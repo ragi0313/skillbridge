@@ -1,0 +1,26 @@
+import Image from "next/image";
+import { ReactNode } from "react";
+import Logo from "../ui/logo";
+
+export default function SignupLayout({ currentStep, children }: { currentStep: number; children: ReactNode }) {
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-col lg:flex-row">
+      <div className="hidden lg:block lg:w-1/2 relative">
+          <div className="absolute top-6 left-8 z-10">
+           <Logo imageWidth={40} imageHeight={40} fontSize="text-2xl" />
+          </div>
+        <Image
+          src="/learner-bg.jpg"
+          alt="Mentorship and growth concept"
+          fill
+          className="object-cover"
+          priority
+        />
+        <div className="absolute inset-0 bg-gradient-to-br from-blue-900/20 to-purple-900/20"></div>
+      </div>
+      <div className="w-full lg:w-1/2 flex flex-col">
+        {children}
+      </div>
+    </div>
+  )
+}

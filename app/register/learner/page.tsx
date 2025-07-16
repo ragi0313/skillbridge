@@ -1,11 +1,14 @@
 "use client"
 
-import { useState } from "react";
-import SignupLayout from "@/components/signup/SignupLayout";
-import SignupHeader from "@/components/signup/SignupHeader";
-import StepIndicator from "@/components/signup/StepIndicator";
-import LearnerBasicInfo from "@/components/signup/LearnerBasicInfo";
-import LearnerGoals from "@/components/signup/LearnerGoals";
+import type React from "react"
+
+import { useState } from "react"
+import SignupLayout from "@/components/signup/SignupLayout"
+import SignupHeader from "@/components/signup/SignupHeader"
+import StepIndicator from "@/components/signup/StepIndicator"
+import LearnerBasicInfo from "@/components/signup/learner/LearnerBasicInfo"
+import LearnerGoals from "@/components/signup/learner/LearnerGoals"
+import LearnerEmailVerification from "@/components/signup/learner/LearnerEmailVerification";
 
 export default function LearnerSignupPage() {
   const [currentStep, setCurrentStep] = useState(1)
@@ -13,11 +16,15 @@ export default function LearnerSignupPage() {
     firstName: "",
     lastName: "",
     email: "",
+    country: "",
     password: "",
     confirmPassword: "",
     learningGoals: "",
     experienceLevel: "",
   })
+
+  const [isSubmitted, setIsSubmitted] = useState(false)
+  const [userEmail, setUserEmail] = useState("")
 
   const totalSteps = 2
 
@@ -31,7 +38,13 @@ export default function LearnerSignupPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    setUserEmail(formData.email)
+    setIsSubmitted(true)
     console.log("Form submitted:", formData)
+  }
+
+  if (isSubmitted) {
+    return <LearnerEmailVerification email={userEmail} />
   }
 
   return (
@@ -42,19 +55,9 @@ export default function LearnerSignupPage() {
           <StepIndicator currentStep={currentStep} totalSteps={totalSteps} />
           <form onSubmit={handleSubmit} className="space-y-6">
             {currentStep === 1 && (
-              <LearnerBasicInfo
-                formData={formData}
-                setFormData={setFormData}
-                nextStep={nextStep}
-              />
+              <LearnerBasicInfo formData={formData} setFormData={setFormData} nextStep={nextStep} />
             )}
-            {currentStep === 2 && (
-              <LearnerGoals
-                formData={formData}
-                setFormData={setFormData}
-                prevStep={prevStep}
-              />
-            )}
+            {currentStep === 2 && <LearnerGoals formData={formData} setFormData={setFormData} prevStep={prevStep} />}
           </form>
         </div>
       </div>

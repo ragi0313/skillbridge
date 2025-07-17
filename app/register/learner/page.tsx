@@ -36,12 +36,29 @@ export default function LearnerSignupPage() {
     if (currentStep > 1) setCurrentStep(currentStep - 1)
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setUserEmail(formData.email)
-    setIsSubmitted(true)
-    console.log("Form submitted:", formData)
+    try {
+      const res = await fetch("/api/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      })
+
+      const data = await res.json()
+
+      if (res.ok && data.success) {
+        setUserEmail(formData.email)
+        setIsSubmitted(true)
+      } else {
+        alert(data.error || "Registration failed")
+      }
+    } catch (error) {
+      console.error("Error registering:", error)
+      alert("Registration failed. Please try again.")
+    }
   }
+
 
   if (isSubmitted) {
     return <LearnerEmailVerification email={userEmail} />

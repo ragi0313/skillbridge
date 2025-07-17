@@ -25,7 +25,7 @@ export default function LearnerEmailVerification({ email }: Props) {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center px-6 py-12">
+    <div className="min-h-screen flex items-center justify-center px-6 py-12">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -142,7 +142,7 @@ export default function LearnerEmailVerification({ email }: Props) {
               transition={{ delay: 0.7 }}
               className="space-y-4 mb-8"
             >
-              <Button
+              {/* <Button
                 onClick={handleResendEmail}
                 disabled={isResending}
                 className="w-full h-14 text-base bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-[1.02]"
@@ -158,7 +158,7 @@ export default function LearnerEmailVerification({ email }: Props) {
                     Resend activation email
                   </>
                 )}
-              </Button>
+              </Button> */}
             </motion.div>
 
             {/* Footer Actions */}

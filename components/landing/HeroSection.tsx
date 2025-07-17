@@ -32,7 +32,7 @@ export default function HeroSection() {
             </p>
             <div className="flex flex-col sm:flex-row gap-4">
               <Button size="lg" className="text-lg px-8 py-6 gradient-bg transition-colors duration-300" asChild>
-                <Link href="/signup/learner">
+                <Link href="/register/learner">
                   Start Learning <ArrowRight className="ml-2 w-5 h-5" />
                 </Link>
               </Button>
@@ -41,7 +41,7 @@ export default function HeroSection() {
                 variant="outline"
                 className="text-lg px-8 py-6 bg-transparent"
               >
-                <Link href="/signup/freelancer">Become a Mentor</Link>
+                <Link href="/register/mentor">Become a Mentor</Link>
               </Button>
             </div>
 

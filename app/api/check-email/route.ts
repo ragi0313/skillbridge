@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server";
-import { db } from "@/db";
-import { users } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { NextResponse } from "next/server"
+import { db } from "@/db"
+import { users, pendingLearners } from "@/db/schema"
+import { eq } from "drizzle-orm"
 
 export async function POST(req: Request) {
   const { email } = await req.json()
@@ -11,12 +11,14 @@ export async function POST(req: Request) {
   }
 
   try {
-    const existing = await db
-      .select()
-      .from(users)
-      .where(eq(users.email, email))
+    const [existingUsers, existingPending] = await Promise.all([
+      db.select().from(users).where(eq(users.email, email)),
+      db.select().from(pendingLearners).where(eq(pendingLearners.email, email)),
+    ])
 
-    return NextResponse.json({ exists: existing.length > 0 })
+    const exists = existingUsers.length > 0 || existingPending.length > 0
+
+    return NextResponse.json({ exists })
   } catch (error) {
     console.error("DB error:", error)
     return NextResponse.json({ error: "Server error" }, { status: 500 })

@@ -54,7 +54,6 @@ export default function LearnerBasicInfo({ formData, setFormData, nextStep }: Pr
           body: JSON.stringify({ email: formData.email }),
         })
         const data = await res.json()
-        // Fixed: API returns 'exists', we need 'available' (opposite)
         setEmailAvailable(!data.exists)
       } catch {
         setEmailAvailable(null)
@@ -75,7 +74,6 @@ export default function LearnerBasicInfo({ formData, setFormData, nextStep }: Pr
 
   return (
     <div className="space-y-6">
-      {/* First + Last Name */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <Label htmlFor="firstName" className="mb-2">First Name*</Label>
@@ -101,7 +99,6 @@ export default function LearnerBasicInfo({ formData, setFormData, nextStep }: Pr
         </div>
       </div>
 
-      {/* Email */}
       <div>
         <Label htmlFor="email" className="mb-2">Email Address*</Label>
         <div className="relative">
@@ -123,7 +120,6 @@ export default function LearnerBasicInfo({ formData, setFormData, nextStep }: Pr
         )}
       </div>
 
-      {/* Country */}
       <div>
         <Label htmlFor="country" className="mb-2">Country*</Label>
         <Select
@@ -143,7 +139,6 @@ export default function LearnerBasicInfo({ formData, setFormData, nextStep }: Pr
         </Select>
       </div>
 
-      {/* Password */}
       <div>
         <Label htmlFor="password" className="mb-2">Password*</Label>
         <div className="relative">

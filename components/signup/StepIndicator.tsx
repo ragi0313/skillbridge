@@ -5,19 +5,30 @@ const stepInfo = [
   ["Tell us about your goals", "Help us personalize your learning experience"],
 ]
 
+const mentorStepInfo = [
+  ["Basic Information", "Let's start with your personal details"],
+  ["Professional Background", "Tell us about your expertise and experience"],
+  ["Skills & Pricing", "Set your skills and hourly rates"],
+  ["Availability & Goals", "Share your availability and motivations"],
+  ["Review & Submit", "Review your application before submitting"],
+]
+
 export default function StepIndicator({
   currentStep,
   totalSteps,
+  isMentor = false,
 }: {
   currentStep: number
   totalSteps: number
+  isMentor?: boolean
 }) {
   const progress = (currentStep / totalSteps) * 100
-  const [title, subtitle] = stepInfo[currentStep - 1] || ["Step", ""]
+  const stepData = isMentor ? mentorStepInfo : stepInfo
+  const [title, subtitle] = stepData[currentStep - 1] || ["Step", ""]
 
   return (
     <div className="mb-8 mt-10 lg:mt-0">
-      <h1 className="font-extrabold mb-8 text-4xl">Sign up as a learner</h1>
+      <h1 className="font-extrabold mb-8 text-4xl">{isMentor ? "Become a mentor" : "Sign up as a learner"}</h1>
       <div className="flex items-center justify-between mb-2">
         <span className="text-sm font-medium text-gray-500">
           Step {currentStep} of {totalSteps}

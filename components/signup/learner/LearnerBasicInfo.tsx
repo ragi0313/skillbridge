@@ -14,6 +14,7 @@ import {
   SelectItem,
 } from "@/components/ui/select"
 
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/
 
 type Props = {
@@ -54,6 +55,7 @@ export default function LearnerBasicInfo({ formData, setFormData, nextStep }: Pr
           body: JSON.stringify({ email: formData.email }),
         })
         const data = await res.json()
+        // Fixed: API returns 'exists', we need 'available' (opposite)
         setEmailAvailable(!data.exists)
       } catch {
         setEmailAvailable(null)
@@ -66,7 +68,7 @@ export default function LearnerBasicInfo({ formData, setFormData, nextStep }: Pr
   const isFormValid =
     formData.firstName.trim() &&
     formData.lastName.trim() &&
-    formData.email.includes("@") &&
+    emailRegex.test(formData.email) &&
     emailAvailable === true &&
     formData.country &&
     passwordRegex.test(formData.password) &&
@@ -74,6 +76,7 @@ export default function LearnerBasicInfo({ formData, setFormData, nextStep }: Pr
 
   return (
     <div className="space-y-6">
+      {/* First + Last Name */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <Label htmlFor="firstName" className="mb-2">First Name*</Label>
@@ -99,6 +102,7 @@ export default function LearnerBasicInfo({ formData, setFormData, nextStep }: Pr
         </div>
       </div>
 
+      {/* Email */}
       <div>
         <Label htmlFor="email" className="mb-2">Email Address*</Label>
         <div className="relative">
@@ -111,15 +115,16 @@ export default function LearnerBasicInfo({ formData, setFormData, nextStep }: Pr
             className="h-14 pr-11"
             required
           />
-          {formData.email.includes("@") && emailAvailable === true && (
+          {emailRegex.test(formData.email) && emailAvailable === true && (
             <CheckCircle className="absolute right-3 top-4 h-6 w-6 text-green-500" />
           )}
         </div>
-        {formData.email.includes("@") && emailAvailable === false && (
+        {emailRegex.test(formData.email) && emailAvailable === false && (
           <p className="text-sm text-red-600 mt-1">Email is already taken.</p>
         )}
       </div>
 
+      {/* Country */}
       <div>
         <Label htmlFor="country" className="mb-2">Country*</Label>
         <Select
@@ -139,6 +144,7 @@ export default function LearnerBasicInfo({ formData, setFormData, nextStep }: Pr
         </Select>
       </div>
 
+      {/* Password */}
       <div>
         <Label htmlFor="password" className="mb-2">Password*</Label>
         <div className="relative">

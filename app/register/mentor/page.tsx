@@ -23,6 +23,7 @@ export default function MentorSignupPage() {
     password: "",
     confirmPassword: "",
     country: "",
+    timezone: "",
 
     // Step 2: Professional Details
     professionalTitle: "",

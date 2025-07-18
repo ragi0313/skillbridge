@@ -1,11 +1,22 @@
 "use client"
 
+import { useState } from "react"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
-import { Checkbox } from "@/components/ui/checkbox"
-import { ArrowLeft, Clock, MessageSquare, Target, Trophy } from "lucide-react"
+import { ArrowLeft, MessageSquare, Target, Trophy, CheckCircle2, AlertTriangle } from "lucide-react"
+import WeeklyAvailabilitySelector from "./WeeklyAvailabilitySelector"
+
+type TimeSlot = {
+  id: string
+  start: string
+  end: string
+}
+
+type WeeklyAvailability = {
+  [key: string]: TimeSlot[]
+}
 
 type Props = {
   formData: any
@@ -14,76 +25,49 @@ type Props = {
   prevStep: () => void
 }
 
-const availabilityOptions = [
-  "Monday AM",
-  "Monday PM",
-  "Tuesday AM",
-  "Tuesday PM",
-  "Wednesday AM",
-  "Wednesday PM",
-  "Thursday AM",
-  "Thursday PM",
-  "Friday AM",
-  "Friday PM",
-  "Saturday AM",
-  "Saturday PM",
-  "Sunday AM",
-  "Sunday PM",
-]
-
 export default function MentorAvailability({ formData, setFormData, nextStep, prevStep }: Props) {
-  const handleAvailabilityChange = (option: string, checked: boolean) => {
-    let availability = [...formData.availability]
-    if (checked) {
-      availability.push(option)
-    } else {
-      availability = availability.filter((item) => item !== option)
+  const [availability, setAvailability] = useState<WeeklyAvailability>(() => {
+    if (formData.availability && typeof formData.availability === "object") {
+      return formData.availability
     }
-    setFormData({ ...formData, availability })
+    return {}
+  })
+
+  const handleAvailabilityChange = (newAvailability: WeeklyAvailability) => {
+    setAvailability(newAvailability)
+    setFormData({ ...formData, availability: newAvailability })
   }
 
-  const isFormValid = () =>
-    formData.availability.length > 0 && formData.whyFreelancer && formData.whyMentor && formData.greatestAchievement
+  const hasAvailability = () => {
+    return Object.values(availability).some((daySlots) => daySlots.length > 0)
+  }
+
+  const isFormValid = () => {
+    const hasValidAvailability = hasAvailability()
+    const hasValidAnswers =
+      formData.whyFreelancer?.trim().length >= 50 &&
+      formData.whyMentor?.trim().length >= 50 &&
+      formData.greatestAchievement?.trim().length >= 50
+    return hasValidAvailability && hasValidAnswers
+  }
 
   return (
-    <div className="space-y-8">
-      {/* Availability */}
+    <div className="space-y-6">
+      {/* Availability Selector */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center space-x-2">
-            <Clock className="w-5 h-5 text-blue-600" />
-            <span>Weekly Availability</span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Label className="text-base font-semibold text-gray-700">
-            When are you typically available for mentoring sessions?*
-          </Label>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {availabilityOptions.map((option) => (
-              <div
-                key={option}
-                className="flex items-center space-x-3 p-3 rounded-lg border hover:bg-gray-50 transition-colors"
-              >
-                <Checkbox
-                  id={option}
-                  checked={formData.availability.includes(option)}
-                  onCheckedChange={(checked) => handleAvailabilityChange(option, !!checked)}
-                />
-                <Label htmlFor={option} className="text-sm cursor-pointer font-medium">
-                  {option}
-                </Label>
-              </div>
-            ))}
-          </div>
-          <p className="text-sm text-gray-500">
-            Select all time slots when you're typically available. You can always adjust this later.
+          <CardTitle>Set Your Availability</CardTitle>
+          <p className="text-sm text-gray-600">
+            Choose when you're available to mentor learners. You can adjust these times later.
           </p>
+        </CardHeader>
+        <CardContent>
+          <WeeklyAvailabilitySelector availability={availability} onChange={handleAvailabilityChange} />
         </CardContent>
       </Card>
 
       {/* Personal Questions */}
-      <div className="space-y-6">
+      <div className="space-y-4">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
@@ -101,10 +85,17 @@ export default function MentorAvailability({ formData, setFormData, nextStep, pr
               value={formData.whyFreelancer}
               onChange={(e) => setFormData({ ...formData, whyFreelancer: e.target.value })}
               rows={4}
-              className="resize-none text-base"
+              className="resize-none h-30"
               required
             />
-            <p className="text-sm text-gray-500">This helps us understand your background (not visible to learners)</p>
+            <div className="flex justify-between items-center">
+              <p className="text-sm text-gray-500">
+                This helps us understand your background (not visible to learners)
+              </p>
+              <span className={`text-sm ${formData.whyFreelancer?.length >= 50 ? "text-green-600" : "text-gray-400"}`}>
+                {formData.whyFreelancer?.length || 0}/50 min
+              </span>
+            </div>
           </CardContent>
         </Card>
 
@@ -125,12 +116,17 @@ export default function MentorAvailability({ formData, setFormData, nextStep, pr
               value={formData.whyMentor}
               onChange={(e) => setFormData({ ...formData, whyMentor: e.target.value })}
               rows={4}
-              className="resize-none text-base"
+              className="resize-none h-30"
               required
             />
-            <p className="text-sm text-gray-500">
-              This helps us match you with the right learners (not visible to learners)
-            </p>
+            <div className="flex justify-between items-center">
+              <p className="text-sm text-gray-500">
+                This helps us match you with the right learners (not visible to learners)
+              </p>
+              <span className={`text-sm ${formData.whyMentor?.length >= 50 ? "text-green-600" : "text-gray-400"}`}>
+                {formData.whyMentor?.length || 0}/50 min
+              </span>
+            </div>
           </CardContent>
         </Card>
 
@@ -151,35 +147,39 @@ export default function MentorAvailability({ formData, setFormData, nextStep, pr
               value={formData.greatestAchievement}
               onChange={(e) => setFormData({ ...formData, greatestAchievement: e.target.value })}
               rows={4}
-              className="resize-none text-base"
+              className="resize-none h-30"
               required
             />
-            <p className="text-sm text-gray-500">
-              This helps us understand your expertise level (not visible to learners)
-            </p>
+            <div className="flex justify-between items-center">
+              <p className="text-sm text-gray-500">
+                This helps us understand your expertise level (not visible to learners)
+              </p>
+              <span
+                className={`text-sm ${formData.greatestAchievement?.length >= 50 ? "text-green-600" : "text-gray-400"}`}
+              >
+                {formData.greatestAchievement?.length || 0}/50 min
+              </span>
+            </div>
           </CardContent>
         </Card>
       </div>
 
       {/* Navigation Buttons */}
-      <div className="flex flex-col sm:flex-row gap-4 pt-6">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={prevStep}
-          className="h-14 px-8 text-base border-2 hover:bg-gray-50 rounded-xl transition-all duration-300 bg-transparent"
-        >
-          <ArrowLeft className="w-5 h-5 mr-2" />
+      <div className="flex flex-col sm:flex-row gap-4 pt-6 border-t border-gray-100">
+        <Button type="button" variant="outline" onClick={prevStep} className="h-12 px-6 text-base bg-transparent">
+          <ArrowLeft className="w-4 h-4 mr-2" />
           Previous Step
         </Button>
-        <Button
-          type="button"
-          onClick={nextStep}
-          disabled={!isFormValid()}
-          className="flex-1 h-14 gradient-bg text-white font-semibold text-lg rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-[1.02] disabled:opacity-50 disabled:transform-none"
-        >
-          Review Application
-        </Button>
+        <div className="flex justify-end w-full">
+          <Button
+            type="button"
+            onClick={nextStep}
+            disabled={!isFormValid}
+            className="w-[15%] h-14 gradient-bg text-white font-semibold text-base rounded-lg"
+          >
+            Continue
+          </Button>
+        </div>
       </div>
     </div>
   )

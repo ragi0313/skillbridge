@@ -17,6 +17,19 @@ type Props = {
 export default function MentorReviewSubmit({ formData, prevStep }: Props) {
   const [agreedToTerms, setAgreedToTerms] = useState(false)
 
+  const getAvailabilityCount = () => {
+    if (!formData.availability || typeof formData.availability !== "object") return 0
+    return Object.values(formData.availability).reduce(
+      (total: number, daySlots: any) => total + (daySlots?.length || 0),
+      0,
+    )
+  }
+
+  const getAvailableDays = () => {
+    if (!formData.availability || typeof formData.availability !== "object") return []
+    return Object.entries(formData.availability).filter(([_, slots]: [string, any]) => slots?.length > 0)
+  }
+
   return (
     <div className="space-y-8">
       {/* Application Summary */}
@@ -45,12 +58,6 @@ export default function MentorReviewSubmit({ formData, prevStep }: Props) {
                 <Label className="text-sm text-gray-500">Country</Label>
                 <p className="font-semibold">{formData.country}</p>
               </div>
-              <div>
-                <Label className="text-sm text-gray-500">Profile Photo</Label>
-                <p className="font-semibold text-green-600">
-                  {formData.profilePicture ? "✓ Uploaded" : "Not uploaded"}
-                </p>
-              </div>
             </div>
           </CardContent>
         </Card>
@@ -74,7 +81,11 @@ export default function MentorReviewSubmit({ formData, prevStep }: Props) {
             </div>
             <div>
               <Label className="text-sm text-gray-500">About Me</Label>
-              <p className="text-gray-700 bg-gray-50 p-3 rounded-lg">{formData.bio}</p>
+              <div className="bg-gray-50 p-3 rounded-lg max-h-48 overflow-y-auto">
+                <p className="text-gray-700 whitespace-pre-wrap break-words">
+                  {formData.bio}
+                </p>
+              </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {formData.linkedinUrl && (
@@ -132,13 +143,27 @@ export default function MentorReviewSubmit({ formData, prevStep }: Props) {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex flex-wrap gap-2">
-              {formData.availability.map((slot: string, index: number) => (
-                <Badge key={index} variant="outline" className="px-3 py-1">
-                  {slot}
-                </Badge>
-              ))}
-            </div>
+            {getAvailabilityCount() > 0 ? (
+              <div className="space-y-3">
+                {getAvailableDays().map(([dayId, slots]: [string, any]) => (
+                  <div key={dayId} className="border rounded-lg p-3 bg-gray-50">
+                    <div className="font-semibold text-gray-900 mb-2 capitalize">{dayId}</div>
+                    <div className="space-y-1">
+                      {slots.map((slot: any, slotIndex: number) => (
+                        <Badge key={slotIndex} variant="outline" className="mr-2 mb-1">
+                          {slot.start} - {slot.end}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                <div className="text-sm text-gray-600 bg-green-50 p-2 rounded border border-green-200">
+                  Total: {getAvailabilityCount()} time slots across {getAvailableDays().length} days
+                </div>
+              </div>
+            ) : (
+              <p className="text-gray-500 italic">No availability set</p>
+            )}
           </CardContent>
         </Card>
       </div>

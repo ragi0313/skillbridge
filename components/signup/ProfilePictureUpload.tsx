@@ -1,13 +1,13 @@
 "use client"
 
-import React, { useState, useCallback, useRef } from "react"
-import Image from "next/image"
-import Cropper from "react-easy-crop"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Button } from "@/components/ui/button"
-import { Label } from "@/components/ui/label"
-import { Upload, Trash, User } from "lucide-react"
-import getCroppedImg from "@/lib/cropImage"
+import React, { useState, useCallback, useRef, useEffect } from "react";
+import Image from "next/image";
+import Cropper, { Area } from "react-easy-crop";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Upload, Trash, User } from "lucide-react";
+import getCroppedImg from "@/lib/cropImage";
 
 interface Props {
   value: File | null
@@ -15,17 +15,34 @@ interface Props {
 }
 
 export default function ProfilePictureUpload({ value, onChange }: Props) {
-  const [previewUrl, setPreviewUrl] = useState<string | null>(value ? URL.createObjectURL(value) : null)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(
+    value ? URL.createObjectURL(value) : null
+  )
   const [cropModalOpen, setCropModalOpen] = useState(false)
   const [imageSrc, setImageSrc] = useState<string | null>(null)
   const [crop, setCrop] = useState({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(1)
-  const [croppedAreaPixels, setCroppedAreaPixels] = useState<any>(null)
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl)
+    }
+  }, [previewUrl])
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
+      if (!["image/jpeg", "image/png"].includes(file.type)) {
+        alert("Only JPG and PNG files are allowed.")
+        return
+      }
+      if (file.size > 5 * 1024 * 1024) {
+        alert("File size should be less than 5MB.")
+        return
+      }
+
       const reader = new FileReader()
       reader.onload = () => {
         setImageSrc(reader.result as string)
@@ -35,8 +52,8 @@ export default function ProfilePictureUpload({ value, onChange }: Props) {
     }
   }
 
-  const onCropComplete = useCallback((_: any, croppedAreaPixels: any) => {
-    setCroppedAreaPixels(croppedAreaPixels)
+  const onCropComplete = useCallback((_: any, croppedArea: Area) => {
+    setCroppedAreaPixels(croppedArea)
   }, [])
 
   const handleCropSave = async () => {
@@ -59,7 +76,13 @@ export default function ProfilePictureUpload({ value, onChange }: Props) {
       <div className="flex items-center space-x-4">
         <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center overflow-hidden">
           {previewUrl ? (
-            <Image src={previewUrl} alt="Preview" width={80} height={80} className="object-cover w-full h-full" />
+            <Image
+              src={previewUrl}
+              alt="Preview"
+              width={80}
+              height={80}
+              className="object-cover w-full h-full"
+            />
           ) : (
             <User className="w-8 h-8 text-gray-400" />
           )}
@@ -78,6 +101,7 @@ export default function ProfilePictureUpload({ value, onChange }: Props) {
               variant="outline"
               onClick={() => inputRef.current?.click()}
               className="flex items-center space-x-2 cursor-pointer"
+              aria-label="Upload profile picture"
             >
               <Upload className="w-4 h-4" />
               <span>{previewUrl ? "Change Photo" : "Upload Photo"}</span>
@@ -88,6 +112,7 @@ export default function ProfilePictureUpload({ value, onChange }: Props) {
                 variant="destructive"
                 onClick={handleRemove}
                 className="flex items-center space-x-2"
+                aria-label="Remove profile picture"
               >
                 <Trash className="w-4 h-4" />
                 <span className="cursor-pointer">Remove</span>
@@ -103,7 +128,7 @@ export default function ProfilePictureUpload({ value, onChange }: Props) {
           <DialogHeader>
             <DialogTitle>Crop Your Profile Picture</DialogTitle>
           </DialogHeader>
-          <div className="relative w-full h-[300px] bg-black">
+          <div className="relative w-full h-[300px] bg-black rounded-md overflow-hidden">
             {imageSrc && (
               <Cropper
                 image={imageSrc}
@@ -117,10 +142,16 @@ export default function ProfilePictureUpload({ value, onChange }: Props) {
             )}
           </div>
           <div className="flex justify-end space-x-2 pt-4">
-            <Button variant="outline" onClick={() => setCropModalOpen(false)} className="cursor-pointer">
+            <Button
+              variant="outline"
+              onClick={() => setCropModalOpen(false)}
+              className="cursor-pointer"
+            >
               Cancel
             </Button>
-            <Button onClick={handleCropSave} className="cursor-pointer">Save</Button>
+            <Button onClick={handleCropSave} className="cursor-pointer">
+              Save
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

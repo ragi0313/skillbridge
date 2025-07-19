@@ -21,7 +21,7 @@ type FormData = {
   country: string
   password: string
   confirmPassword: string
-  profilePicture: File | null
+  profilePictureUrl: File | null
   timezone: string
 }
 
@@ -56,8 +56,8 @@ export default function MentorBasicInfo({ formData, setFormData, nextStep }: Pro
   return (
     <div className="space-y-6">
       <ProfilePictureUpload
-        value={formData.profilePicture}
-        onChange={(file) => updateField('profilePicture', file)}
+        value={formData.profilePictureUrl}
+        onChange={(file) => updateField('profilePictureUrl', file)}
       />
       
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

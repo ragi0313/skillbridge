@@ -25,21 +25,22 @@ export function useFormValidation<T extends BaseFormData>(
   const doPasswordsMatch = formData.password === formData.confirmPassword
   
   const isFormValid = useMemo(() => {
-    const baseValid = formData.firstName.trim() &&
-                     formData.lastName.trim() &&
-                     isEmailValid &&
-                     emailAvailable === true &&
-                     formData.country &&
-                     isPasswordValid &&
-                     doPasswordsMatch
-    
-    // Check if it's a mentor form (has profilePicture)
-    if ('profilePicture' in formData) {
-      return baseValid && (formData as MentorFormData).profilePicture !== null
-    }
-    
-    return baseValid
-  }, [formData, emailAvailable, isEmailValid, isPasswordValid, doPasswordsMatch])
+  const baseValid =
+    formData.firstName?.trim() &&
+    formData.lastName?.trim() &&
+    isEmailValid &&
+    emailAvailable === true &&
+    formData.country &&
+    isPasswordValid &&
+    doPasswordsMatch;
+
+  if ("profilePicture" in formData) {
+    return baseValid && (formData as MentorFormData).profilePicture !== null;
+  }
+
+  return baseValid;
+}, [formData, emailAvailable, isEmailValid, isPasswordValid, doPasswordsMatch]);
+
   
   return {
     isFormValid,

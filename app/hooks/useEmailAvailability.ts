@@ -1,41 +1,31 @@
 import { useEffect, useState } from "react"
 
-const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-
-export function useEmailAvailability(email: string, delay: number = 500) {
+export function useEmailAvailability(email: string) {
   const [emailAvailable, setEmailAvailable] = useState<boolean | null>(null)
-  const [isChecking, setIsChecking] = useState(false)
 
   useEffect(() => {
     const checkEmail = setTimeout(async () => {
-      if (!email || !emailRegex.test(email)) {
+      if (!email || !email.includes("@")) {
         setEmailAvailable(null)
-        setIsChecking(false)
         return
       }
 
-      setIsChecking(true)
-      
       try {
         const res = await fetch("/api/check-email", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email }),
         })
+
         const data = await res.json()
-        setEmailAvailable(!data.exists)
+        setEmailAvailable(!data.exists) // email is available if it doesn't exist
       } catch {
         setEmailAvailable(null)
-      } finally {
-        setIsChecking(false)
       }
-    }, delay)
+    }, 500)
 
-    return () => {
-      clearTimeout(checkEmail)
-      setIsChecking(false)
-    }
-  }, [email, delay])
+    return () => clearTimeout(checkEmail)
+  }, [email])
 
-  return { emailAvailable, isChecking }
+  return emailAvailable
 }

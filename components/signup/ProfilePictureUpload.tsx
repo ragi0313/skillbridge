@@ -1,23 +1,21 @@
 "use client"
 
-import React, { useState, useCallback, useRef, useEffect } from "react";
-import Image from "next/image";
-import Cropper, { Area } from "react-easy-crop";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Upload, Trash, User } from "lucide-react";
-import getCroppedImg from "@/lib/cropImage";
+import React, { useState, useCallback, useRef, useEffect } from "react"
+import Image from "next/image"
+import Cropper, { Area } from "react-easy-crop"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
+import { Label } from "@/components/ui/label"
+import { Upload, Trash, User } from "lucide-react"
+import getCroppedImg from "@/lib/cropImage"
 
 interface Props {
-  value: File | null
-  onChange: (file: File | null) => void
+  value: string | null
+  onChange: (url: string | null) => void
 }
 
 export default function ProfilePictureUpload({ value, onChange }: Props) {
-  const [previewUrl, setPreviewUrl] = useState<string | null>(
-    value ? URL.createObjectURL(value) : null
-  )
+  const [previewUrl, setPreviewUrl] = useState<string | null>(value)
   const [cropModalOpen, setCropModalOpen] = useState(false)
   const [imageSrc, setImageSrc] = useState<string | null>(null)
   const [crop, setCrop] = useState({ x: 0, y: 0 })
@@ -27,29 +25,32 @@ export default function ProfilePictureUpload({ value, onChange }: Props) {
 
   useEffect(() => {
     return () => {
-      if (previewUrl) URL.revokeObjectURL(previewUrl)
+      if (previewUrl?.startsWith("blob:")) {
+        URL.revokeObjectURL(previewUrl)
+      }
     }
   }, [previewUrl])
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (file) {
-      if (!["image/jpeg", "image/png"].includes(file.type)) {
-        alert("Only JPG and PNG files are allowed.")
-        return
-      }
-      if (file.size > 5 * 1024 * 1024) {
-        alert("File size should be less than 5MB.")
-        return
-      }
+    if (!file) return
 
-      const reader = new FileReader()
-      reader.onload = () => {
-        setImageSrc(reader.result as string)
-        setCropModalOpen(true)
-      }
-      reader.readAsDataURL(file)
+    if (!["image/jpeg", "image/png"].includes(file.type)) {
+      alert("Only JPG and PNG files are allowed.")
+      return
     }
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert("File size must be under 5MB.")
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = () => {
+      setImageSrc(reader.result as string)
+      setCropModalOpen(true)
+    }
+    reader.readAsDataURL(file)
   }
 
   const onCropComplete = useCallback((_: any, croppedArea: Area) => {
@@ -59,10 +60,30 @@ export default function ProfilePictureUpload({ value, onChange }: Props) {
   const handleCropSave = async () => {
     if (!imageSrc || !croppedAreaPixels) return
 
-    const { file, url } = await getCroppedImg(imageSrc, croppedAreaPixels)
-    setPreviewUrl(url)
-    onChange(file)
-    setCropModalOpen(false)
+    try {
+      const { file } = await getCroppedImg(imageSrc, croppedAreaPixels)
+
+      // Upload to Cloudinary
+      const formData = new FormData()
+      formData.append("file", file)
+
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      })
+
+      const data = await res.json()
+      if (data.secure_url) {
+        setPreviewUrl(data.secure_url)
+        onChange(data.secure_url)
+        setCropModalOpen(false)
+      } else {
+        alert("Upload failed")
+      }
+    } catch (err) {
+      console.error("Crop or upload error", err)
+      alert("Something went wrong.")
+    }
   }
 
   const handleRemove = () => {
@@ -100,8 +121,7 @@ export default function ProfilePictureUpload({ value, onChange }: Props) {
               type="button"
               variant="outline"
               onClick={() => inputRef.current?.click()}
-              className="flex items-center space-x-2 cursor-pointer"
-              aria-label="Upload profile picture"
+              className="flex items-center space-x-2"
             >
               <Upload className="w-4 h-4" />
               <span>{previewUrl ? "Change Photo" : "Upload Photo"}</span>
@@ -112,10 +132,9 @@ export default function ProfilePictureUpload({ value, onChange }: Props) {
                 variant="destructive"
                 onClick={handleRemove}
                 className="flex items-center space-x-2"
-                aria-label="Remove profile picture"
               >
                 <Trash className="w-4 h-4" />
-                <span className="cursor-pointer">Remove</span>
+                <span>Remove</span>
               </Button>
             )}
           </div>
@@ -142,16 +161,10 @@ export default function ProfilePictureUpload({ value, onChange }: Props) {
             )}
           </div>
           <div className="flex justify-end space-x-2 pt-4">
-            <Button
-              variant="outline"
-              onClick={() => setCropModalOpen(false)}
-              className="cursor-pointer"
-            >
+            <Button variant="outline" onClick={() => setCropModalOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleCropSave} className="cursor-pointer">
-              Save
-            </Button>
+            <Button onClick={handleCropSave}>Save</Button>
           </div>
         </DialogContent>
       </Dialog>

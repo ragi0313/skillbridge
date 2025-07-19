@@ -30,7 +30,6 @@ export async function POST(req: Request) {
         email,
         country,
         hashedPassword,
-        role: "learner",
         experienceLevel,
         learningGoals,
         verificationToken,

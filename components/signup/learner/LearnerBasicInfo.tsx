@@ -1,9 +1,11 @@
 "use client"
 
+import { useState } from "react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
-import { Eye, EyeOff, CheckCircle, Loader2 } from "lucide-react"
+import { Eye, EyeOff, CheckCircle } from "lucide-react"
+import countries from "world-countries"
 import {
   Select,
   SelectTrigger,
@@ -13,9 +15,9 @@ import {
 } from "@/components/ui/select"
 import { useEmailAvailability } from "@/app/hooks/useEmailAvailability"
 import { usePasswordVisibility } from "@/app/hooks/usePasswordVisibility"
-import { useCountryOptions } from "@/app/hooks/useCountryOptions"
-import { useFormValidation } from "@/app/hooks/useFormValidation"
-import { useFormInput } from "@/app/hooks/useFormInput"
+
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/
 
 type Props = {
   formData: {
@@ -31,12 +33,27 @@ type Props = {
 }
 
 export default function LearnerBasicInfo({ formData, setFormData, nextStep }: Props) {
-  // Custom hooks
-  const { emailAvailable, isChecking } = useEmailAvailability(formData.email)
-  const { showPassword, showConfirmPassword, togglePassword, toggleConfirmPassword } = usePasswordVisibility()
-  const countryOptions = useCountryOptions()
-  const { isFormValid, isPasswordValid, doPasswordsMatch, emailRegex, passwordRegex } = useFormValidation(formData, emailAvailable)
-  const { updateField } = useFormInput(formData, setFormData)
+  const emailAvailable = useEmailAvailability(formData.email)
+  const {
+    showPassword,
+    showConfirmPassword,
+    togglePassword,
+    toggleConfirmPassword,
+  } = usePasswordVisibility()
+
+  const countryOptions = countries.map((country) => ({
+    value: country.cca2,
+    label: country.name.common,
+  }))
+
+  const isFormValid =
+    formData.firstName.trim() &&
+    formData.lastName.trim() &&
+    emailRegex.test(formData.email) &&
+    emailAvailable === true &&
+    formData.country &&
+    passwordRegex.test(formData.password) &&
+    formData.password === formData.confirmPassword
 
   return (
     <div className="space-y-6">
@@ -47,7 +64,7 @@ export default function LearnerBasicInfo({ formData, setFormData, nextStep }: Pr
           <Input
             id="firstName"
             value={formData.firstName}
-            onChange={(e) => updateField('firstName', e.target.value)}
+            onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
             placeholder="Enter your first name"
             className="h-14"
             required
@@ -58,7 +75,7 @@ export default function LearnerBasicInfo({ formData, setFormData, nextStep }: Pr
           <Input
             id="lastName"
             value={formData.lastName}
-            onChange={(e) => updateField('lastName', e.target.value)}
+            onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
             placeholder="Enter your last name"
             className="h-14"
             required
@@ -74,15 +91,12 @@ export default function LearnerBasicInfo({ formData, setFormData, nextStep }: Pr
             id="email"
             type="email"
             value={formData.email}
-            onChange={(e) => updateField('email', e.target.value)}
+            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
             placeholder="Enter your email"
             className="h-14 pr-11"
             required
           />
-          {isChecking && (
-            <Loader2 className="absolute right-3 top-4 h-6 w-6 text-gray-400 animate-spin" />
-          )}
-          {!isChecking && emailRegex.test(formData.email) && emailAvailable === true && (
+          {emailRegex.test(formData.email) && emailAvailable === true && (
             <CheckCircle className="absolute right-3 top-4 h-6 w-6 text-green-500" />
           )}
         </div>
@@ -96,7 +110,7 @@ export default function LearnerBasicInfo({ formData, setFormData, nextStep }: Pr
         <Label htmlFor="country" className="mb-2">Country*</Label>
         <Select
           value={formData.country}
-          onValueChange={(value) => updateField('country', value)}
+          onValueChange={(value) => setFormData({ ...formData, country: value })}
         >
           <SelectTrigger className="w-full h-14 rounded-sm">
             <SelectValue placeholder="Select your country" />
@@ -119,10 +133,12 @@ export default function LearnerBasicInfo({ formData, setFormData, nextStep }: Pr
             id="password"
             type={showPassword ? "text" : "password"}
             value={formData.password}
-            onChange={(e) => updateField('password', e.target.value)}
+            onChange={(e) => setFormData({ ...formData, password: e.target.value })}
             placeholder="Create a strong password"
             className={`h-14 pr-11 ${
-              formData.password && !isPasswordValid ? "border-red-500" : ""
+              formData.password && !passwordRegex.test(formData.password)
+                ? "border-red-500"
+                : ""
             }`}
             required
           />
@@ -134,10 +150,10 @@ export default function LearnerBasicInfo({ formData, setFormData, nextStep }: Pr
             {showPassword ? <EyeOff className="w-6 h-6" /> : <Eye className="w-6 h-6" />}
           </button>
         </div>
-        {formData.password && !isPasswordValid && (
-            <p className="mt-1 text-sm text-red-600">
-              Must include uppercase, lowercase, number, and special character.
-            </p>
+        {formData.password && !passwordRegex.test(formData.password) && (
+          <p className="text-sm text-red-600 mt-1">
+            Must include uppercase, lowercase, number, and special character.
+          </p>
         )}
       </div>
 
@@ -149,7 +165,9 @@ export default function LearnerBasicInfo({ formData, setFormData, nextStep }: Pr
             id="confirmPassword"
             type={showConfirmPassword ? "text" : "password"}
             value={formData.confirmPassword}
-            onChange={(e) => updateField('confirmPassword', e.target.value)}
+            onChange={(e) =>
+              setFormData({ ...formData, confirmPassword: e.target.value })
+            }
             placeholder="Confirm your password"
             className="h-14 pr-11"
             required
@@ -162,9 +180,10 @@ export default function LearnerBasicInfo({ formData, setFormData, nextStep }: Pr
             {showConfirmPassword ? <EyeOff className="w-6 h-6" /> : <Eye className="w-6 h-6" />}
           </button>
         </div>
-        {formData.confirmPassword && !doPasswordsMatch && (
-          <p className="text-sm text-red-600 mt-1">Passwords do not match.</p>
-        )}
+        {formData.confirmPassword &&
+          formData.confirmPassword !== formData.password && (
+            <p className="text-sm text-red-600 mt-1">Passwords do not match.</p>
+          )}
       </div>
 
       {/* Continue */}

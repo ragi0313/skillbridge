@@ -1,41 +1,86 @@
-import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
-import jwt from "jsonwebtoken";
+// middleware.ts
+import { NextResponse } from "next/server"
+import type { NextRequest } from "next/server"
+import { jwtVerify } from "jose"
 
-export function middleware(request: NextRequest) {
-  const token = request.cookies.get("token")?.value
-  if (!token) {
-    return NextResponse.redirect(new URL("/login", request.url))
-  }
+const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET!)
 
+async function verifyJWT(token: string) {
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!)
-    const role = (decoded as any).role
+    const { payload } = await jwtVerify(token, JWT_SECRET)
+    return payload
+  } catch (err) {
+    return null
+  }
+}
 
-    const pathname = request.nextUrl.pathname
+export async function middleware(req: NextRequest) {
+  const rawToken = req.cookies.get("session_token")?.value
+  const token = rawToken && rawToken.trim().length > 0 ? rawToken : null
 
-    if (pathname.startsWith("/app/mentor") && role !== "mentor") {
-      return NextResponse.redirect(new URL("/unauthorized", request.url))
-    }
+  const url = req.nextUrl.clone()
+  const pathname = url.pathname
 
-    if (pathname.startsWith("/app/learner") && role !== "learner") {
-      return NextResponse.redirect(new URL("/unauthorized", request.url))
-    }
+  const session = token ? await verifyJWT(token) : null
 
-    if (pathname.startsWith("/app/admin") && role !== "admin") {
-      return NextResponse.redirect(new URL("/unauthorized", request.url))
+  const isPublicPath = [
+    "/",
+    "/login",
+    "/signup",
+    "/register/learner",
+    "/register/mentor",
+  ].includes(pathname)
+
+  // 🔒 Not logged in
+  if (!session) {
+    if (
+      pathname.startsWith("/learner") ||
+      pathname.startsWith("/mentor") ||
+      pathname.startsWith("/admin")
+    ) {
+      url.pathname = "/login"
+      return NextResponse.redirect(url)
     }
 
     return NextResponse.next()
-  } catch (err) {
-    return NextResponse.redirect(new URL("/login", request.url))
   }
+
+  // ✅ Logged in
+  const role = session.role as string
+
+  // 🔁 Redirect from `/` to correct dashboard
+  if (pathname === "/") {
+    url.pathname = `/${role}/dashboard`
+    return NextResponse.redirect(url)
+  }
+
+  // 🚫 Prevent access to login/register if logged in
+  if (isPublicPath) {
+    url.pathname = `/${role}/dashboard`
+    return NextResponse.redirect(url)
+  }
+
+  // 🔐 Role-based route protection
+  if (
+    (pathname.startsWith("/learner") && role !== "learner") ||
+    (pathname.startsWith("/mentor") && role !== "mentor") ||
+    (pathname.startsWith("/admin") && role !== "admin")
+  ) {
+    url.pathname = `/${role}/dashboard`
+    return NextResponse.redirect(url)
+  }
+
+  return NextResponse.next()
 }
 
 export const config = {
   matcher: [
-    "/app/mentor/:path*",
-    "/app/learner/:path*",
-    "/app/admin/:path*", 
+    "/",
+    "/login",
+    "/signup",
+    "/register/:path*",
+    "/learner/:path*",
+    "/mentor/:path*",
+    "/admin/:path*",
   ],
 }

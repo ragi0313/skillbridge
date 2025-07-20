@@ -1,3 +1,4 @@
+//Header.tsx
 "use client"
 
 import Link from "next/link"
@@ -36,7 +37,7 @@ export default function Header() {
 
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" })
-    router.push("/login")
+    router.push("/")
     router.refresh()
   }
 

@@ -3,12 +3,12 @@
 import type React from "react"
 
 import { useState } from "react"
-import SignupLayout from "@/components/signup/SignupLayout"
-import SignupHeader from "@/components/signup/SignupHeader"
-import StepIndicator from "@/components/signup/StepIndicator"
-import LearnerBasicInfo from "@/components/signup/learner/LearnerBasicInfo"
-import LearnerGoals from "@/components/signup/learner/LearnerGoals"
-import LearnerEmailVerification from "@/components/signup/learner/LearnerEmailVerification";
+import SignupLayout from "@/components/register/SignupLayout"
+import SignupHeader from "@/components/register/SignupHeader"
+import StepIndicator from "@/components/register/StepIndicator"
+import LearnerBasicInfo from "@/components/register/learner/LearnerBasicInfo"
+import LearnerGoals from "@/components/register/learner/LearnerGoals"
+import LearnerEmailVerification from "@/components/register/learner/LearnerEmailVerification";
 
 export default function LearnerSignupPage() {
   const [currentStep, setCurrentStep] = useState(1)

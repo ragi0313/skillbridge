@@ -16,12 +16,15 @@ interface Props {
 
 export default function ProfilePictureUpload({ value, onChange }: Props) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(value)
+  const [publicId, setPublicId] = useState<string | null>(null)
   const [cropModalOpen, setCropModalOpen] = useState(false)
   const [imageSrc, setImageSrc] = useState<string | null>(null)
   const [crop, setCrop] = useState({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(1)
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const [isUploading, setIsUploading] = useState(false)
+  const [isRemoving, setIsRemoving] = useState(false)
 
   useEffect(() => {
     return () => {
@@ -57,24 +60,28 @@ export default function ProfilePictureUpload({ value, onChange }: Props) {
     setCroppedAreaPixels(croppedArea)
   }, [])
 
+  
+
   const handleCropSave = async () => {
-    if (!imageSrc || !croppedAreaPixels) return
+    if (!imageSrc || !croppedAreaPixels || isUploading) return
 
     try {
+      setIsUploading(true)
       const { file } = await getCroppedImg(imageSrc, croppedAreaPixels)
 
-      // Upload to Cloudinary
       const formData = new FormData()
       formData.append("file", file)
 
-      const res = await fetch("/api/upload", {
+      const res = await fetch("/api/picture/upload", {
         method: "POST",
         body: formData,
       })
 
       const data = await res.json()
+
       if (data.secure_url) {
         setPreviewUrl(data.secure_url)
+        setPublicId(data.public_id)
         onChange(data.secure_url)
         setCropModalOpen(false)
       } else {
@@ -83,13 +90,40 @@ export default function ProfilePictureUpload({ value, onChange }: Props) {
     } catch (err) {
       console.error("Crop or upload error", err)
       alert("Something went wrong.")
+      } finally {
+        setIsUploading(false)
+      }
+  }
+
+  const handleRemove = async () => {
+    if (!publicId) {
+      setPreviewUrl(null)
+      setPublicId(null)
+      onChange(null)
+      return
+    }
+
+    setIsRemoving(true)
+    try {
+      await fetch("/api/picture/delete", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ publicId }),
+      })
+      setPreviewUrl(null)
+      setPublicId(null)
+      onChange(null)
+      inputRef.current?.value && (inputRef.current.value = "")
+    } catch (err) {
+      console.error("Failed to delete image from Cloudinary", err)
+      alert("Failed to delete image. Please try again.")
+    } finally {
+      setIsRemoving(false)
     }
   }
 
-  const handleRemove = () => {
-    setPreviewUrl(null)
-    onChange(null)
-  }
 
   return (
     <div>
@@ -131,10 +165,11 @@ export default function ProfilePictureUpload({ value, onChange }: Props) {
                 type="button"
                 variant="destructive"
                 onClick={handleRemove}
+                disabled={isRemoving}
                 className="flex items-center space-x-2"
               >
                 <Trash className="w-4 h-4" />
-                <span>Remove</span>
+                <span>{isRemoving ? "Removing..." : "Remove"}</span>
               </Button>
             )}
           </div>
@@ -161,10 +196,19 @@ export default function ProfilePictureUpload({ value, onChange }: Props) {
             )}
           </div>
           <div className="flex justify-end space-x-2 pt-4">
-            <Button variant="outline" onClick={() => setCropModalOpen(false)}>
+            <Button
+              variant="outline"
+              disabled={isUploading}
+              onClick={() => setCropModalOpen(false)}
+            >
               Cancel
             </Button>
-            <Button onClick={handleCropSave}>Save</Button>
+            <Button
+              onClick={handleCropSave}
+              disabled={isUploading}
+            >
+              {isUploading ? "Uploading..." : "Save"}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

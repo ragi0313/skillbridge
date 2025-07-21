@@ -1,13 +1,13 @@
 "use client"
 
 import type React from "react";
-import { useState, useEffect } from "react";
-import StepIndicator from "@/components/signup/StepIndicator";
-import MentorBasicInfo from "@/components/signup/mentor/MentorBasicInfo";
-import MentorProfessionalDetails from "@/components/signup/mentor/MentorProfessionalDetails";
-import MentorSkillsRates from "@/components/signup/mentor/MentorSkillsRate";
-import MentorAvailability from "@/components/signup/mentor/MentorAvailability";
-import MentorReviewSubmit from "@/components/signup/mentor/MentorReviewSubmit";
+import { useState } from "react";
+import StepIndicator from "@/components/register/StepIndicator";
+import MentorBasicInfo from "@/components/register/mentor/MentorBasicInfo";
+import MentorProfessionalDetails from "@/components/register/mentor/MentorProfessionalDetails";
+import MentorSkillsRates from "@/components/register/mentor/MentorSkillsRate";
+import MentorAvailability from "@/components/register/mentor/MentorAvailability";
+import MentorReviewSubmit from "@/components/register/mentor/MentorReviewSubmit";
 import { useRouter } from "next/navigation";
 import Header from "@/components/landing/Header";
 
@@ -16,7 +16,7 @@ export default function MentorSignupPage() {
   const [currentStep, setCurrentStep] = useState(1)
   const [formData, setFormData] = useState({
     // Step 1: Basic Info
-    profilePicture: null as File | null,
+    profilePicture: null as string | null,
     firstName: "",
     lastName: "",
     email: "",
@@ -58,18 +58,29 @@ export default function MentorSignupPage() {
     setFormData(prev => ({ ...prev, ...data }))
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    setUserEmail(formData.email)
-    setIsSubmitted(true)
-    console.log("Mentor application submitted:", formData)
-  }
+  const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault()
 
-    useEffect(() => {
-        if (isSubmitted) {
-            router.push("/")
-        }
-    }, [isSubmitted])
+  try {
+    const res = await fetch("/api/register/mentor", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(formData),
+    })
+
+    if (res.ok) {
+      setUserEmail(formData.email);
+      setIsSubmitted(true);
+      router.push("/");
+    } else {
+      const errorData = await res.json();
+      alert(errorData.error || "Something went wrong");
+    }
+  } catch (err) {
+    console.error("Submission error:", err);
+    alert("Something went wrong. Please try again.");
+  }
+}
 
   return (
     <div className="min-h-screen bg-white">

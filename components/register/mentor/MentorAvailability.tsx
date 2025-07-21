@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
-import { ArrowLeft, MessageSquare, Target, Trophy, CheckCircle2, AlertTriangle } from "lucide-react"
+import { ArrowLeft, MessageSquare, Target, Trophy } from "lucide-react"
 import WeeklyAvailabilitySelector from "./WeeklyAvailabilitySelector"
 
 type TimeSlot = {
@@ -58,7 +58,7 @@ export default function MentorAvailability({ formData, setFormData, nextStep, pr
         <CardHeader>
           <CardTitle>Set Your Availability</CardTitle>
           <p className="text-sm text-gray-600">
-            Choose when you're available to mentor learners. You can adjust these times later.
+            Choose when you're available to mentor learners. You can adjust these later in your dashboard.
           </p>
         </CardHeader>
         <CardContent>
@@ -174,7 +174,7 @@ export default function MentorAvailability({ formData, setFormData, nextStep, pr
           <Button
             type="button"
             onClick={nextStep}
-            disabled={!isFormValid}
+            disabled={!isFormValid()}
             className="w-[15%] h-14 gradient-bg text-white font-semibold text-base rounded-lg"
           >
             Continue

@@ -4,7 +4,7 @@ import { db } from "@/db"
 import { pendingLearners } from "@/db/schema"
 import { hash } from "bcryptjs"
 import { nanoid } from "nanoid"
-import { sendVerificationEmail } from "@/lib/mail"
+import { sendVerificationEmail } from "@/lib/email/activationMail"
 
 export async function POST(req: Request) {
   const body = await req.json()

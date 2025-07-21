@@ -1,15 +1,15 @@
 "use client"
 
-import React, { useState } from "react"
-import { useRouter } from "next/navigation"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Button } from "@/components/ui/button"
-import { Eye, EyeOff } from "lucide-react"
-import SignupLayout from "@/components/signup/SignupLayout"
-import SignupHeader from "@/components/signup/SignupHeader"
-import Link from "next/link"
-import { usePasswordVisibility } from "@/app/hooks/usePasswordVisibility"
+import React, { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { Eye, EyeOff } from "lucide-react";
+import SignupLayout from "@/components/register/SignupLayout";
+import SignupHeader from "@/components/register/SignupHeader";
+import Link from "next/link";
+import { usePasswordVisibility } from "@/app/hooks/usePasswordVisibility";
 
 const Login = () => {
   const [formData, setFormData] = useState({ email: "", password: "" })

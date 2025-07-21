@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { db } from "@/db"
-import { users, pendingLearners } from "@/db/schema"
+import { users, pendingLearners, pendingMentors } from "@/db/schema"
 import { eq } from "drizzle-orm"
 
 export async function POST(req: Request) {
@@ -11,12 +11,13 @@ export async function POST(req: Request) {
   }
 
   try {
-    const [existingUsers, existingPending] = await Promise.all([
+    const [existingUsers, existingPendingLearners, existingPendingMentors] = await Promise.all([
       db.select().from(users).where(eq(users.email, email)),
       db.select().from(pendingLearners).where(eq(pendingLearners.email, email)),
+      db.select().from(pendingMentors).where(eq(pendingMentors.email, email)),
     ])
 
-    const exists = existingUsers.length > 0 || existingPending.length > 0
+   const exists = existingUsers.length > 0 || existingPendingLearners.length > 0 || existingPendingMentors.length > 0
 
     return NextResponse.json({ exists })
   } catch (error) {

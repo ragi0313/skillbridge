@@ -1,6 +1,6 @@
 import Header from "@/components/landing/Header";
-import SignupHero from "@/components/signup/SignupHero";
-import SignupOptions from "@/components/signup/SignupOptions";
+import SignupHero from "@/components/register/SignupHero";
+import SignupOptions from "@/components/register/SignupOptions";
 import Link from "next/link";
 
 

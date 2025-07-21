@@ -1,12 +1,4 @@
-import {
-  pgTable,
-  serial,
-  varchar,
-  text,
-  timestamp,
-  integer,
-  json,
-} from "drizzle-orm/pg-core"
+import { pgTable, serial, varchar, text, timestamp, integer, json } from "drizzle-orm/pg-core"
 
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
@@ -22,16 +14,13 @@ export const users = pgTable("users", {
   email: varchar("email", { length: 255 }).notNull().unique(),
   hashedPassword: varchar("hashed_password", { length: 255 }).notNull(),
   role: varchar("role", { length: 20 }).notNull(), // 'learner' | 'mentor' | 'admin'
-  profilePictureUrl: varchar("profile_picture_url", { length: 512 }), // optional
   ...timestamps,
 })
 
 export const admins = pgTable("admins", {
   id: serial("id").primaryKey(),
-  firstName: varchar("first_name", { length: 100 }).notNull(),
-  lastName: varchar("last_name", { length: 100 }).notNull(),
-  email: varchar("email", { length: 255 }).notNull().unique(),
-  passwordHash: varchar("password_hash", { length: 255 }).notNull(),
+  userId: integer("user_id").notNull().unique().references(() => users.id),
+  profilePictureUrl: varchar("profile_picture_url", { length: 512 }),
   createdAt: timestamp("created_at").defaultNow(),
 })
 // LEARNERS TABLE
@@ -46,7 +35,6 @@ export const learners = pgTable("learners", {
   profilePictureUrl: varchar("profile_picture_url", { length: 255 }), // optional
   socialLinks: json("social_links"), // e.g., { github, twitter }
   timezone: varchar("timezone", { length: 100 }),
-  availability: text("availability"),
   ...timestamps,
 })
 
@@ -76,6 +64,16 @@ export const mentorSkills = pgTable("mentor_skills", {
   ratePerHour: integer("rate_per_hour").notNull(), // in credits
   ...timestamps,
 })
+
+export const mentorReviews = pgTable("mentor_reviews", {
+  id: serial("id").primaryKey(),
+  mentorId: integer("mentor_id").notNull().references(() => mentors.id),
+  learnerId: integer("learner_id").notNull().references(() => learners.id),
+  reviewText: text("review_text").notNull(),
+  rating: integer("rating"),
+  ...timestamps,
+})
+
 
 // PENDING LEARNERS TABLE
 export const pendingLearners = pgTable("pending_learners", {

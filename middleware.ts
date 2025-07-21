@@ -26,7 +26,7 @@ export async function middleware(req: NextRequest) {
   const isPublicPath = [
     "/",
     "/login",
-    "/signup",
+    "/register",
     "/register/learner",
     "/register/mentor",
   ].includes(pathname)
@@ -77,7 +77,7 @@ export const config = {
   matcher: [
     "/",
     "/login",
-    "/signup",
+    "/register",
     "/register/:path*",
     "/learner/:path*",
     "/mentor/:path*",

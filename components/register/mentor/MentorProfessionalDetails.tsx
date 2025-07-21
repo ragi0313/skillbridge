@@ -116,7 +116,7 @@ export default function MentorProfessionalDetails({ formData, setFormData, nextS
           </Label>
           <Input
             id="professionalTitle"
-            placeholder="e.g., Senior React Developer, UI/UX Designer, Full-Stack Engineer"
+            placeholder="e.g., Digital Marketing Specialist, UI/UX Designer, Full-Stack Web Developer"
             value={formData.professionalTitle}
             onChange={(e) => setFormData({ ...formData, professionalTitle: e.target.value })}
             className="h-12 text-base"
@@ -145,9 +145,6 @@ export default function MentorProfessionalDetails({ formData, setFormData, nextS
           />
           <div className="flex justify-between items-center">
             <p className="text-sm text-gray-500">This will be visible on your mentor profile</p>
-            <p className={`text-sm ${formData.bio?.length > 800 ? "text-orange-600" : "text-gray-500"}`}>
-              {formData.bio?.length || 0}/1000 characters (min: 100)
-            </p>
           </div>
         </CardContent>
       </Card>
@@ -161,7 +158,7 @@ export default function MentorProfessionalDetails({ formData, setFormData, nextS
           <Input
             id="yearsOfExperience"
             type="number"
-            placeholder="e.g., 5"
+            placeholder="5"
             value={formData.yearsOfExperience}
             onChange={(e) => setFormData({ ...formData, yearsOfExperience: e.target.value })}
             className="h-12 text-base"
@@ -207,7 +204,7 @@ export default function MentorProfessionalDetails({ formData, setFormData, nextS
           <CardTitle className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <Link className="w-5 h-5 text-purple-600" />
-              <span>Additional Links* ({linkAttachments.length})</span>
+              <span>Website/Portfolio Links* ({linkAttachments.length})</span>
             </div>
             <Button
               type="button"

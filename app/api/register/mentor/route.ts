@@ -1,8 +1,8 @@
-import { NextResponse } from "next/server"
 import { db } from "@/db"
 import { pendingMentors, pendingMentorSkills } from "@/db/schema"
 import { hash } from "bcryptjs"
-import { nanoid } from "nanoid"
+import { randomUUID } from "crypto"
+import { NextResponse } from "next/server"
 
 export async function POST(req: Request) {
   try {
@@ -13,75 +13,65 @@ export async function POST(req: Request) {
       lastName,
       email,
       password,
+      profilePicture,
+      country,
+      timezone,
       professionalTitle,
       bio,
       yearsOfExperience,
-      country,
-      profileUrl,
-      profilePictureUrl,
-      linkedInUrl,
-      socialLinks,
-      timezone,
-      availability,
+      linkedinUrl,
+      portfolioUrl,
       skills,
-      question1,
-      question2,
-      question3,
+      availability,
+      whyFreelancer,
+      whyMentor,
+      greatestAchievement,
     } = body
 
+    // Hash the password
     const hashedPassword = await hash(password, 10)
-    const verificationToken = nanoid(32)
 
-    const insertedMentors = await db
+    // Generate a token for future email verification (optional)
+    const verificationToken = randomUUID()
+
+    // Insert into pendingMentors
+    const [mentor] = await db
       .insert(pendingMentors)
       .values({
         firstName,
         lastName,
         email,
         hashedPassword,
+        profilePictureUrl: profilePicture!,
+        country,
+        timezone,
         professionalTitle,
         bio,
-        yearsOfExperience,
-        country,
-        profileUrl,
-        profilePictureUrl,
-        linkedInUrl,
-        socialLinks,
-        timezone,
+        yearsOfExperience: parseInt(yearsOfExperience || "0", 10),
+        linkedInUrl: linkedinUrl,
+        socialLinks: portfolioUrl ? { portfolioUrl } : null,
         availability: JSON.stringify(availability),
-        question1,
-        question2,
-        question3,
+        question1: whyFreelancer,
+        question2: whyMentor,
+        question3: greatestAchievement,
         verificationToken,
-        createdAt: new Date(),
       })
-      .returning({ id: pendingMentors.id })
+      .returning()
 
-    const pendingMentorId = insertedMentors[0]?.id
-
-    if (!pendingMentorId) {
-      return NextResponse.json(
-        { success: false, error: "Failed to get mentor ID." },
-        { status: 500 }
-      )
-    }
-
-    if (Array.isArray(skills) && skills.length > 0) {
+    // Insert skills
+    if (skills && skills.length > 0) {
       await db.insert(pendingMentorSkills).values(
-        skills.map(skill => ({
-          mentorId: pendingMentorId,
-          skillName: skill.name,
-          ratePerHour: skill.rate,
+        skills.map((s: any) => ({
+          mentorId: mentor.id,
+          skillName: s.name,
+          ratePerHour: s.rate,
         }))
       )
     }
 
     return NextResponse.json({ success: true })
-  } catch (error) {
-    console.error("Failed to register pending mentor:", error)
-    return NextResponse.json(
-      { success: false, error: "Failed to register pending mentor" },
-      { status: 500 }
-    )
+  } catch (err) {
+    console.error("Mentor signup error:", err)
+    return NextResponse.json({ error: "Failed to register mentor" }, { status: 500 })
   }
 }

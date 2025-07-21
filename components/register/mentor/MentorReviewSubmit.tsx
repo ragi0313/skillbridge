@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { ArrowLeft, CheckCircle, User, Briefcase, Star, Clock, DollarSign, AlertCircle } from "lucide-react"
 import { useState } from "react"
+import Link from "next/link"
 
 type Props = {
   formData: any
@@ -109,7 +110,7 @@ export default function MentorReviewSubmit({ formData, prevStep }: Props) {
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
               <Star className="w-5 h-5 text-yellow-500" />
-              <span>Skills & Rates ({formData.skills.length})</span>
+              <span>Skills & Rates per hour ({formData.skills.length})</span>
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -168,32 +169,7 @@ export default function MentorReviewSubmit({ formData, prevStep }: Props) {
         </Card>
       </div>
 
-      {/* Terms Agreement */}
-      <Card className="border-2 border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50">
-        <CardContent className="p-6">
-          <div className="flex items-start space-x-3">
-            <Checkbox
-              id="terms"
-              checked={agreedToTerms}
-              onCheckedChange={(checked) => setAgreedToTerms(!!checked)}
-              className="mt-1"
-            />
-            <Label htmlFor="terms" className="text-sm leading-relaxed text-blue-900">
-              I agree to the{" "}
-              <a href="/terms" className="text-blue-600 hover:text-blue-700 hover:underline font-semibold">
-                Terms of Service
-              </a>{" "}
-              and{" "}
-              <a href="/privacy" className="text-blue-600 hover:text-blue-700 hover:underline font-semibold">
-                Privacy Policy
-              </a>
-              . I understand that my application will be reviewed by SkillBridge admins before account activation.
-            </Label>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Review Notice */}
+  
       <Card className="border-2 border-amber-200 bg-gradient-to-r from-amber-50 to-yellow-50">
         <CardContent className="p-6">
           <div className="flex items-start space-x-3">
@@ -210,8 +186,38 @@ export default function MentorReviewSubmit({ formData, prevStep }: Props) {
         </CardContent>
       </Card>
 
+      <Card className="border-2 border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50">
+        <CardContent className="p-6">
+          <div className="flex items-start space-x-3">
+            <Checkbox
+              id="terms"
+              checked={agreedToTerms}
+              onCheckedChange={(checked) => setAgreedToTerms(!!checked)}
+              className="mt-1"
+            />
+            <Label htmlFor="terms" className="text-sm leading-relaxed text-blue-900 block">
+              I agree to the{" "}
+              <Link
+                href="/terms"
+                className="text-blue-600 hover:text-blue-700 hover:underline font-semibold"
+              >
+                Terms of Service
+              </Link>
+              {" "}and{" "}
+              <Link
+                href="/privacy"
+                className="text-blue-600 hover:text-blue-700 hover:underline font-semibold"
+              >
+                Privacy Policy
+              </Link>
+              . I understand that my application will be reviewed by SkillBridge admins before account activation.
+            </Label>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Navigation Buttons */}
-      <div className="flex flex-col sm:flex-row gap-4 pt-6">
+      <div className="flex flex-col sm:flex-row justify-between gap-4 pt-6">
         <Button
           type="button"
           variant="outline"
@@ -224,7 +230,7 @@ export default function MentorReviewSubmit({ formData, prevStep }: Props) {
         <Button
           type="submit"
           disabled={!agreedToTerms}
-          className="flex-1 h-14 gradient-bg text-white font-semibold text-lg rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-[1.02] disabled:opacity-50 disabled:transform-none"
+          className="w-[28%] h-14 gradient-bg text-white font-semibold text-lg rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-[1.02] disabled:opacity-50 disabled:transform-none"
         >
           Submit Application
           <CheckCircle className="w-5 h-5 ml-2" />

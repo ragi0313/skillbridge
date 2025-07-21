@@ -1,20 +1,13 @@
 "use client"
 
-import { useState } from "react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
-import { Eye, EyeOff, CheckCircle } from "lucide-react"
-import countries from "world-countries"
-import {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-} from "@/components/ui/select"
+import { Eye, EyeOff, CheckCircle, Loader2 } from "lucide-react"
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select"
 import { useEmailAvailability } from "@/app/hooks/useEmailAvailability"
 import { usePasswordVisibility } from "@/app/hooks/usePasswordVisibility"
+import { useCountryOptions } from "@/app/hooks/useCountryOptions"
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/
@@ -33,7 +26,7 @@ type Props = {
 }
 
 export default function LearnerBasicInfo({ formData, setFormData, nextStep }: Props) {
-  const emailAvailable = useEmailAvailability(formData.email)
+  const { emailAvailable, isChecking } = useEmailAvailability(formData.email)
   const {
     showPassword,
     showConfirmPassword,
@@ -41,14 +34,11 @@ export default function LearnerBasicInfo({ formData, setFormData, nextStep }: Pr
     toggleConfirmPassword,
   } = usePasswordVisibility()
 
-  const countryOptions = countries.map((country) => ({
-    value: country.cca2,
-    label: country.name.common,
-  }))
+  const countryOptions = useCountryOptions()
 
   const isFormValid =
-    formData.firstName.trim() &&
-    formData.lastName.trim() &&
+    formData.firstName &&
+    formData.lastName &&
     emailRegex.test(formData.email) &&
     emailAvailable === true &&
     formData.country &&
@@ -94,14 +84,16 @@ export default function LearnerBasicInfo({ formData, setFormData, nextStep }: Pr
             onChange={(e) => setFormData({ ...formData, email: e.target.value })}
             placeholder="Enter your email"
             className="h-14 pr-11"
-            required
           />
-          {emailRegex.test(formData.email) && emailAvailable === true && (
+          {emailRegex.test(formData.email) && isChecking && (
+            <Loader2 className="absolute right-3 top-4 h-5 w-5 text-gray-400 animate-spin" />
+          )}
+          {emailRegex.test(formData.email) && !isChecking && emailAvailable && (
             <CheckCircle className="absolute right-3 top-4 h-6 w-6 text-green-500" />
           )}
         </div>
-        {emailRegex.test(formData.email) && emailAvailable === false && (
-          <p className="text-sm text-red-600 mt-1">Email is already taken.</p>
+        {emailRegex.test(formData.email) && !isChecking && emailAvailable === false && (
+          <p className="text-sm text-red-600 mt-1 ml-1">Email is already taken.</p>
         )}
       </div>
 

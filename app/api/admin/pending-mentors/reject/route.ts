@@ -1,6 +1,7 @@
 import { db } from "@/db"
 import { pendingMentors, pendingMentorSkills } from "@/db/schema"
 import { sendMentorRejectionEmail } from "@/lib/email/rejectionMail"
+import { deleteFromCloudinary } from "@/lib/cloudinary"
 import { eq } from "drizzle-orm"
 import { NextResponse } from "next/server"
 
@@ -12,6 +13,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid request data" }, { status: 400 })
     }
 
+    // Get the pending mentor by ID
     const pending = await db.query.pendingMentors.findFirst({
       where: eq(pendingMentors.id, id),
     })
@@ -20,10 +22,31 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Pending mentor not found" }, { status: 404 })
     }
 
+    // Delete profile picture from Cloudinary (if it exists)
+    if (pending.profilePictureUrl) {
+      const parts = pending.profilePictureUrl.split("/")
+      const filename = parts[parts.length - 1] // e.g., abc123.jpg
+      const publicId = filename.split(".")[0]   // e.g., abc123
+      if (publicId) {
+        try {
+          await deleteFromCloudinary(publicId)
+        } catch (cloudErr) {
+          console.error("Cloudinary deletion failed:", cloudErr)
+          // Continue anyway — do not block the rest
+        }
+      }
+    }
+
+    // Delete from related tables
     await db.delete(pendingMentorSkills).where(eq(pendingMentorSkills.mentorId, id))
     await db.delete(pendingMentors).where(eq(pendingMentors.id, id))
 
-    await sendMentorRejectionEmail(pending.email, `${pending.firstName} ${pending.lastName}`, notes)
+    // Send rejection email
+    await sendMentorRejectionEmail(
+      pending.email,
+      `${pending.firstName} ${pending.lastName}`,
+      notes
+    )
 
     return NextResponse.json({ success: true, message: "Mentor application rejected." })
   } catch (err) {
@@ -31,4 +54,3 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
-

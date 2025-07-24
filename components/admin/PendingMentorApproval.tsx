@@ -29,10 +29,10 @@ export default function PendingMentorApprovals() {
 
   const handleApprove = async (id: number, notes: string) => {
     try {
-      await fetch("/api/admin/pending-mentors/approve", {
+      await fetch(`/api/admin/pending-mentors/approve/${id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, notes }),
+        body: JSON.stringify({ notes }),
       })
       setMentors((prev) => prev.filter((m) => m.id !== id))
     } catch (error) {
@@ -40,9 +40,10 @@ export default function PendingMentorApprovals() {
     }
   }
 
+
   const handleReject = async (id: number, notes: string) => {
     try {
-      await fetch("/api/admin/pending-mentors/reject", {
+      await fetch(`/api/admin/pending-mentors/reject`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id, notes }),

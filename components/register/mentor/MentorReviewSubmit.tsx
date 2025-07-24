@@ -92,16 +92,26 @@ export default function MentorReviewSubmit({ formData, prevStep }: Props) {
               {formData.linkedinUrl && (
                 <div>
                   <Label className="text-sm text-gray-500">LinkedIn</Label>
-                  <p className="font-medium text-blue-600 truncate">{formData.linkedinUrl}</p>
-                </div>
-              )}
-              {formData.portfolioUrl && (
-                <div>
-                  <Label className="text-sm text-gray-500">Portfolio</Label>
-                  <p className="font-medium text-blue-600 truncate">{formData.portfolioUrl}</p>
+                  <a href={formData.linkedinUrl}  target="_blank" className="font-medium text-blue-600 truncate hover:underline">
+                    {formData.linkedinUrl}
+                  </a>
                 </div>
               )}
             </div>
+              {formData.linkAttachments.map((item: any, i: number) => (
+                <div>
+                  <Label className="text-sm text-gray-500">{item.label}</Label>
+                  <a
+                  key={i}
+                  href={item.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium text-blue-600 truncate block hover:underline"
+                >
+                  {item.url}
+                </a>
+                </div>
+              ))}
           </CardContent>
         </Card>
 

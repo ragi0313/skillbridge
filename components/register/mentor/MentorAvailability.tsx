@@ -90,7 +90,7 @@ export default function MentorAvailability({ formData, setFormData, nextStep, pr
             />
             <div className="flex justify-between items-center">
               <p className="text-sm text-gray-500">
-                This helps us understand your background (not visible to learners)
+                (Not visible in public)
               </p>
               <span className={`text-sm ${formData.whyFreelancer?.length >= 50 ? "text-green-600" : "text-gray-400"}`}>
                 {formData.whyFreelancer?.length || 0}/50 min
@@ -121,7 +121,7 @@ export default function MentorAvailability({ formData, setFormData, nextStep, pr
             />
             <div className="flex justify-between items-center">
               <p className="text-sm text-gray-500">
-                This helps us match you with the right learners (not visible to learners)
+                (Not visible in public)
               </p>
               <span className={`text-sm ${formData.whyMentor?.length >= 50 ? "text-green-600" : "text-gray-400"}`}>
                 {formData.whyMentor?.length || 0}/50 min
@@ -139,7 +139,7 @@ export default function MentorAvailability({ formData, setFormData, nextStep, pr
           </CardHeader>
           <CardContent className="space-y-4">
             <Label htmlFor="greatestAchievement" className="text-base font-semibold text-gray-700">
-              What is your greatest professional achievement so far?*
+              What is your greatest professional achievement so far in your freelancing career?
             </Label>
             <Textarea
               id="greatestAchievement"
@@ -152,7 +152,7 @@ export default function MentorAvailability({ formData, setFormData, nextStep, pr
             />
             <div className="flex justify-between items-center">
               <p className="text-sm text-gray-500">
-                This helps us understand your expertise level (not visible to learners)
+                (Not visible in public)
               </p>
               <span
                 className={`text-sm ${formData.greatestAchievement?.length >= 50 ? "text-green-600" : "text-gray-400"}`}

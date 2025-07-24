@@ -4,14 +4,8 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Separator } from "@/components/ui/separator"
 import { CheckCircle, XCircle, Eye, ExternalLink, Clock, Mail, MapPin, Globe, Star } from "lucide-react"
@@ -57,7 +51,7 @@ export function MentorReviewDialog({ mentor, onApprove, onReject }: MentorReview
           Review
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-7xl max-h-[90vh] overflow-y-auto">
         <DialogHeader className="pb-4">
           <DialogTitle className="text-2xl">Review Application - {name}</DialogTitle>
           <DialogDescription className="text-base">
@@ -135,15 +129,23 @@ export function MentorReviewDialog({ mentor, onApprove, onReject }: MentorReview
                   </div>
                   <div>
                     <p className="text-sm font-medium text-gray-700 mb-1">Social Links</p>
-                    <a
-                      href={mentor.socialLinks}
-                      className="inline-flex items-center text-blue-600 hover:text-blue-800 hover:underline"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      View Social Profile
-                      <ExternalLink className="w-4 h-4 ml-1" />
-                    </a>
+                    {Array.isArray(mentor.socialLinks) && mentor.socialLinks.length > 0 ? (
+                      mentor.socialLinks.map((item: any, i: number) => (
+                        <div key={i}>
+                          <Label className="text-sm text-gray-500">{item.label}</Label>
+                          <a
+                            href={item.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-medium text-blue-600 truncate block hover:underline"
+                          >
+                            {item.url}
+                          </a>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-sm text-gray-500">No social links provided</p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -212,14 +214,14 @@ export function MentorReviewDialog({ mentor, onApprove, onReject }: MentorReview
           <TabsContent value="questions" className="space-y-6">
             <div className="space-y-6">
               <div>
-                <h5 className="font-medium text-gray-900 mb-3">Why do you want to become a mentor on SkillBridge?</h5>
+                <h5 className="font-medium text-gray-900 mb-3">Why did you become a freelancer?</h5>
                 <div className="bg-blue-50 border-l-4 border-blue-400 p-4 rounded-r-lg">
                   <p className="text-gray-700 leading-relaxed">{mentor.question1}</p>
                 </div>
               </div>
               <div>
                 <h5 className="font-medium text-gray-900 mb-3">
-                  Describe your previous mentoring or teaching experience.
+                  Why dou you want to become a mentor?
                 </h5>
                 <div className="bg-green-50 border-l-4 border-green-400 p-4 rounded-r-lg">
                   <p className="text-gray-700 leading-relaxed">{mentor.question2}</p>
@@ -227,7 +229,7 @@ export function MentorReviewDialog({ mentor, onApprove, onReject }: MentorReview
               </div>
               <div>
                 <h5 className="font-medium text-gray-900 mb-3">
-                  What is your approach to mentoring and helping others learn?
+                  What is your greatest professional achievement so far in your freelancing career?
                 </h5>
                 <div className="bg-purple-50 border-l-4 border-purple-400 p-4 rounded-r-lg">
                   <p className="text-gray-700 leading-relaxed">{mentor.question3}</p>

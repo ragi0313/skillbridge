@@ -46,6 +46,7 @@ export default function MentorProfessionalDetails({ formData, setFormData, nextS
       formData.bio.length <= 1000 &&
       formData.yearsOfExperience &&
       formData.linkedinUrl
+      formData.linkAttachments
 
     const hasValidLinkedIn = formData.linkedinUrl && formData.linkedinUrl.includes("linkedin.com")
 
@@ -160,7 +161,10 @@ export default function MentorProfessionalDetails({ formData, setFormData, nextS
             type="number"
             placeholder="5"
             value={formData.yearsOfExperience}
-            onChange={(e) => setFormData({ ...formData, yearsOfExperience: e.target.value })}
+            onChange={(e) => {
+              const value = parseInt(e.target.value, 10)
+              setFormData({ ...formData, yearsOfExperience: isNaN(value) ? "" : value })
+            }}
             className="h-12 text-base"
             min="0"
             max="50"

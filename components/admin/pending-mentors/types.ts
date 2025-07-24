@@ -7,6 +7,8 @@ export type PendingMentor = {
   lastName: string
   email: string
   profilePictureUrl: string
+  gender: string
+  languagesSpoken: string
   country: string
   timezone: string
   professionalTitle: string

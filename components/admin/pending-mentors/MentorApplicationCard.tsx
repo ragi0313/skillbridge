@@ -2,7 +2,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Separator } from "@/components/ui/separator"
-import { Star, Calendar, MapPin, Clock, Mail, Globe } from "lucide-react"
+import { Star, Calendar, MapPin, Clock, Mail, Globe, User, Languages } from "lucide-react"
 import type { PendingMentor, Availability } from "./types"
 import { CreditsDisplay } from "./CreditsDisplay"
 import { MentorReviewDialog } from "./MentorReviewDialog"
@@ -54,6 +54,19 @@ export function MentorApplicationCard({ mentor, onApprove, onReject }: MentorApp
                 <div className="flex items-center text-gray-600">
                   <Globe className="w-4 h-4 mr-2 text-purple-500" />
                   <span>{mentor.timezone}</span>
+                </div>
+                <div className="flex items-center text-gray-600">
+                  <User className="w-4 h-4 mr-2 text-pink-500" />
+                  <span className="capitalize">{mentor.gender}</span>
+                </div>
+                <div className="flex items-center text-gray-600">
+                  <Languages className="w-4 h-4 mr-2 text-teal-500" />
+                  <span>
+                    {Array.isArray(mentor.languagesSpoken) ? (mentor.languagesSpoken as string[]).slice(0, 2).join(", ") +
+                      ((mentor.languagesSpoken as string[]).length > 2 ? "..." : "") : typeof mentor.languagesSpoken === "string"
+                      ? mentor.languagesSpoken : "Not specified"
+                    }
+                  </span>
                 </div>
                 <div className="flex items-center text-gray-600">
                   <Calendar className="w-4 h-4 mr-2 text-orange-500" />

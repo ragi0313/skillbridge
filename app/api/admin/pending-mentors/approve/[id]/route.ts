@@ -29,6 +29,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     profilePictureUrl: pending.profilePictureUrl,
     country: pending.country,
     timezone: pending.timezone,
+    gender: pending.gender,
+    languagesSpoken: pending.languagesSpoken,
     professionalTitle: pending.professionalTitle,
     bio: pending.bio,
     yearsOfExperience: pending.yearsOfExperience,

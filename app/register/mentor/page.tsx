@@ -20,6 +20,8 @@ export default function MentorSignupPage() {
     firstName: "",
     lastName: "",
     email: "",
+    gender: "",
+    languages: [] as string[],
     password: "",
     confirmPassword: "",
     country: "",
@@ -30,7 +32,7 @@ export default function MentorSignupPage() {
     bio: "",
     yearsOfExperience: "",
     linkedinUrl: "",
-    portfolioUrl: "",
+    linkAttachments: [] as string[],
 
     // Step 3: Skills & Rates
     skills: [] as Array<{ name: string; rate: number }>,

@@ -23,6 +23,7 @@ export default function FindMentorsPage() {
   const [ratingRange, setRatingRange] = useState<[number, number]>([0, 5])
   const [sortBy, setSortBy] = useState<string>("highest-rated")
   const [currentPage, setCurrentPage] = useState(1)
+  
   const MENTORS_PER_PAGE = 8
 
   // Fetch mentors from API

@@ -4,72 +4,15 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Star, MapPin, Clock, DollarSign, MessageCircle, Calendar } from "lucide-react"
+import { CheckCircle, Star, Award, Users, MapPin, Languages, Coins, Calendar, MessageCircle } from "lucide-react"
 import type { Mentor } from "./types"
+import Link from "next/link"
 
 interface MentorCardProps {
   mentor: Mentor
 }
 
-// Helper function to get country flag emoji
-const getCountryFlag = (country: string): string => {
-  const countryFlags: { [key: string]: string } = {
-    "United States": "🇺🇸",
-    Canada: "🇨🇦",
-    "United Kingdom": "🇬🇧",
-    Germany: "🇩🇪",
-    France: "🇫🇷",
-    Spain: "🇪🇸",
-    Italy: "🇮🇹",
-    Netherlands: "🇳🇱",
-    Sweden: "🇸🇪",
-    Norway: "🇳🇴",
-    Denmark: "🇩🇰",
-    Finland: "🇫🇮",
-    Australia: "🇦🇺",
-    "New Zealand": "🇳🇿",
-    Japan: "🇯🇵",
-    "South Korea": "🇰🇷",
-    Singapore: "🇸🇬",
-    India: "🇮🇳",
-    Brazil: "🇧🇷",
-    Mexico: "🇲🇽",
-    Argentina: "🇦🇷",
-    Chile: "🇨🇱",
-    "South Africa": "🇿🇦",
-    Israel: "🇮🇱",
-    UAE: "🇦🇪",
-    Switzerland: "🇨🇭",
-    Austria: "🇦🇹",
-    Belgium: "🇧🇪",
-    Portugal: "🇵🇹",
-    Ireland: "🇮🇪",
-    Poland: "🇵🇱",
-    "Czech Republic": "🇨🇿",
-    Hungary: "🇭🇺",
-    Romania: "🇷🇴",
-    Bulgaria: "🇧🇬",
-    Croatia: "🇭🇷",
-    Slovenia: "🇸🇮",
-    Slovakia: "🇸🇰",
-    Estonia: "🇪🇪",
-    Latvia: "🇱🇻",
-    Lithuania: "🇱🇹",
-    Greece: "🇬🇷",
-    Turkey: "🇹🇷",
-    Russia: "🇷🇺",
-    Ukraine: "🇺🇦",
-    China: "🇨🇳",
-    Taiwan: "🇹🇼",
-    "Hong Kong": "🇭🇰",
-    Thailand: "🇹🇭",
-    Vietnam: "🇻🇳",
-    Philippines: "🇵🇭",
-    Indonesia: "🇮🇩",
-    Malaysia: "🇲🇾",
-  }
-  return countryFlags[country] || "🌍"
-}
+
 
 export function MentorCard({ mentor }: MentorCardProps) {
   const initials = mentor.name
@@ -78,124 +21,156 @@ export function MentorCard({ mentor }: MentorCardProps) {
     .join("")
     .toUpperCase()
 
+  // Format bio with proper line breaks
+  const MAX_SENTENCES = 2
+
+const formattedBio = mentor.bio
+  .split(". ")
+  .slice(0, MAX_SENTENCES)
+  .map((sentence, i, arr) => (
+    <span key={i}>
+      {sentence.trim()}
+      {i < arr.length - 1 ? ". " : mentor.bio.split(". ").length > MAX_SENTENCES ? "..." : "."}
+    </span>
+  ))
+
+  const slug = `${mentor.name}`.toLowerCase().replace(/\s+/g, "-")
+
   return (
-    <Card className="group hover:shadow-2xl transition-all duration-300 border-0 bg-white rounded-3xl overflow-hidden transform hover:-translate-y-2">
-      <CardContent className="p-0">
-        {/* Header with Avatar and Basic Info */}
-        <div className="relative p-8 pb-6">
-          <div className="flex items-start gap-6">
+    <Card className="group hover:shadow-2xl transition-all duration-500 cursor-pointer border-0 shadow-lg hover:-translate-y-2 bg-white rounded-3xl overflow-hidden relative">
+      {/* Availability Badge */}
+      {mentor.isAvailable && (
+        <div className="absolute top-6 right-6 z-10">
+          <Badge className="bg-green-100 text-green-700 border-green-200 font-medium px-4 py-2">
+            <CheckCircle className="w-4 h-4 mr-2" />
+            Available Now
+          </Badge>
+        </div>
+      )}
+
+      <CardContent className="p-8">
+        <div className="flex items-start gap-8">
+          {/* Left Section - Avatar and Basic Info */}
+          <div className="flex-shrink-0">
             <div className="relative">
-              <Avatar className="h-20 w-20 border-4 border-white shadow-lg">
+              <Avatar className="w-32 h-32 shadow-2xl">
                 <AvatarImage src={mentor.avatar || "/default-avatar.png"} alt={mentor.name} />
-                <AvatarFallback className="bg-gradient-to-br from-purple-500 to-pink-500 text-white text-xl font-bold">
+                <AvatarFallback className="bg-gradient-to-br from-purple-600 to-blue-600 text-white font-bold text-3xl">
                   {initials}
                 </AvatarFallback>
               </Avatar>
-              <div
-                className={`absolute -bottom-1 -right-1 w-6 h-6 rounded-full border-3 border-white ${
-                  mentor.isAvailable ? "bg-green-500" : "bg-gray-400"
-                }`}
-              />
+              <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-2 shadow-lg">
+                <div className="w-6 h-6 bg-green-600 rounded-full"></div>
+              </div>
             </div>
+            {/* Location */}
+            <div className="flex items-center justify-center text-sm text-gray-500 mt-4">
+              <MapPin className="w-4 h-4 mr-2 text-gray-400" />
+              <span className="font-medium">{mentor.country}</span>
+            </div>
+          </div>
 
-            <div className="flex-1 min-w-0">
-              <div className="flex items-start justify-between mb-2">
-                <div>
-                  <h3 className="text-xl font-bold text-gray-900 mb-1 truncate">{mentor.name}</h3>
-                  <p className="text-purple-600 font-semibold text-sm mb-2">{mentor.title}</p>
+          {/* Middle Section - Main Info */}
+          <div className="flex-1 min-w-0">
+            <div className="mb-6">
+              <h3 className="text-3xl font-bold text-gray-900 group-hover:text-purple-600 transition-colors mb-2">
+                {mentor.name}
+              </h3>
+              <p className="text-lg font-semibold text-gray-600 mb-4">{mentor.title}</p>
+
+              {/* Rating and Experience Row */}
+              <div className="flex flex-wrap items-center gap-3 mb-6">
+                <div className="flex items-center bg-gray-50 px-4 py-2 rounded-full">
+                  <Star className="w-5 h-5 text-yellow-500 fill-current mr-2" />
+                  <span className="font-bold text-gray-900 text-lg">{mentor.rating.toFixed(1)}</span>
+                  <span className="text-gray-600 ml-1">({mentor.reviewCount} reviews)</span>
                 </div>
-                <div className="flex items-center gap-1 bg-yellow-50 px-3 py-1 rounded-full">
-                  <Star className="h-4 w-4 text-yellow-500 fill-current" />
-                  <span className="text-sm font-bold text-gray-900">{mentor.rating.toFixed(1)}</span>
-                  <span className="text-xs text-gray-600">({mentor.reviewCount})</span>
+                <div className="flex items-center bg-gray-50 px-4 py-2 rounded-full">
+                  <Award className="w-5 h-5 text-gray-600 mr-2" />
+                  <span className="font-medium text-gray-700 text-lg">{mentor.experience} years exp</span>
+                </div>
+                <div className="flex items-center bg-gray-50 px-4 py-2 rounded-full">
+                  <Users className="w-5 h-5 text-gray-600 mr-2" />
+                  <span className="font-medium text-gray-700 text-lg">{mentor.reviewCount} sessions</span>
                 </div>
               </div>
 
-              <div className="flex items-center gap-4 text-sm text-gray-600 mb-3">
-                <div className="flex items-center gap-1">
-                  <MapPin className="h-4 w-4" />
-                  <span>
-                    {getCountryFlag(mentor.country)} {mentor.country}
-                  </span>
+              {/* Bio */}
+              <p className="text-gray-700 leading-relaxed text-lg mb-6">{formattedBio}</p>
+
+              {/* Skills */}
+              <div className="mb-6">
+                <h4 className="text-sm font-semibold text-gray-800 mb-3">Skills:</h4>
+                <div className="flex flex-wrap gap-3">
+                  {mentor.skills.map((skill, index) => (
+                    <Badge
+                      key={index}
+                      variant="secondary"
+                      className="text-sm font-medium px-4 py-2 bg-gray-100 text-gray-700 border-gray-200 rounded-2xl"
+                    >
+                      {skill}
+                    </Badge>
+                  ))}
                 </div>
-                <div className="flex items-center gap-1">
-                  <Clock className="h-4 w-4" />
-                  <span>{mentor.experience} years exp.</span>
+              </div>
+
+              {/* Languages */}
+              <div className="mb-6">
+                <h4 className="text-sm font-semibold text-gray-800 mb-3">Languages:</h4>
+                <div className="flex items-center gap-3">
+                  <Languages className="w-5 h-5 text-gray-400" />
+                  <span className="text-gray-700 text-lg font-medium">{mentor.languages.join(", ")}</span>
                 </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* Bio */}
-        <div className="px-8 pb-6">
-          <p className="text-gray-700 text-sm leading-relaxed line-clamp-3">{mentor.bio}</p>
-        </div>
+          {/* Right Section - Pricing and Actions */}
+          <div className="flex-shrink-0 w-80">
+            <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-2xl p-8 border border-purple-100">
+              {/* Pricing */}
+              <div className="text-center mb-8">
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  <Coins className="w-8 h-8 text-purple-600" />
+                  <span className="text-4xl font-bold text-purple-700">{mentor.hourlyRate}</span>
+                </div>
+                <div className="text-lg text-gray-600 font-medium">credits per session</div>
+                <div className="text-sm text-gray-500 mt-1">
+                  ≈ ${(mentor.hourlyRate / 5)}/hour
+                </div>
+              </div>
 
-        {/* Skills */}
-        <div className="px-8 pb-6">
-          <div className="flex flex-wrap gap-2">
-            {mentor.skills.slice(0, 4).map((skill) => (
-              <Badge
-                key={skill}
-                variant="secondary"
-                className="bg-purple-100 text-purple-700 hover:bg-purple-200 transition-colors text-xs px-3 py-1 rounded-full font-medium"
-              >
-                {skill}
-              </Badge>
-            ))}
-            {mentor.skills.length > 4 && (
-              <Badge variant="outline" className="text-gray-500 border-gray-300 text-xs px-3 py-1 rounded-full">
-                +{mentor.skills.length - 4} more
-              </Badge>
-            )}
-          </div>
-        </div>
+              {/* Session Stats */}
+              <div className="space-y-4 mb-8">
+                <div className="flex items-center justify-between p-3 bg-white rounded-xl">
+                  <span className="text-gray-600 font-medium">Total Sessions</span>
+                  <span className="text-gray-900 font-semibold">{mentor.reviewCount}</span>
+                </div>
+                <div className="flex items-center justify-between p-3 bg-white rounded-xl">
+                  <span className="text-gray-600 font-medium">Experience</span>
+                  <span className="text-gray-900 font-semibold">{mentor.experience} years</span>
+                </div>
+                <div className="flex items-center justify-between p-3 bg-white rounded-xl">
+                  <span className="text-gray-600 font-medium">Rating</span>
+                  <div className="flex items-center gap-1">
+                    <Star className="w-4 h-4 text-yellow-500 fill-current" />
+                    <span className="text-gray-900 font-semibold">{mentor.rating.toFixed(1)}</span>
+                  </div>
+                </div>
+              </div>
 
-        {/* Languages */}
-        <div className="px-8 pb-6">
-          <div className="flex items-center gap-2 text-sm text-gray-600">
-            <span className="font-medium">Languages:</span>
-            <span>{mentor.languages.join(", ")}</span>
-          </div>
-        </div>
-
-        {/* Footer with Price and Actions */}
-        <div className="px-8 pb-8">
-          <div className="flex items-center justify-between pt-6 border-t border-gray-100">
-            <div className="flex items-center gap-2">
-              <DollarSign className="h-5 w-5 text-green-600" />
-              <span className="text-2xl font-bold text-gray-900">{mentor.hourlyRate}</span>
-              <span className="text-sm text-gray-600">credits/hour</span>
+              {/* Action Buttons */}
+              <div className="space-y-3">
+                 <Link href={`/mentors/${mentor.id}/${slug}`}>
+                  <Button
+                    size="lg"
+                    className="w-[80%] ml-6 gradient-bg hover:from-purple-700 hover:to-blue-700 text-white font-semibold py-4 rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105"
+                  >
+                    View Profile
+                  </Button>
+                </Link>
+              </div>
             </div>
-
-            <div className="flex items-center gap-3">
-              <Button
-                variant="outline"
-                size="sm"
-                className="border-2 border-purple-200 text-purple-600 hover:bg-purple-50 hover:border-purple-300 rounded-xl font-semibold transition-all duration-200 bg-transparent"
-              >
-                <MessageCircle className="h-4 w-4 mr-2" />
-                Message
-              </Button>
-              <Button
-                size="sm"
-                className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-xl font-semibold px-6 transition-all duration-200 shadow-lg hover:shadow-xl"
-              >
-                <Calendar className="h-4 w-4 mr-2" />
-                Book Session
-              </Button>
-            </div>
-          </div>
-        </div>
-
-        {/* Availability Status */}
-        <div className={`px-8 py-3 ${mentor.isAvailable ? "bg-green-50" : "bg-gray-50"}`}>
-          <div className="flex items-center justify-center gap-2 text-sm font-medium">
-            <div className={`w-2 h-2 rounded-full ${mentor.isAvailable ? "bg-green-500" : "bg-gray-400"}`} />
-            <span className={mentor.isAvailable ? "text-green-700" : "text-gray-600"}>
-              {mentor.isAvailable ? "Available for sessions" : "Currently unavailable"}
-            </span>
           </div>
         </div>
       </CardContent>

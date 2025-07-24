@@ -54,7 +54,7 @@ export function FilterBar({
   clearAllFilters,
 }: FilterBarProps) {
   return (
-    <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8 mb-8 relative z-10">
+    <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8 pb-2 mb-8 relative z-10">
       {/* Main Filter Row */}
       <div className="flex flex-wrap items-center gap-4 mb-6">
         <div className="flex items-center gap-3">

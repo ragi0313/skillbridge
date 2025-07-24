@@ -62,7 +62,6 @@ export async function GET() {
         };
       })
     );
-    console.log(enriched)
     return NextResponse.json(enriched);
   } catch (err) {
     console.error("[GET_MENTORS_ERROR]", err);

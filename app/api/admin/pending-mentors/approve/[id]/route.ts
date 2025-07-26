@@ -1,20 +1,31 @@
-import { db } from "@/db";
-import { users, mentors, mentorSkills, pendingMentors, pendingMentorSkills } from "@/db/schema";
-import { eq } from "drizzle-orm";
-import { NextResponse } from "next/server";
-import { sendMentorApprovedEmail } from "@/lib/email/approvedMail";
+import { db } from "@/db"
+import {
+  users,
+  mentors,
+  mentorSkills,
+  pendingMentors,
+  pendingMentorSkills,
+  pendingMentorAvailability,
+  mentorAvailability,
+} from "@/db/schema"
+import { eq } from "drizzle-orm"
+import { NextResponse } from "next/server"
 
-export async function POST(req: Request, { params }: { params: { id: string } }) {
-  const id = parseInt(params.id)
+export async function POST(_: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id: idString } = await params
+  const id = Number(idString)
 
-  const pending = await db.query.pendingMentors.findFirst({
-    where: eq(pendingMentors.id, id)
-  })
+  // Get pending mentor
+  const [pending] = await db
+    .select()
+    .from(pendingMentors)
+    .where(eq(pendingMentors.id, id))
 
   if (!pending) {
     return NextResponse.json({ error: "Pending mentor not found" }, { status: 404 })
   }
 
+  // Create user
   const [user] = await db.insert(users).values({
     firstName: pending.firstName,
     lastName: pending.lastName,
@@ -23,6 +34,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     role: "mentor",
   }).returning()
 
+  // Create mentor
   const [mentor] = await db.insert(mentors).values({
     userId: user.id,
     profileUrl: pending.profileUrl,
@@ -31,32 +43,51 @@ export async function POST(req: Request, { params }: { params: { id: string } })
     timezone: pending.timezone,
     gender: pending.gender,
     languagesSpoken: pending.languagesSpoken,
-    professionalTitle: pending.professionalTitle,
+    professionalTitle: pending.professionalTitle ?? "",
     bio: pending.bio,
     yearsOfExperience: pending.yearsOfExperience,
     linkedInUrl: pending.linkedInUrl,
     socialLinks: pending.socialLinks,
-    availability: pending.availability,
     creditsBalance: 0,
   }).returning()
 
-  const pendingSkills = await db.query.pendingMentorSkills.findMany({
-    where: eq(pendingMentorSkills.mentorId, id)
-  })
+  // Transfer skills
+  const pendingSkills = await db
+    .select()
+    .from(pendingMentorSkills)
+    .where(eq(pendingMentorSkills.mentorId, id))
 
   if (pendingSkills.length > 0) {
     await db.insert(mentorSkills).values(
-      pendingSkills.map(skill => ({
+      pendingSkills.map((s) => ({
         mentorId: mentor.id,
-        skillName: skill.skillName,
-        ratePerHour: skill.ratePerHour,
+        skillName: s.skillName,
+        ratePerHour: s.ratePerHour,
       }))
     )
   }
 
-  await db.delete(pendingMentorSkills).where(eq(pendingMentorSkills.mentorId, id))
-  await db.delete(pendingMentors).where(eq(pendingMentors.id, id))
-  await sendMentorApprovedEmail(user.email, `${user.firstName} ${user.lastName}`)
+  // Transfer availability slots
+  const pendingSlots = await db
+    .select()
+    .from(pendingMentorAvailability)
+    .where(eq(pendingMentorAvailability.mentorId, id))
 
-  return NextResponse.json({ success: true, message: "Mentor approved and migrated." })
+  if (pendingSlots.length > 0) {
+    await db.insert(mentorAvailability).values(
+      pendingSlots.map((slot) => ({
+        mentorId: mentor.id,
+        day: slot.day,
+        startTime: slot.startTime,
+        endTime: slot.endTime,
+      }))
+    )
+  }
+
+  // Cleanup
+  await db.delete(pendingMentorSkills).where(eq(pendingMentorSkills.mentorId, id))
+  await db.delete(pendingMentorAvailability).where(eq(pendingMentorAvailability.mentorId, id))
+  await db.delete(pendingMentors).where(eq(pendingMentors.id, id))
+
+  return NextResponse.json({ success: true })
 }

@@ -41,13 +41,13 @@ const Login = () => {
       // Redirect based on role
       switch (data.role) {
         case "learner":
-          router.push("/dashboard/learner")
+          router.push("/learner/dashboard")
           break
         case "mentor":
-          router.push("/dashboard/mentor")
+          router.push("/mentor/dashboard")
           break
         case "admin":
-          router.push("/dashboard/admin")
+          router.push("/admin/dashboard")
           break
         default:
           router.push("/")

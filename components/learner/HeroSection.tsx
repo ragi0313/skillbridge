@@ -30,9 +30,9 @@ export default function HeroSection() {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
     if (searchQuery.trim()) {
-      router.push(`/browse-mentors?search=${encodeURIComponent(searchQuery.trim())}`)
+      router.push(`/find-mentors?search=${encodeURIComponent(searchQuery.trim())}`)
     } else {
-      router.push("/browse-mentors")
+      router.push("/find-mentors")
     }
   }
 

@@ -1,11 +1,27 @@
 import { notFound } from "next/navigation"
-import { Star, MapPin, Award, Languages, CheckCircle, MessageCircle } from "lucide-react"
+import {
+  Star,
+  MapPin,
+  Award,
+  Languages,
+  MessageCircle,
+  Twitter,
+  Github,
+  Globe,
+  Linkedin,
+} from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import Header from "@/components/landing/Header"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import BookingWidget from "@/components/mentors-overview/BookingWidget"
+import UnifiedHeader from "@/components/UnifiedHeader"
 
 interface MentorData {
   id: number
@@ -45,8 +61,14 @@ export default async function MentorProfilePage({
   if (!res.ok) return notFound()
   const mentor: MentorData = await res.json()
 
-  const expectedSlug = `${mentor.firstName}-${mentor.lastName}`.toLowerCase().replace(/\s+/g, "-")
+  const expectedSlug = `${mentor.firstName}-${mentor.lastName}`
+    .toLowerCase()
+    .replace(/\s+/g, "-")
   if (slug !== expectedSlug) return notFound()
+
+  const parsedSocialLinks = typeof mentor.socialLinks === "string"
+  ? JSON.parse(mentor.socialLinks)
+  : mentor.socialLinks;
 
   const averageRating =
     mentor.reviews.length > 0
@@ -56,14 +78,15 @@ export default async function MentorProfilePage({
   const averageRate =
     Object.values(mentor.rates).length > 0
       ? Math.round(
-          Object.values(mentor.rates).reduce((sum, rate) => sum + rate, 0) / Object.values(mentor.rates).length,
+          Object.values(mentor.rates).reduce((sum, rate) => sum + rate, 0) /
+            Object.values(mentor.rates).length,
         )
       : 0
 
   return (
     <div>
-      <Header />
-      <section className="bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 text-white py-55"></section>
+      <UnifiedHeader />
+      <section className="bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 py-55"></section>
 
       <div className="relative max-w-7xl mx-auto px-10 z-20 py-10">
         <div className="flex-shrink-0 relative">
@@ -74,73 +97,106 @@ export default async function MentorProfilePage({
               className="w-full h-full object-cover"
             />
           </div>
-          {mentor.isAvailable && (
-            <div className="absolute -bottom-2 -right-2 bg-green-500 text-white px-3 py-1 rounded-full text-sm font-medium flex items-center gap-1">
-              <CheckCircle className="w-4 h-4" />
-              Available
-            </div>
-          )}
         </div>
 
         <div className="flex-1 flex-col mt-4 sm:mt-12 lg:mt-20">
           <h1 className="text-xl sm:text-3xl lg:text-4xl font-semibold mb-2">
             {mentor.firstName} {mentor.lastName}
           </h1>
-          <p className="text-md text-gray-700 sm:text-lg mb-4 font-medium">{mentor.professionalTitle}</p>
+          <p className="text-md text-gray-700 sm:text-lg mb-6 font-medium">
+            {mentor.professionalTitle}
+          </p>
 
-          <div className="flex flex-col flex-wrap gap-4 mb-6 text-gray-700">
-            <div className="flex items-center gap-2">
-              <MapPin className="w-5 h-5 text-purple-500" />
-              <span className="font-medium">{mentor.country}</span>
+          {/* Grouped Grid Section */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:mr-50 gap-y-6 mb-15 text-gray-700">
+            {/* Column 1 */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <MapPin className="w-5 h-5 text-purple-500" />
+                <span className="font-medium">{mentor.country}</span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Award className="w-5 h-5 text-purple-500" />
+                <span className="font-medium">{mentor.yearsOfExperience} years experience</span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Languages className="w-5 h-5 text-purple-500" />
+                <span className="font-medium">{mentor.languages.join(", ")}</span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Star className="w-5 h-5 fill-current text-yellow-300" />
+                <span className="font-medium">
+                  {averageRating.toFixed(1)} ({mentor.reviews.length} reviews)
+                </span>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Award className="w-5 h-5 text-purple-500" />
-              <span className="font-medium">{mentor.yearsOfExperience} years experience</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Languages className="w-5 h-5 text-purple-500" />
-              <span className="font-medium">{mentor.languages.join(", ")}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Star className="w-5 h-5 fill-current text-yellow-300" />
-              <span className="font-medium">
-                {averageRating.toFixed(1)} ({mentor.reviews.length} reviews)
-              </span>
+
+            <div className="space-y-4">
+              {/* Skills */}
+              <div className="flex flex-wrap gap-2">
+                {mentor.skills.map((skill, index) => (
+                  <Badge
+                    key={index}
+                    variant="secondary"
+                    className="px-3 py-1 bg-gray-100 text-gray-700 text-sm font-medium"
+                  >
+                    {skill}
+                  </Badge>
+                ))}
+              </div>
+
+              {/* LinkedIn + Social Links */}
+              <div className="flex items-center gap-4 ml-2">
+                {mentor.linkedInUrl && (
+                  <a
+                    href={mentor.linkedInUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-gray-600 hover:text-blue-600"
+                  >
+                    <Linkedin className="w-5 h-5" />
+                  </a>
+                )}
+
+                {Array.isArray(parsedSocialLinks) && parsedSocialLinks.length > 0 ? (
+                  parsedSocialLinks.map((item, i) => (
+                    <a
+                      key={i}
+                      href={item.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-gray-600 hover:text-blue-600"
+                    >
+                      {item.label === "GitHub" && <Github className="w-5 h-5" />}
+                      {item.label === "Twitter" && <Twitter className="w-5 h-5" />}
+                      {item.label === "Portfolio" && <Globe className="w-5 h-5" />}
+                    </a>
+                  ))
+                ) : (
+                  <p className="text-sm text-gray-500">No social links provided</p>
+                )}
+              </div>
             </div>
           </div>
         </div>
+
+        {/* Content Grid */}
         <div className="mx-auto py-6">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
             {/* Left Column - Main Content */}
             <div className="lg:col-span-2 space-y-12">
-              {/* Skills Section */}
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900 mb-6">Skills</h2>
-                <div className="flex flex-wrap gap-3">
-                  {mentor.skills.slice(0, 10).map((skill, index) => (
-                    <Badge
-                      key={index}
-                      variant="secondary"
-                      className="px-4 py-2 bg-gray-100 text-gray-700 hover:bg-gray-200 text-sm font-medium"
-                    >
-                      {skill}
-                    </Badge>
-                  ))}
-                </div>
-
-                {mentor.skills.length > 10 && (
-                  <Button variant="ghost" className="text-teal-600 hover:text-teal-700 p-0 h-auto font-medium mt-2">
-                    + {mentor.skills.length - 10} more
-                  </Button>
-                )}
-              </div>
-
               {/* About Section */}
               <div>
                 <h2 className="text-2xl font-bold text-gray-900 mb-6">About</h2>
                 <div className="prose prose-gray max-w-none">
                   <p className="text-gray-700 leading-relaxed mb-4">{mentor.bio}</p>
-                  <Button variant="ghost" className="text-teal-600 hover:text-teal-700 p-0 h-auto font-medium">
+                  <Button
+                    variant="ghost"
+                    className="text-teal-600 hover:text-teal-700 p-0 h-auto font-medium"
+                  >
                     Read more
                   </Button>
                 </div>
@@ -155,7 +211,8 @@ export default async function MentorProfilePage({
                       <div>
                         <h3 className="font-semibold text-gray-900">Open to inquiries</h3>
                         <p className="text-gray-600">
-                          You can message {mentor.firstName} to ask questions before booking their services
+                          You can message {mentor.firstName} to ask questions before booking their
+                          services
                         </p>
                       </div>
                     </div>
@@ -181,6 +238,7 @@ export default async function MentorProfilePage({
                     </SelectContent>
                   </Select>
                 </div>
+
                 {mentor.reviews.length === 0 ? (
                   <div className="border border-dashed border-gray-300 rounded-md p-8 text-center">
                     <MessageCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
@@ -198,13 +256,17 @@ export default async function MentorProfilePage({
                           </div>
                           <div className="flex-1">
                             <div className="flex items-center gap-4 mb-2 flex-wrap">
-                              <h4 className="font-semibold text-gray-900">{review.learnerName}</h4>
+                              <h4 className="font-semibold text-gray-900">
+                                {review.learnerName}
+                              </h4>
                               <div className="flex items-center gap-1">
                                 {[...Array(5)].map((_, i) => (
                                   <Star
                                     key={i}
                                     className={`w-4 h-4 ${
-                                      i < review.rating ? "text-yellow-400 fill-current" : "text-gray-300"
+                                      i < review.rating
+                                        ? "text-yellow-400 fill-current"
+                                        : "text-gray-300"
                                     }`}
                                   />
                                 ))}

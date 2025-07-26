@@ -69,7 +69,7 @@ export default function Header() {
                 Sessions
               </Link>
               <Link
-                href="/learner/browse-mentors"
+                href="/find-mentors"
                 className={`px-3 py-2 rounded-md text-md font-medium transition-colors ${
                   pathname === "/learner/browse-mentors"
                     ? "bg-blue-600 text-white"

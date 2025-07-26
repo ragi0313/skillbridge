@@ -17,7 +17,6 @@ export async function GET() {
         bio: mentors.bio,
         yearsOfExperience: mentors.yearsOfExperience,
         creditsBalance: mentors.creditsBalance,
-        availability: mentors.availability,
         firstName: users.firstName,
         lastName: users.lastName,
       })
@@ -57,7 +56,6 @@ export async function GET() {
           languages: m.languagesSpoken as string[],
           country: m.country,
           bio: m.bio || "",
-          isAvailable: !!m.availability, // simplistic check
           credits: m.creditsBalance,
         };
       })

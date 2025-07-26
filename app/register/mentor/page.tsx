@@ -38,7 +38,7 @@ export default function MentorSignupPage() {
     skills: [] as Array<{ name: string; rate: number }>,
 
     // Step 4: Availability & Goals
-    availability: [] as string[],
+    availability: {} as Record<string, { id: string; start: string; end: string }[]>,
     whyFreelancer: "",
     whyMentor: "",
     greatestAchievement: "",
@@ -46,6 +46,7 @@ export default function MentorSignupPage() {
 
   const [isSubmitted, setIsSubmitted] = useState(false)
   const [userEmail, setUserEmail] = useState("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const totalSteps = 5
 
@@ -81,6 +82,8 @@ export default function MentorSignupPage() {
   } catch (err) {
     console.error("Submission error:", err);
     alert("Something went wrong. Please try again.");
+  } finally {
+    setIsSubmitting(false)
   }
 }
 
@@ -124,7 +127,7 @@ export default function MentorSignupPage() {
                 />
               )}
               {currentStep === 5 && (
-                <MentorReviewSubmit formData={formData} setFormData={setFormData} prevStep={prevStep} />
+                <MentorReviewSubmit formData={formData} setFormData={setFormData} prevStep={prevStep} isSubmitting={isSubmitting} />
               )}
             </form>
           </div>

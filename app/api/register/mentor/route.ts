@@ -1,5 +1,9 @@
 import { db } from "@/db"
-import { pendingMentors, pendingMentorSkills } from "@/db/schema"
+import {
+  pendingMentors,
+  pendingMentorSkills,
+  pendingMentorAvailability,
+} from "@/db/schema"
 import { hash } from "bcryptjs"
 import { randomUUID } from "crypto"
 import { NextResponse } from "next/server"
@@ -24,16 +28,13 @@ export async function POST(req: Request) {
       linkedinUrl,
       linkAttachments,
       skills,
-      availability,
       whyFreelancer,
       whyMentor,
       greatestAchievement,
+      availability, // ✅ received from frontend
     } = body
 
-    // Hash the password
     const hashedPassword = await hash(password, 10)
-
-    // Generate a token for future email verification (optional)
     const verificationToken = randomUUID()
 
     // Insert into pendingMentors
@@ -54,7 +55,6 @@ export async function POST(req: Request) {
         yearsOfExperience: parseInt(yearsOfExperience || "0", 10),
         linkedInUrl: linkedinUrl,
         socialLinks: Array.isArray(linkAttachments) ? linkAttachments : null,
-        availability: JSON.stringify(availability),
         question1: whyFreelancer,
         question2: whyMentor,
         question3: greatestAchievement,
@@ -62,7 +62,7 @@ export async function POST(req: Request) {
       })
       .returning()
 
-    // Insert skills
+    // Insert mentor skills
     if (skills && skills.length > 0) {
       await db.insert(pendingMentorSkills).values(
         skills.map((s: any) => ({
@@ -73,9 +73,32 @@ export async function POST(req: Request) {
       )
     }
 
+    // ✅ Insert availability
+    if (availability && typeof availability === "object") {
+      const availabilityInserts = []
+
+      for (const [day, slots] of Object.entries(availability)) {
+        for (const slot of slots as { start: string; end: string }[]) {
+          availabilityInserts.push({
+            mentorId: mentor.id,
+            day,
+            startTime: slot.start,
+            endTime: slot.end,
+          })
+        }
+      }
+
+      if (availabilityInserts.length > 0) {
+        await db.insert(pendingMentorAvailability).values(availabilityInserts)
+      }
+    }
+
     return NextResponse.json({ success: true })
   } catch (err) {
     console.error("Mentor signup error:", err)
-    return NextResponse.json({ error: "Failed to register mentor" }, { status: 500 })
+    return NextResponse.json(
+      { error: "Failed to register mentor" },
+      { status: 500 }
+    )
   }
 }

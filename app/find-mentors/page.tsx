@@ -2,11 +2,11 @@
 
 import { useState, useEffect } from "react"
 import { useSearchParams } from "next/navigation"
-import Header from "@/components/landing/Header"
 import { HeroSection } from "@/components/find-mentors/HeroSection"
 import { FilterBar } from "@/components/find-mentors/FilterBar"
 import { MentorList } from "@/components/find-mentors/MentorList"
 import type { Mentor } from "@/components/find-mentors/types"
+import UnifiedHeader from "@/components/UnifiedHeader"
 
 export default function FindMentorsPage() {
   const searchParams = useSearchParams()
@@ -166,7 +166,7 @@ export default function FindMentorsPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-purple-50">
-      <Header />
+      <UnifiedHeader />
       <HeroSection searchQuery={searchQuery} setSearchQuery={setSearchQuery} />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <FilterBar

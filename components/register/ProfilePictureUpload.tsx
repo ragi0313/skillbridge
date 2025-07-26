@@ -127,7 +127,7 @@ export default function ProfilePictureUpload({ value, onChange }: Props) {
 
   return (
     <div>
-      <Label className="mb-2">Profile Picture</Label>
+      <Label className="mb-2">Profile Picture*</Label>
       <div className="flex items-center space-x-4">
         <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center overflow-hidden">
           {previewUrl ? (

@@ -5,7 +5,6 @@ const timestamps = {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 }
 
-
 // USERS TABLE
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
@@ -23,7 +22,7 @@ export const admins = pgTable("admins", {
   profilePictureUrl: varchar("profile_picture_url", { length: 512 }),
   createdAt: timestamp("created_at").defaultNow(),
 })
-// LEARNERS TABLE
+
 export const learners = pgTable("learners", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull().unique().references(() => users.id),
@@ -32,19 +31,18 @@ export const learners = pgTable("learners", {
   learningGoals: text("learning_goals").notNull(),
   creditsBalance: integer("credits_balance").default(0).notNull(),
   profileUrl: varchar("profile_url", { length: 255 }),
-  profilePictureUrl: varchar("profile_picture_url", { length: 255 }), // optional
-  socialLinks: json("social_links"), // e.g., { github, twitter }
+  profilePictureUrl: varchar("profile_picture_url", { length: 255 }),
+  socialLinks: json("social_links"),
   timezone: varchar("timezone", { length: 100 }),
   ...timestamps,
 })
 
-// MENTORS TABLE
 export const mentors = pgTable("mentors", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull().unique().references(() => users.id),
   profileUrl: varchar("profile_url", { length: 255 }),
   profilePictureUrl: varchar("profile_picture_url", { length: 255 }).notNull(),
-  languagesSpoken: json("languages_spoken").notNull(), 
+  languagesSpoken: json("languages_spoken").notNull(),
   gender: varchar("gender", { length: 50 }).notNull(),
   country: varchar("country", { length: 100 }).notNull(),
   timezone: varchar("timezone", { length: 100 }).notNull(),
@@ -53,17 +51,24 @@ export const mentors = pgTable("mentors", {
   yearsOfExperience: integer("years_of_experience").notNull(),
   linkedInUrl: varchar("linkedin_url", { length: 255 }).notNull(),
   socialLinks: json("social_links").notNull(),
-  availability: text("availability"),
   creditsBalance: integer("credits_balance").default(0).notNull(),
   ...timestamps,
 })
 
-// MENTOR SKILLS
+export const mentorAvailability = pgTable("mentor_availability", {
+  id: serial("id").primaryKey(),
+  mentorId: integer("mentor_id").notNull().references(() => mentors.id),
+  day: varchar("day", { length: 20 }).notNull(), // e.g. "monday"
+  startTime: varchar("start_time", { length: 10 }).notNull(), // e.g. "09:00"
+  endTime: varchar("end_time", { length: 10 }).notNull(), // e.g. "11:00"
+  ...timestamps,
+})
+
 export const mentorSkills = pgTable("mentor_skills", {
   id: serial("id").primaryKey(),
   mentorId: integer("mentor_id").notNull().references(() => mentors.id),
   skillName: varchar("skill_name", { length: 100 }).notNull(),
-  ratePerHour: integer("rate_per_hour").notNull(), // in credits
+  ratePerHour: integer("rate_per_hour").notNull(),
   ...timestamps,
 })
 
@@ -76,8 +81,6 @@ export const mentorReviews = pgTable("mentor_reviews", {
   ...timestamps,
 })
 
-
-// PENDING LEARNERS TABLE
 export const pendingLearners = pgTable("pending_learners", {
   id: serial("id").primaryKey(),
   firstName: varchar("first_name", { length: 255 }).notNull(),
@@ -91,7 +94,6 @@ export const pendingLearners = pgTable("pending_learners", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 })
 
-// PENDING MENTORS TABLE
 export const pendingMentors = pgTable("pending_mentors", {
   id: serial("id").primaryKey(),
   firstName: varchar("first_name", { length: 100 }).notNull(),
@@ -100,7 +102,7 @@ export const pendingMentors = pgTable("pending_mentors", {
   hashedPassword: varchar("hashed_password", { length: 255 }).notNull(),
   profileUrl: varchar("profile_url", { length: 255 }),
   profilePictureUrl: varchar("profile_picture_url", { length: 255 }).notNull(),
-  languagesSpoken: json("languages_spoken").notNull(), 
+  languagesSpoken: json("languages_spoken").notNull(),
   gender: varchar("gender", { length: 50 }).notNull(),
   country: varchar("country", { length: 100 }).notNull(),
   timezone: varchar("timezone", { length: 100 }).notNull(),
@@ -109,7 +111,6 @@ export const pendingMentors = pgTable("pending_mentors", {
   yearsOfExperience: integer("years_of_experience").notNull(),
   linkedInUrl: varchar("linkedin_url", { length: 255 }).notNull(),
   socialLinks: json("social_links").notNull(),
-  availability: text("availability"),
   question1: text("question1").notNull(),
   question2: text("question2").notNull(),
   question3: text("question3").notNull(),
@@ -117,11 +118,36 @@ export const pendingMentors = pgTable("pending_mentors", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 })
 
-// PENDING MENTOR SKILLS
+export const pendingMentorAvailability = pgTable("pending_mentor_availability", {
+  id: serial("id").primaryKey(),
+  mentorId: integer("mentor_id").notNull().references(() => pendingMentors.id),
+  day: varchar("day", { length: 20 }).notNull(),
+  startTime: varchar("start_time", { length: 10 }).notNull(),
+  endTime: varchar("end_time", { length: 10 }).notNull(),
+  ...timestamps,
+})
+
 export const pendingMentorSkills = pgTable("pending_mentor_skills", {
   id: serial("id").primaryKey(),
   mentorId: integer("mentor_id").notNull().references(() => pendingMentors.id),
   skillName: varchar("skill_name", { length: 100 }).notNull(),
   ratePerHour: integer("rate_per_hour").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+})
+
+export const bookingSessions = pgTable("booking_sessions", {
+  id: serial("id").primaryKey(),
+
+  learnerId: integer("learner_id").notNull().references(() => learners.id, { onDelete: "cascade" }),
+  mentorId: integer("mentor_id").notNull().references(() => mentors.id, { onDelete: "cascade" }),
+  mentorSkillId: integer("mentor_skill_id").notNull().references(() => mentorSkills.id, { onDelete: "set null" }),
+
+  scheduledDate: timestamp("scheduled_date", { withTimezone: true }).notNull(),
+  durationMinutes: integer("duration_minutes").notNull(),
+  totalCostCredits: integer("total_cost_credits").notNull(),
+
+  status: text("status").default("pending"), // pending | confirmed | cancelled | completed
+
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 })

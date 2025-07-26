@@ -1,5 +1,5 @@
 import { db } from "@/db"
-import { pendingMentors, pendingMentorSkills } from "@/db/schema"
+import { pendingMentors, pendingMentorSkills, pendingMentorAvailability } from "@/db/schema"
 import { sendMentorRejectionEmail } from "@/lib/email/rejectionMail"
 import { deleteFromCloudinary } from "@/lib/cloudinary"
 import { eq } from "drizzle-orm"
@@ -22,11 +22,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Pending mentor not found" }, { status: 404 })
     }
 
-    // Delete profile picture from Cloudinary (if it exists)
     if (pending.profilePictureUrl) {
       const parts = pending.profilePictureUrl.split("/")
-      const filename = parts[parts.length - 1] // e.g., abc123.jpg
-      const publicId = filename.split(".")[0]   // e.g., abc123
+      const filename = parts[parts.length - 1] 
+      const publicId = filename.split(".")[0]   
       if (publicId) {
         try {
           await deleteFromCloudinary(publicId)
@@ -39,6 +38,7 @@ export async function POST(req: Request) {
 
     // Delete from related tables
     await db.delete(pendingMentorSkills).where(eq(pendingMentorSkills.mentorId, id))
+    await db.delete(pendingMentorAvailability).where(eq(pendingMentorAvailability.mentorId, id))
     await db.delete(pendingMentors).where(eq(pendingMentors.id, id))
 
     // Send rejection email

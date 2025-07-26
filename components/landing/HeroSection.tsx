@@ -63,7 +63,7 @@ export default function HeroSection() {
             className="relative h-[400px] rounded-xl overflow-hidden hidden md:block"
           >
             <Image
-              src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/kobu-agency-7okkFhxrxNw-unsplash.jpg-5bKdOWwmUt1XymBAS7iBCKRukGOPiK.jpeg"
+              src="/landing-bg.jpeg"
               alt="Mentorship image"
               fill
               className="object-cover"

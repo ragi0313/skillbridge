@@ -24,12 +24,8 @@ export function MentorReviewDialog({ mentor, onApprove, onReject }: MentorReview
 
   const name = `${mentor.firstName} ${mentor.lastName}`
 
-  let parsedAvailability: Availability = {}
-  try {
-    parsedAvailability = typeof mentor.availability === "string" ? JSON.parse(mentor.availability) : mentor.availability
-  } catch (err) {
-    console.error("Invalid availability format", err)
-  }
+  // Handle availability data - it should already be properly structured from the API
+  const availabilityData = mentor.availability || {}
 
   const handleApprove = () => {
     onApprove(mentor.id, reviewNotes)
@@ -184,30 +180,46 @@ export function MentorReviewDialog({ mentor, onApprove, onReject }: MentorReview
           <TabsContent value="availability" className="space-y-6">
             <div>
               <h4 className="font-semibold text-lg text-gray-900 mb-4">Weekly Availability</h4>
-              <div className="grid gap-4">
-                {Object.entries(parsedAvailability).map(([day, slots]) => (
-                  <div key={day} className="bg-gray-50 rounded-lg p-4">
-                    <div className="flex items-center justify-between">
-                      <h5 className="font-medium text-gray-900 capitalize mb-2">{day}</h5>
-                      <Badge variant="outline" className="text-xs">
-                        {slots.length} {slots.length === 1 ? "slot" : "slots"}
-                      </Badge>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {slots.map((slot, index) => (
-                        <Badge
-                          key={slot?.id || `${day}-${index}`}
-                          variant="secondary"
-                          className="bg-blue-100 text-blue-800"
-                        >
-                          <Clock className="w-3 h-3 mr-1" />
-                          {slot.start} - {slot.end}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
+              {Object.keys(availabilityData).length > 0 ? (
+                <div className="grid gap-4">
+                  {Object.entries(availabilityData).map(([day, slots]) => {
+                    // Ensure slots is an array
+                    const slotsArray = Array.isArray(slots) ? slots : []
+                    
+                    return (
+                      <div key={day} className="bg-gray-50 rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <h5 className="font-medium text-gray-900 capitalize text-lg">{day}</h5>
+                          <Badge variant="outline" className="text-xs bg-white">
+                            {slotsArray.length} {slotsArray.length === 1 ? "slot" : "slots"}
+                          </Badge>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {slotsArray.length > 0 ? (
+                            slotsArray.map((slot, index) => (
+                              <Badge
+                                key={slot?.id || `${day}-${index}`}
+                                variant="secondary"
+                                className="bg-blue-100 text-blue-800 px-3 py-1 text-sm font-medium"
+                              >
+                                <Clock className="w-3 h-3 mr-1" />
+                                {slot.start} - {slot.end}
+                              </Badge>
+                            ))
+                          ) : (
+                            <p className="text-sm text-gray-500 italic">No availability slots</p>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <div className="bg-gray-50 rounded-lg p-8 text-center">
+                  <Clock className="w-12 h-12 text-gray-400 mx-auto mb-3" />
+                  <p className="text-gray-500 text-lg">No availability information provided</p>
+                </div>
+              )}
             </div>
           </TabsContent>
 

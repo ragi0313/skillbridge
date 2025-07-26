@@ -13,9 +13,11 @@ type Props = {
   formData: any
   setFormData: (data: any) => void
   prevStep: () => void
+  isSubmitting: boolean
 }
 
 export default function MentorReviewSubmit({ formData, prevStep }: Props) {
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [agreedToTerms, setAgreedToTerms] = useState(false)
 
   const getAvailabilityCount = () => {
@@ -99,10 +101,9 @@ export default function MentorReviewSubmit({ formData, prevStep }: Props) {
               )}
             </div>
               {formData.linkAttachments.map((item: any, i: number) => (
-                <div>
+                <div key={i}>
                   <Label className="text-sm text-gray-500">{item.label}</Label>
                   <a
-                  key={i}
                   href={item.url}
                   target="_blank"
                   rel="noopener noreferrer"
@@ -239,11 +240,34 @@ export default function MentorReviewSubmit({ formData, prevStep }: Props) {
         </Button>
         <Button
           type="submit"
-          disabled={!agreedToTerms}
-          className="w-[28%] h-14 gradient-bg text-white font-semibold text-lg rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-[1.02] disabled:opacity-50 disabled:transform-none"
+          disabled={!agreedToTerms || isSubmitting}
+          className="w-[28%] h-14 gradient-bg text-white font-semibold text-lg rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-[1.02] disabled:opacity-50 disabled:transform-none flex items-center justify-center"
         >
-          Submit Application
-          <CheckCircle className="w-5 h-5 ml-2" />
+          {isSubmitting ? (
+            <span className="flex items-center gap-2">
+              <svg className="animate-spin w-5 h-5 text-white" viewBox="0 0 24 24">
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                ></circle>
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+                ></path>
+              </svg>
+              Submitting...
+            </span>
+          ) : (
+            <>
+              Submit Application
+              <CheckCircle className="w-5 h-5 ml-2" />
+            </>
+          )}
         </Button>
       </div>
     </div>

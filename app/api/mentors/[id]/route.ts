@@ -77,7 +77,6 @@ export async function GET(
     yearsOfExperience: mentorData.yearsOfExperience,
     linkedInUrl: mentorData.linkedInUrl,
     socialLinks: mentorData.socialLinks ?? {},
-    availability: JSON.parse(mentorData.availability || "{}"),
     skills: skillNames,
     rates: skillRates,
     reviews: formattedReviews,

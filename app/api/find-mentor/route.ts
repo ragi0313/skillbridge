@@ -62,7 +62,6 @@ export async function GET() {
     );
     return NextResponse.json(enriched);
   } catch (err) {
-    console.error("[GET_MENTORS_ERROR]", err);
     return NextResponse.json({ error: "Failed to fetch mentors" }, { status: 500 });
   }
 }

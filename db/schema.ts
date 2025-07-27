@@ -1,4 +1,4 @@
-import { pgTable, serial, varchar, text, timestamp, integer, json } from "drizzle-orm/pg-core"
+import { pgTable, serial, varchar, text, timestamp, integer, json, numeric } from "drizzle-orm/pg-core"
 
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
@@ -127,6 +127,7 @@ export const pendingMentorAvailability = pgTable("pending_mentor_availability", 
   ...timestamps,
 })
 
+
 export const pendingMentorSkills = pgTable("pending_mentor_skills", {
   id: serial("id").primaryKey(),
   mentorId: integer("mentor_id").notNull().references(() => pendingMentors.id),
@@ -134,6 +135,32 @@ export const pendingMentorSkills = pgTable("pending_mentor_skills", {
   ratePerHour: integer("rate_per_hour").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 })
+
+export const creditPurchases = pgTable("credit_purchases", {
+  id: serial("id").primaryKey(),
+
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  amountCredits: integer("amount_credits").notNull(),
+  amountPaidUsd: numeric("amount_paid_usd", { precision: 10, scale: 2 }).notNull(),
+
+  provider: text("provider").notNull(), 
+  paymentStatus: text("payment_status").default("pending"), 
+  paymentReference: text("payment_reference"),
+
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+})
+
+export const creditTransactions = pgTable("credit_transactions", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  type: text("type").notNull(), 
+  direction: text("direction").notNull(), 
+  amount: integer("amount").notNull(),
+  relatedSessionId: integer("related_session_id").references(() => bookingSessions.id),
+  description: text("description"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+})
+
 
 export const bookingSessions = pgTable("booking_sessions", {
   id: serial("id").primaryKey(),
@@ -146,8 +173,24 @@ export const bookingSessions = pgTable("booking_sessions", {
   durationMinutes: integer("duration_minutes").notNull(),
   totalCostCredits: integer("total_cost_credits").notNull(),
 
-  status: text("status").default("pending"), // pending | confirmed | cancelled | completed
+  status: text("status").default("pending"), 
 
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+})
+
+
+export const mentorPayouts = pgTable("mentor_payouts", {
+  id: serial("id").primaryKey(),
+
+  mentorId: integer("mentor_id").notNull().references(() => mentors.id, { onDelete: "cascade" }),
+  sessionId: integer("session_id").notNull().references(() => bookingSessions.id, { onDelete: "cascade" }),
+
+  earnedCredits: integer("earned_credits").notNull(), 
+  feePercentage: integer("fee_percentage").default(20),
+
+  status: text("status").default("pending"), 
+  paidOutAt: timestamp("paid_out_at", { withTimezone: true }),
+
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 })

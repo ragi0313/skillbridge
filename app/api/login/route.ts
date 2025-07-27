@@ -46,14 +46,11 @@ export async function POST(req: Request) {
     const [user] = userQuery
 
     if (!user) {
-      console.log('Login API: User not found')
       return NextResponse.json(
         { message: "Invalid email or password" }, 
         { status: 401 }
       )
     }
-
-    console.log('Login API: Comparing password')
     
     // Password comparison with timeout
     const isPasswordValid = await withTimeout(
@@ -62,14 +59,12 @@ export async function POST(req: Request) {
     )
     
     if (!isPasswordValid) {
-      console.log('Login API: Invalid password')
       return NextResponse.json(
         { message: "Invalid email or password" }, 
         { status: 401 }
       )
     }
 
-    console.log('Login API: Fetching profile picture URL based on role')
     
     // Get profile picture URL based on user role
     let profilePictureUrl = null
@@ -111,7 +106,6 @@ export async function POST(req: Request) {
       // Continue without profile picture if query fails
     }
 
-    console.log('Login API: Generating JWT token')
     
     // JWT signing
     if (!process.env.JWT_SECRET) {
@@ -134,7 +128,6 @@ export async function POST(req: Request) {
       { expiresIn: "7d" }
     )
 
-    console.log('Login API: Setting cookie')
     
     // Set cookie
     const cookieStore = await cookies()
@@ -145,8 +138,6 @@ export async function POST(req: Request) {
       path: "/",
       maxAge: 60 * 60 * 24 * 7, // 7 days
     })
-
-    console.log('Login API: Success, user role:', user.role)
     
     // Return success with role (matching frontend expectation)
     return NextResponse.json({ 

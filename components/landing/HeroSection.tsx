@@ -1,17 +1,31 @@
 "use client"
+
+import { useState } from "react"
+import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { ArrowRight, Search } from "lucide-react"
+import { Search } from "lucide-react"
 import Image from "next/image"
 import { motion } from "framer-motion"
+import { Button } from "../ui/button"
 
 export default function HeroSection() {
+  const [searchQuery, setSearchQuery] = useState("")
+    const router = useRouter()
+  
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (searchQuery.trim()) {
+      router.push(`/find-mentors?search=${encodeURIComponent(searchQuery.trim())}`)
+    } else {
+      router.push("/find-mentors")
+    }
+  }
   return (
     <section className="bg-gray-900 text-white py-20">
       <div className="container mx-auto px-4">
-        <div className="grid md:grid-cols-2 gap-12 items-center">
+        <div className="grid lg:grid-cols-2 gap-12 items-center">
           <motion.div
             initial={{ opacity: 0, x: -50 }}
             animate={{ opacity: 1, x: 0 }}
@@ -30,37 +44,31 @@ export default function HeroSection() {
             <p className="text-lg text-gray-300">
               Get personalized guidance from freelancing experts, accelerate your growth, <br/> and achieve your freelancing goals faster.
             </p>
-            <div className="flex flex-col sm:flex-row gap-4">
-              <Button size="lg" className="text-lg px-8 py-6 gradient-bg transition-colors duration-300" asChild>
-                <Link href="/register/learner">
-                  Start Learning <ArrowRight className="ml-2 w-5 h-5" />
-                </Link>
-              </Button>
-               <Button
-                size="lg"
-                variant="outline"
-                className="text-lg px-8 py-6 bg-transparent"
+            <form onSubmit={handleSearch} className="mt-7 max-w-2xl mx-auto mb-8">
+            <div className="relative">
+              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white w-5 h-5 z-20" />
+              <Input
+                type="text"
+                placeholder="Search for mentors by skill, expertise, or name..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full h-14 pl-12 pr-24 text-base bg-white/10 border-gray-600 text-white placeholder:text-gray-400 focus:bg-white/20 focus:border-blue-500 rounded-xl backdrop-blur-sm"
+              />
+              <Button
+                type="submit"
+                className="absolute right-2 top-1/2 transform -translate-y-1/2 h-10 px-6 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold rounded-lg shadow-lg transition-all duration-300"
               >
-                <Link href="/register/mentor">Become a Mentor</Link>
+                Search
               </Button>
             </div>
-
-            <div className="md:hidden mt-6">
-              <div className="relative">
-                <Search className="absolute left-3 top-2 h-5 w-5 text-gray-400" />
-                <Input
-                  placeholder="Search"
-                  className="pl-10 bg-gray-800 border-gray-700 text-white placeholder:text-base"
-                />
-              </div>
-            </div>
+          </form>
           </motion.div>
 
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.6, delay: 0.2 }}
-            className="relative h-[400px] rounded-xl overflow-hidden hidden md:block"
+            className="relative h-[400px] rounded-xl overflow-hidden hidden lg:block"
           >
             <Image
               src="/landing-bg.jpeg"

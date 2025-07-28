@@ -1,66 +1,104 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import Link from "next/link"
 import { creditPackages } from "@/lib/payments/creditPackages"
+import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 
-export default function CreditsPage() {
-  const [session, setSession] = useState<null | {
-    id: number
-    role: string
-    firstName: string
-    lastName: string
-    profilePictureUrl?: string
-  }>(null)
+type SessionUser = {
+  id: number
+  role: string
+  firstName: string
+  lastName: string
+  profilePictureUrl: string | null
+}
 
-  const [loading, setLoading] = useState(true)
+export default function PricingPage() {
+  const [loading, setLoading] = useState(false)
+  const [session, setSession] = useState<SessionUser | null>(null)
+  const [checkingSession, setCheckingSession] = useState(true)
+  const router = useRouter()
 
   useEffect(() => {
     const fetchSession = async () => {
       try {
         const res = await fetch("/api/auth/session")
-        if (res.ok) {
-          const data = await res.json()
-          setSession(data.user)
-        }
-      } catch (error) {
-        console.error("Error fetching session:", error)
+        const data = await res.json()
+        setSession(data.user)
+      } catch {
+        setSession(null)
       } finally {
-        setLoading(false)
+        setCheckingSession(false)
       }
     }
 
     fetchSession()
   }, [])
 
-  return (
-    <div className="max-w-3xl mx-auto py-10">
-      <h1 className="text-2xl font-bold mb-6">Buy Credits</h1>
-      <div className="grid gap-6 md:grid-cols-3">
-        {creditPackages.map((pkg) => (
-          <div key={pkg.id} className="border rounded-xl p-6 bg-white shadow">
-            <h2 className="text-lg font-semibold mb-2">{pkg.name}</h2>
-            <p className="text-sm mb-4">{pkg.credits} credits</p>
-            <p className="text-xl font-bold mb-4">${pkg.price}</p>
+  const handleCheckout = async (packageId: string) => {
+    if (!session) {
+      router.push("/login")
+      return
+    }
 
-            {loading ? (
-              <p>Loading...</p>
-            ) : session?.role === "learner" ? (
-              <Link
-                href={`/credits-pricing/checkout?package=${pkg.id}`}
-                className="btn-primary"
+    if (session.role !== "learner") {
+      alert("Only learners can purchase credits.")
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        body: JSON.stringify({ packageId }),
+      })
+
+      const data = await res.json()
+      if (data.url) {
+        router.push(data.url)
+      } else {
+        alert("Checkout failed.")
+      }
+    } catch {
+      alert("Something went wrong.")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="p-6 max-w-3xl mx-auto">
+      <h1 className="text-3xl font-bold mb-6">Buy Credits</h1>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {creditPackages.map((pack) => {
+          const isDisabled = loading || checkingSession
+
+          return (
+            <div key={pack.id} className="p-4 border rounded shadow">
+              <h2 className="text-xl font-semibold mb-2">{pack.name}</h2>
+              <p>{pack.credits} Credits</p>
+              <p className="font-bold">${pack.price}</p>
+              <button
+                className={`mt-3 px-4 py-2 rounded transition ${
+                  isDisabled
+                    ? "bg-gray-400 cursor-not-allowed"
+                    : "bg-blue-600 text-white hover:bg-blue-700"
+                }`}
+                onClick={() => handleCheckout(pack.id)}
+                disabled={isDisabled}
               >
-                Buy Now
-              </Link>
-            ) : session ? (
-              <p className="text-red-600 text-sm">Only learners can purchase credits.</p>
-            ) : (
-              <Link href={`/login?redirect=/credits-pricing`} className="btn-primary">
-                Buy now
-              </Link>
-            )}
-          </div>
-        ))}
+                {loading
+                  ? "Redirecting..."
+                  : !session
+                  ? "Buy Now"
+                  : session.role !== "learner"
+                  ? "Learners Only"
+                  : "Buy Now"}
+              </button>
+            </div>
+          )
+        })}
       </div>
     </div>
   )

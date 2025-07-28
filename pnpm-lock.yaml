@@ -179,15 +179,15 @@ importers:
       sonner:
         specifier: ^2.0.6
         version: 2.0.6(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+      stripe:
+        specifier: ^18.3.0
+        version: 18.3.0(@types/node@20.19.7)
       tailwind-merge:
         specifier: ^3.3.1
         version: 3.3.1
       world-countries:
         specifier: ^5.1.0
         version: 5.1.0
-      xendit-node:
-        specifier: ^7.0.0
-        version: 7.0.0
       zod:
         specifier: ^4.0.8
         version: 4.0.8
@@ -4118,6 +4118,15 @@ packages:
     resolution: {integrity: sha512-6fPc+R4ihwqP6N/aIv2f1gMH8lOVtWQHoqC4yK6oSDVVocumAsfCqjkXnqiYMhmMwS/mEHLp7Vehlt3ql6lEig==}
     engines: {node: '>=8'}
 
+  stripe@18.3.0:
+    resolution: {integrity: sha512-FkxrTUUcWB4CVN2yzgsfF/YHD6WgYHduaa7VmokCy5TLCgl5UNJkwortxcedrxSavQ8Qfa4Ir4JxcbIYiBsyLg==}
+    engines: {node: '>=12.*'}
+    peerDependencies:
+      '@types/node': '>=12.x.x'
+    peerDependenciesMeta:
+      '@types/node':
+        optional: true
+
   styled-jsx@5.1.6:
     resolution: {integrity: sha512-qSVyDTeMotdvQYoHWLNGwRFJHC+i+ZvdBRYosOFgC+Wg1vx4frN2/RG/NA7SYqqvKNLf39P2LSRA2pu6n0XYZA==}
     engines: {node: '>= 12.0.0'}
@@ -4370,10 +4379,6 @@ packages:
 
   wrappy@1.0.2:
     resolution: {integrity: sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==}
-
-  xendit-node@7.0.0:
-    resolution: {integrity: sha512-atsCQ9femoWLu+hU5rY0TZ+ZhqSYbpTtABZN7rGMhhBh1xLhTuY1rgLfoaXzFiRt3eOQRqsew78wPUcQn1QckA==}
-    engines: {node: '>=18.0.0'}
 
   xtend@4.0.2:
     resolution: {integrity: sha512-LKYU1iAXJXUgAXn9URjiu+MWhyUXHsvfp7mcuYm9dSUKK0/CjtrUwFAxD82/mCWbtLsGjFIad0wIsod4zrTAEQ==}
@@ -8439,6 +8444,12 @@ snapshots:
 
   strip-json-comments@3.1.1: {}
 
+  stripe@18.3.0(@types/node@20.19.7):
+    dependencies:
+      qs: 6.14.0
+    optionalDependencies:
+      '@types/node': 20.19.7
+
   styled-jsx@5.1.6(@babel/core@7.28.0)(react@19.1.0):
     dependencies:
       client-only: 0.0.1
@@ -8731,8 +8742,6 @@ snapshots:
       strip-ansi: 6.0.1
 
   wrappy@1.0.2: {}
-
-  xendit-node@7.0.0: {}
 
   xtend@4.0.2: {}
 

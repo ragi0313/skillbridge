@@ -57,7 +57,7 @@ export default function HeroSection() {
 
           <form onSubmit={handleSearch} className="max-w-2xl mx-auto mb-8">
             <div className="relative">
-              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 z-20 w-5 h-5" />
               <Input
                 type="text"
                 placeholder="Search for mentors by skill, expertise, or name..."

@@ -44,7 +44,7 @@ export default function HeroSection() {
             <p className="text-lg text-gray-300">
               Get personalized guidance from freelancing experts, accelerate your growth, <br/> and achieve your freelancing goals faster.
             </p>
-            <form onSubmit={handleSearch} className="mt-7 max-w-2xl mx-auto mb-8">
+            <form onSubmit={handleSearch} className="mt-7 max-w-2xl mb-8">
             <div className="relative">
               <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white w-5 h-5 z-20" />
               <Input
@@ -56,7 +56,7 @@ export default function HeroSection() {
               />
               <Button
                 type="submit"
-                className="absolute right-2 top-1/2 transform -translate-y-1/2 h-10 px-6 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold rounded-lg shadow-lg transition-all duration-300"
+                className="cursor-pointer absolute right-2 top-1/2 transform -translate-y-1/2 h-10 px-6 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold rounded-lg shadow-lg transition-all duration-300"
               >
                 Search
               </Button>

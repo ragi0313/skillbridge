@@ -4,7 +4,6 @@ import {
   users, 
   mentorSkills, 
   mentorReviews, 
-  mentorAvailability,
   learners 
 } from "@/db/schema"
 import { eq } from "drizzle-orm"
@@ -32,7 +31,6 @@ export async function GET() {
       languagesSpoken: mentors.languagesSpoken,
       gender: mentors.gender,
       country: mentors.country,
-      timezone: mentors.timezone,
       professionalTitle: mentors.professionalTitle,
       bio: mentors.bio,
       yearsOfExperience: mentors.yearsOfExperience,
@@ -62,18 +60,6 @@ export async function GET() {
     .from(mentorSkills)
     .where(eq(mentorSkills.mentorId, mentorProfile.id))
 
-  // Get mentor availability
-  const availability = await db
-    .select({
-      id: mentorAvailability.id,
-      day: mentorAvailability.day,
-      startTime: mentorAvailability.startTime,
-      endTime: mentorAvailability.endTime,
-      createdAt: mentorAvailability.createdAt,
-      updatedAt: mentorAvailability.updatedAt,
-    })
-    .from(mentorAvailability)
-    .where(eq(mentorAvailability.mentorId, mentorProfile.id))
 
   // Get mentor reviews with learner information
   const reviews = await db
@@ -95,52 +81,19 @@ export async function GET() {
     .leftJoin(users, eq(learners.userId, users.id))
     .where(eq(mentorReviews.mentorId, mentorProfile.id))
 
-  // Group availability by day for better organization
-  const groupedAvailability = availability.reduce((acc, slot) => {
-    if (!acc[slot.day]) {
-      acc[slot.day] = []
-    }
-    acc[slot.day].push({
-      id: slot.id,
-      start: slot.startTime,
-      end: slot.endTime,
-      createdAt: slot.createdAt,
-      updatedAt: slot.updatedAt,
-    })
-    return acc
-  }, {} as Record<string, Array<{
-    id: number
-    start: string
-    end: string
-    createdAt: Date | null
-    updatedAt: Date | null
-  }>>)
 
-  // Calculate statistics
   const averageRating = reviews.length > 0 
     ? reviews.reduce((sum, review) => sum + (review.rating || 0), 0) / reviews.length 
     : 0
 
-  // Prepare the complete response
   const completeProfile = {
-    // Basic mentor information
     ...mentorProfile,
-    
-    // Skills array
     skills: skills,
-    
-    // Availability grouped by day
-    availability: groupedAvailability,
-    
-    // Reviews with learner info
     reviews: reviews,
-    
-    // Additional statistics
     stats: {
       totalReviews: reviews.length,
-      averageRating: Math.round(averageRating * 10) / 10, // Round to 1 decimal
+      averageRating: Math.round(averageRating * 10) / 10, 
       totalSkills: skills.length,
-      availableDays: Object.keys(groupedAvailability).length,
     }
   }
 

@@ -12,6 +12,7 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
+    "@calcom/embed-react": "^1.5.3",
     "@radix-ui/react-accordion": "^1.2.11",
     "@radix-ui/react-alert-dialog": "^1.1.14",
     "@radix-ui/react-avatar": "^1.1.10",
@@ -62,6 +63,7 @@
     "nodemailer": "^7.0.5",
     "pg": "^8.16.3",
     "react": "^19.0.0",
+    "react-day-picker": "^9.8.1",
     "react-dom": "^19.0.0",
     "react-easy-crop": "^5.5.0",
     "react-select": "^5.10.2",

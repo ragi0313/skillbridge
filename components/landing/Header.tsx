@@ -27,6 +27,16 @@ export default function Header() {
               >
                 Pricing
               </Link>
+              <Link
+                href="/find-mentors"
+                className={`px-3 py-2 rounded-md text-md font-medium transition-colors ${
+                  pathname === "/find-mentors"
+                    ? "bg-blue-600 text-white"
+                    : "hover:text-white hover:bg-gray-800"
+                }`}
+              >
+                Browse Mentors
+              </Link>
             </nav>
 
         {/* Auth Buttons */}

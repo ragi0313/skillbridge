@@ -13,7 +13,6 @@ export const users = pgTable("users", {
   email: varchar("email", { length: 255 }).notNull().unique(),
   hashedPassword: varchar("hashed_password", { length: 255 }).notNull(),
   role: varchar("role", { length: 20 }).notNull(), // 'learner' | 'mentor' | 'admin'
-  isEmailVerified: boolean("is_email_verified").default(false),
   ...timestamps,
 })
 
@@ -53,8 +52,6 @@ export const mentors = pgTable("mentors", {
   linkedInUrl: varchar("linkedin_url", { length: 255 }).notNull(),
   socialLinks: json("social_links").notNull(),
   creditsBalance: integer("credits_balance").default(0).notNull(),
-  isApproved: boolean("is_approved").default(false),
-  approvedAt: timestamp("approved_at", { withTimezone: true }),
   ...timestamps,
 })
 
@@ -177,29 +174,38 @@ export const creditTransactions = pgTable("credit_transactions", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 })
 
-// SESSION BOOKING TABLES
 export const bookingSessions = pgTable("booking_sessions", {
   id: serial("id").primaryKey(),
   learnerId: integer("learner_id").notNull().references(() => learners.id, { onDelete: "cascade" }),
   mentorId: integer("mentor_id").notNull().references(() => mentors.id, { onDelete: "cascade" }),
-  mentorSkillId: integer("mentor_skill_id").notNull().references(() => mentorSkills.id, { onDelete: "restrict" }),
+  mentorSkillId: integer("mentor_skill_id").notNull().references(() => mentorSkills.id),
   scheduledDate: timestamp("scheduled_date", { withTimezone: true }).notNull(),
   durationMinutes: integer("duration_minutes").notNull(),
   totalCostCredits: integer("total_cost_credits").notNull(),
-  escrowCredits: integer("escrow_credits").notNull(), // Credits held in escrow
-  status: varchar("status", { length: 20 }).default("pending"), // 'pending', 'confirmed', 'in_progress', 'completed', 'cancelled', 'no_show'
+  escrowCredits: integer("escrow_credits").notNull(),
+  sessionNotes: text("session_notes").notNull(),
+  status: varchar("status", { length: 20 }).default("pending"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+})
+
+export const sessions = pgTable("sessions", {
+  id: serial("id").primaryKey(),
+  bookingSessionId: integer("booking_session_id").notNull().references(() => bookingSessions.id, { onDelete: "cascade" }),
   meetingLink: varchar("meeting_link", { length: 512 }),
   meetingId: varchar("meeting_id", { length: 255 }),
-  sessionNotes: text("session_notes"), // Post-session notes
-  learnerRating: integer("learner_rating"), // 1-5 stars from learner
-  mentorRating: integer("mentor_rating"), // 1-5 stars from mentor
-  cancelledBy: varchar("cancelled_by", { length: 20 }), // 'learner', 'mentor', 'admin'
+  mentorResponseAt: timestamp("mentor_response_at", { withTimezone: true }),
+  mentorResponseMessage: text("mentor_response_message"),
+  sessionNotes: text("session_notes"),
+  learnerRating: integer("learner_rating"),
+  mentorRating: integer("mentor_rating"),
+  cancelledBy: varchar("cancelled_by", { length: 20 }),
   cancellationReason: text("cancellation_reason"),
   cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
   completedAt: timestamp("completed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 })
+
 
 // MENTOR PAYOUTS
 export const mentorPayouts = pgTable("mentor_payouts", {

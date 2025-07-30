@@ -1,5 +1,5 @@
 import { db } from "@/db"
-import { pendingMentors, pendingMentorSkills, pendingMentorAvailability } from "@/db/schema"
+import { pendingMentors, pendingMentorSkills } from "@/db/schema"
 import { sendMentorRejectionEmail } from "@/lib/email/rejectionMail"
 import { deleteFromCloudinary } from "@/lib/cloudinary"
 import { eq } from "drizzle-orm"
@@ -31,14 +31,12 @@ export async function POST(req: Request) {
           await deleteFromCloudinary(publicId)
         } catch (cloudErr) {
           console.error("Cloudinary deletion failed:", cloudErr)
-          // Continue anyway — do not block the rest
         }
       }
     }
 
     // Delete from related tables
     await db.delete(pendingMentorSkills).where(eq(pendingMentorSkills.mentorId, id))
-    await db.delete(pendingMentorAvailability).where(eq(pendingMentorAvailability.mentorId, id))
     await db.delete(pendingMentors).where(eq(pendingMentors.id, id))
 
     // Send rejection email

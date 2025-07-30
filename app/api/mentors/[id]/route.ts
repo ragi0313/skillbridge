@@ -1,11 +1,7 @@
+//app/api/mentors/[id]
+
 import { db } from "@/db"
-import {
-  users,
-  mentors,
-  mentorSkills,
-  mentorReviews,
-  learners,
-} from "@/db/schema"
+import { users, mentors, mentorSkills, mentorReviews, learners } from "@/db/schema"
 import { eq } from "drizzle-orm"
 import { NextResponse } from "next/server"
 
@@ -14,8 +10,8 @@ export async function GET(
   contextPromise: Promise<{ params: Promise<{ id: string }> }>
 ) {
   const { params } = await contextPromise
-  const { id } = await params  // Add this line to await params
-  const mentorId = parseInt(id) // Use id instead of params.id
+  const { id } = await params  
+  const mentorId = parseInt(id) 
 
   if (isNaN(mentorId)) {
     return NextResponse.json({ error: "Invalid mentor ID" }, { status: 400 })
@@ -71,7 +67,6 @@ export async function GET(
     profilePictureUrl: mentorData.profilePictureUrl,
     country: mentorData.country,
     languages: mentorData.languagesSpoken,
-    timezone: mentorData.timezone,
     professionalTitle: mentorData.professionalTitle,
     bio: mentorData.bio,
     yearsOfExperience: mentorData.yearsOfExperience,

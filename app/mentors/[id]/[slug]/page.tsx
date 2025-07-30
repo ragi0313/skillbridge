@@ -1,3 +1,5 @@
+//app/mentors/[id]/[slug]/page.tsx
+
 import { notFound } from "next/navigation"
 import {
   Star,
@@ -20,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import BookingWidget from "@/components/mentors-overview/BookingWidget"
+import BookingWidget from "@/components/mentors/BookingWidget"
 import UnifiedHeader from "@/components/UnifiedHeader"
 
 interface MentorData {

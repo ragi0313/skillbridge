@@ -28,7 +28,7 @@ export default function BookingWidget({ mentor, averageRate }: BookingWidgetProp
   const [isSticky, setIsSticky] = useState(false)
 
   const mentorSlug = `${mentor.firstName}-${mentor.lastName}`.toLowerCase().replace(/\s+/g, "-")
-  const bookingUrl = `/mentors/${mentor.id}/${mentorSlug}/book-session`
+  const bookingUrl = `/mentors/${mentor.id}/${mentorSlug}/book`
 
   useEffect(() => {
     const handleScroll = () => {

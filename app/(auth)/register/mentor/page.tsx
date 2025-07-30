@@ -65,7 +65,7 @@ export default function MentorSignupPage() {
   e.preventDefault()
 
   try {
-    const res = await fetch("/api/register/mentor", {
+    const res = await fetch("/api/auth/register/mentor", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(formData),

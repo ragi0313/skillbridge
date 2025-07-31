@@ -1,13 +1,20 @@
 "use client"
 
 import { cn } from "@/lib/utils"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, useCallback } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { DayPicker } from "react-day-picker"
 import { format } from "date-fns"
+import { toZonedTime } from "date-fns-tz"
 import { toast } from "sonner"
-import { Loader2 } from "lucide-react"
+import { Loader2, Clock, ArrowRight, CheckCircle } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Textarea } from "@/components/ui/textarea"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import "react-day-picker/dist/style.css"
+import UnifiedHeader from "@/components/UnifiedHeader"
 
 type Props = {
   session: {
@@ -51,48 +58,34 @@ interface TimeSlot {
   available: boolean
 }
 
-const dayNameFromDate = (date: Date) =>
-  format(date, "EEEE").toLowerCase()
-
 // Helper function to convert time string to minutes since midnight
 const timeToMinutes = (timeStr: string): number => {
-  console.log(`Converting time: "${timeStr}"`)
-  
   // Handle 12-hour format (9:00 AM, 4:00 PM)
-  if (timeStr.includes('AM') || timeStr.includes('PM')) {
-    const [time, period] = timeStr.split(' ')
-    const [hours, minutes] = time.split(':').map(Number)
-    
+  if (timeStr.includes("AM") || timeStr.includes("PM")) {
+    const [time, period] = timeStr.split(" ")
+    const [hours, minutes] = time.split(":").map(Number)
     let convertedHours = hours
-    if (period === 'PM' && hours !== 12) {
+    if (period === "PM" && hours !== 12) {
       convertedHours = hours + 12
-    } else if (period === 'AM' && hours === 12) {
+    } else if (period === "AM" && hours === 12) {
       convertedHours = 0
     }
-    
-    const result = convertedHours * 60 + (minutes || 0)
-    console.log(`12-hour format: ${timeStr} -> ${result} minutes`)
-    return result
+    return convertedHours * 60 + (minutes || 0)
   }
-  
   // Handle 24-hour format (09:00, 16:00)
-  const [hours, minutes] = timeStr.split(':').map(Number)
-  const result = hours * 60 + (minutes || 0)
-  console.log(`24-hour format: ${timeStr} -> ${result} minutes`)
-  return result
+  const [hours, minutes] = timeStr.split(":").map(Number)
+  return hours * 60 + (minutes || 0)
 }
 
-// Helper function to convert minutes since midnight to time string
+// Helper function to convert minutes since midnight to time string (24h)
 const minutesToTime = (minutes: number): string => {
   const hours = Math.floor(minutes / 60)
   const mins = minutes % 60
-  return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`
+  return `${hours.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}`
 }
+
 // Helper function to check if two time ranges overlap
-const timeRangesOverlap = (
-  start1: number, end1: number,
-  start2: number, end2: number
-): boolean => {
+const timeRangesOverlap = (start1: number, end1: number, start2: number, end2: number): boolean => {
   return start1 < end2 && start2 < end1
 }
 
@@ -109,165 +102,152 @@ export default function BookMentorSessionPageClient({ session }: Props) {
   const [sessionNotes, setSessionNotes] = useState("")
   const [estimatedCost, setEstimatedCost] = useState<number | null>(null)
   const [submitting, setSubmitting] = useState(false)
-
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
+  // Enhanced data fetching with better error handling
+  const fetchMentor = useCallback(async () => {
     if (session.role !== "learner") {
       toast.error("Only learners can book a session")
       router.replace("/")
       return
     }
-
-    const fetchMentor = async () => {
-      try {
-        const res = await fetch(`/api/mentors/${id}/booking-info`, {
-          cache: "no-store",
-        })
-        if (!res.ok) throw new Error("Failed to fetch mentor data")
-        const data = await res.json()
-        setMentor(data)
-      } catch (err: any) {
-        setError(err.message)
-      } finally {
-        setLoading(false)
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/mentors/${id}/booking-info`, {
+        cache: "no-store",
+        headers: { 'Content-Type': 'application/json' },
+      })
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ error: 'Failed to fetch mentor data' }))
+        throw new Error(errorData.error || `HTTP ${res.status}: ${res.statusText}`)
       }
+      const data = await res.json()
+      if (!data || typeof data !== 'object') throw new Error('Invalid response format')
+      if (!data.mentorId || !data.fullName) throw new Error('Incomplete mentor data received')
+      setMentor(data)
+      if (data.skills && data.skills.length > 0) setSelectedSkillId(data.skills[0].id)
+    } catch (err: any) {
+      setError(err.message || 'Failed to load mentor information')
+    } finally {
+      setLoading(false)
     }
-
-    fetchMentor()
   }, [id, router, session.role])
 
+  useEffect(() => { fetchMentor() }, [fetchMentor])
 
-const availableTimeSlotsForSelectedDay = useMemo(() => {
-  console.log("=== AVAILABILITY CALCULATION DEBUG ===")
-  console.log("Mentor exists:", !!mentor)
-  console.log("Selected date:", selectedDate)
-  
-  if (!mentor || !selectedDate) {
-    console.log("Missing mentor or selected date")
-    return []
-  }
-  
-  const day = format(selectedDate, "EEEE").toLowerCase() // "wednesday"
-  
-  console.log("Calculated day name:", day)
-  console.log("Available days from mentor:", mentor.availability?.map(a => ({ day: a.day, start: a.startTime, end: a.endTime })))
-  
-  const availabilitySlots = mentor.availability?.filter(
-    (slot) => {
-      console.log(`Comparing "${slot.day}" === "${day}":`, slot.day === day)
-      console.log("Slot isActive:", slot.isActive)
-      return slot.day === day && slot.isActive
-    }
-  ) || []
-
-  console.log("Matching availability slots:", availabilitySlots)
-
-  if (availabilitySlots.length === 0) {
-    console.log("No availability slots found for", day)
-    return []
-  }
-
-  const selectedDateStr = selectedDate.toISOString().split('T')[0]
-  console.log("Selected date string:", selectedDateStr)
-  
-  const bookedSessionsForDay = mentor.bookedSessions?.filter(session => {
-    const sessionDate = new Date(session.scheduledDate)
-    const sessionDateStr = sessionDate.toISOString().split('T')[0]
-    const matches = sessionDateStr === selectedDateStr
-    console.log(`Session date ${sessionDateStr} matches ${selectedDateStr}:`, matches)
-    return matches
-  }) || []
-
-  console.log("Booked sessions for day:", bookedSessionsForDay)
-
-  const timeSlots: TimeSlot[] = []
-  const slotInterval = 60 // 1-hour intervals
-
-  availabilitySlots.forEach((availSlot, index) => {
-    console.log(`Processing availability slot ${index}:`, availSlot)
-    
-    const startMinutes = timeToMinutes(availSlot.startTime)
-    const endMinutes = timeToMinutes(availSlot.endTime)
-
-    console.log(`Slot ${index}: ${availSlot.startTime} (${startMinutes}min) - ${availSlot.endTime} (${endMinutes}min)`)
-
-    // Validate the time conversion
-    if (isNaN(startMinutes) || isNaN(endMinutes)) {
-      console.error("Invalid time conversion:", availSlot.startTime, availSlot.endTime)
-      return
-    }
-
-    // Generate hourly slots within this availability window
-    for (let currentMinutes = startMinutes; currentMinutes < endMinutes; currentMinutes += slotInterval) {
-      const slotEndMinutes = Math.min(currentMinutes + slotInterval, endMinutes)
-      
-      console.log(`Generating slot: ${minutesToTime(currentMinutes)} - ${minutesToTime(slotEndMinutes)}`)
-      
-      // Check if this slot conflicts with any booked session
-      let isAvailable = true
-      
-      bookedSessionsForDay.forEach(bookedSession => {
-        const bookedStart = new Date(bookedSession.scheduledDate)
-        const bookedStartMinutes = bookedStart.getHours() * 60 + bookedStart.getMinutes()
-        const bookedEndMinutes = bookedStartMinutes + bookedSession.durationMinutes
-
-        if (timeRangesOverlap(currentMinutes, slotEndMinutes, bookedStartMinutes, bookedEndMinutes)) {
-          isAvailable = false
-          console.log(`Slot ${minutesToTime(currentMinutes)}-${minutesToTime(slotEndMinutes)} conflicts with booking`)
-        }
-      })
-
-      const slot = {
-        startTime: minutesToTime(currentMinutes),
-        endTime: minutesToTime(slotEndMinutes),
-        available: isAvailable
+  useEffect(() => {
+    if (mentor) {
+      setSelectedDate(undefined)
+      setSelectedTimeSlot(null)
+      if (mentor.skills && mentor.skills.length > 0 && !selectedSkillId) {
+        setSelectedSkillId(mentor.skills[0].id)
       }
-      
-      console.log("Created slot:", slot)
-      timeSlots.push(slot)
     }
-  })
+  }, [mentor, selectedSkillId])
 
-  console.log("Final time slots:", timeSlots)
-  return timeSlots
-}, [mentor, selectedDate])
+  // --- TIME SLOT LOGIC WITH TIMEZONE ---
+  const availableTimeSlotsForSelectedDay = useMemo(() => {
+    if (!mentor || !selectedDate) return []
+    const mentorTz = mentor.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone
+
+    // Get "today" in mentor's timezone
+    const now = toZonedTime(new Date(), mentorTz)
+    const selectedDateInMentorTz = toZonedTime(selectedDate, mentorTz)
+    const isToday =
+      format(selectedDateInMentorTz, "yyyy-MM-dd") === format(now, "yyyy-MM-dd")
+
+    const day = format(selectedDateInMentorTz, "EEEE").toLowerCase()
+    const availabilitySlots =
+      mentor.availability?.filter((slot) => slot.day === day && slot.isActive) || []
+
+    if (availabilitySlots.length === 0) return []
+
+    const selectedDateStr = format(selectedDateInMentorTz, "yyyy-MM-dd")
+    const bookedSessionsForDay =
+      mentor.bookedSessions?.filter((session) => {
+        const sessionDate = toZonedTime(new Date(session.scheduledDate), mentorTz)
+        return format(sessionDate, "yyyy-MM-dd") === selectedDateStr
+      }) || []
+
+    const timeSlots: TimeSlot[] = []
+    const slotInterval = 60 // 1-hour intervals
+
+    availabilitySlots.forEach((availSlot) => {
+      const startMinutes = timeToMinutes(availSlot.startTime)
+      const endMinutes = timeToMinutes(availSlot.endTime)
+      if (isNaN(startMinutes) || isNaN(endMinutes)) return
+
+      for (let currentMinutes = startMinutes; currentMinutes < endMinutes; currentMinutes += slotInterval) {
+        const slotEndMinutes = Math.min(currentMinutes + slotInterval, endMinutes)
+
+        // Build slot start/end as Date in mentor's timezone
+        const slotDate = new Date(selectedDateInMentorTz)
+        slotDate.setHours(Math.floor(currentMinutes / 60), currentMinutes % 60, 0, 0)
+
+        let isAvailable = true
+
+        // Block if slot is in the past (mentor's timezone)
+        if (isToday && slotDate < now) {
+          isAvailable = false
+        }
+
+        // Block if slot overlaps with a booked session
+        bookedSessionsForDay.forEach((bookedSession) => {
+          const bookedStart = toZonedTime(new Date(bookedSession.scheduledDate), mentorTz)
+          const bookedStartMinutes = bookedStart.getHours() * 60 + bookedStart.getMinutes()
+          const bookedEndMinutes = bookedStartMinutes + bookedSession.durationMinutes
+          if (timeRangesOverlap(currentMinutes, slotEndMinutes, bookedStartMinutes, bookedEndMinutes)) {
+            isAvailable = false
+          }
+        })
+
+        timeSlots.push({
+          startTime: minutesToTime(currentMinutes),
+          endTime: minutesToTime(slotEndMinutes),
+          available: isAvailable,
+        })
+      }
+    })
+
+    return timeSlots
+  }, [mentor, selectedDate])
+
+  useEffect(() => {
+    setSelectedTimeSlot(null)
+  }, [selectedDate])
 
   const computeMaxDurationMinutes = () => {
     if (!selectedTimeSlot || !mentor || !selectedDate) return 0
-    
-    const day = dayNameFromDate(selectedDate)
+    const mentorTz = mentor.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone
+    const day = format(toZonedTime(selectedDate, mentorTz), "EEEE").toLowerCase()
     const availabilitySlot = mentor.availability.find(
-      (slot) => slot.day === day && slot.isActive &&
-      timeToMinutes(slot.startTime) <= timeToMinutes(selectedTimeSlot.startTime) &&
-      timeToMinutes(slot.endTime) >= timeToMinutes(selectedTimeSlot.endTime)
+      (slot) =>
+        slot.day === day &&
+        slot.isActive &&
+        timeToMinutes(slot.startTime) <= timeToMinutes(selectedTimeSlot.startTime) &&
+        timeToMinutes(slot.endTime) >= timeToMinutes(selectedTimeSlot.endTime),
     )
-    
     if (!availabilitySlot) return 0
-
     const slotStartMinutes = timeToMinutes(selectedTimeSlot.startTime)
     const availabilityEndMinutes = timeToMinutes(availabilitySlot.endTime)
-    
-    const selectedDateStr = selectedDate.toISOString().split('T')[0]
+    const selectedDateInMentorTz = toZonedTime(selectedDate, mentorTz)
+    const selectedDateStr = format(selectedDateInMentorTz, "yyyy-MM-dd")
     const bookedSessionsAfter = mentor.bookedSessions
-      .filter(session => {
-        const sessionDate = new Date(session.scheduledDate).toISOString().split('T')[0]
-        if (sessionDate !== selectedDateStr) return false
-        
-        const sessionStart = new Date(session.scheduledDate)
-        const sessionStartMinutes = sessionStart.getHours() * 60 + sessionStart.getMinutes()
+      .filter((session) => {
+        const sessionDate = toZonedTime(new Date(session.scheduledDate), mentorTz)
+        if (format(sessionDate, "yyyy-MM-dd") !== selectedDateStr) return false
+        const sessionStartMinutes = sessionDate.getHours() * 60 + sessionDate.getMinutes()
         return sessionStartMinutes > slotStartMinutes
       })
       .sort((a, b) => new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime())
-
     if (bookedSessionsAfter.length > 0) {
       const nextBookedSession = bookedSessionsAfter[0]
-      const nextSessionStart = new Date(nextBookedSession.scheduledDate)
+      const nextSessionStart = toZonedTime(new Date(nextBookedSession.scheduledDate), mentorTz)
       const nextSessionStartMinutes = nextSessionStart.getHours() * 60 + nextSessionStart.getMinutes()
       return Math.min(nextSessionStartMinutes - slotStartMinutes, availabilityEndMinutes - slotStartMinutes)
     }
-
     return availabilityEndMinutes - slotStartMinutes
   }
 
@@ -297,31 +277,33 @@ const availableTimeSlotsForSelectedDay = useMemo(() => {
     setEstimatedCost(cost)
   }
 
+  useEffect(() => {
+    const totalMinutes = durationHours * 60 + durationMinutes
+    const cost = computeEstimatedCost(totalMinutes)
+    setEstimatedCost(cost)
+  }, [selectedSkillId, durationHours, durationMinutes, mentor])
+
   const handleBooking = async () => {
     if (!mentor || !selectedDate || !selectedTimeSlot || !selectedSkillId) {
       toast.error("Missing required booking information.")
       return
     }
-
     const totalMinutes = durationHours * 60 + durationMinutes
     if (totalMinutes < 60 || totalMinutes > maxDuration) {
       toast.error("Invalid session duration.")
       return
     }
-
     if (!sessionNotes.trim()) {
       toast.warning("Please provide session notes.")
       return
     }
-
     setSubmitting(true)
-
     const [startH, startM] = selectedTimeSlot.startTime.split(":").map(Number)
-    const scheduledStart = new Date(selectedDate)
+    const mentorTz = mentor.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone
+    const scheduledStart = toZonedTime(selectedDate, mentorTz)
     scheduledStart.setHours(startH, startM, 0, 0)
-
     try {
-      const res = await fetch("/api/book-session", {
+      const res = await fetch("/api/bookings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -333,17 +315,15 @@ const availableTimeSlotsForSelectedDay = useMemo(() => {
           sessionNotes,
         }),
       })
-
       const data = await res.json()
-
       if (!res.ok) {
         toast.error(data.error || "Booking failed.")
       } else {
         toast.success("Session booked! Pending mentor approval.")
-        router.push("/dashboard/learner/sessions")
+        router.push("/learner/dashboard/sessions")
       }
-    } catch (err) {
-      toast.error("Something went wrong.")
+    } catch (err: any) {
+      toast.error("Something went wrong. Please try again.")
     } finally {
       setSubmitting(false)
     }
@@ -351,148 +331,272 @@ const availableTimeSlotsForSelectedDay = useMemo(() => {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center py-20">
-        <Loader2 className="animate-spin w-6 h-6 text-purple-600" />
-        <span className="ml-2 text-gray-600">Loading mentor info...</span>
+      <div className="min-h-screen bg-gray-50 flex justify-center items-center">
+        <Card className="p-8">
+          <div className="flex items-center space-x-3">
+            <Loader2 className="animate-spin w-6 h-6 text-teal-600" />
+            <span className="text-gray-700 font-medium">Loading mentor information...</span>
+          </div>
+        </Card>
       </div>
     )
   }
 
   if (error || !mentor) {
     return (
-      <div className="text-center py-20 text-red-600">
-        Unable to load mentor info.
-        {error && <p className="text-sm text-gray-500 mt-2">{error}</p>}
+      <div className="min-h-screen bg-gray-50 flex justify-center items-center">
+        <Card className="p-8 text-center max-w-md">
+          <div className="text-red-600 mb-4">
+            <h2 className="text-xl font-semibold">Unable to load mentor information</h2>
+            {error && <p className="text-sm text-gray-500 mt-2">{error}</p>}
+          </div>
+          <div className="space-y-3">
+            <Button onClick={fetchMentor} variant="outline" className="w-full">
+              Try Again
+            </Button>
+            <Button onClick={() => router.back()} variant="ghost" className="w-full">
+              Go Back
+            </Button>
+          </div>
+        </Card>
       </div>
     )
   }
 
+  const selectedSkill = mentor.skills.find((s) => s.id === selectedSkillId)
+
   return (
-    <div className="max-w-3xl mx-auto py-12 px-4 space-y-6">
-      <h1 className="text-2xl font-semibold">Book a session with {mentor.fullName}</h1>
+    <div className="min-h-screen">
+      {/* Header */}
+      <UnifiedHeader />
 
-      <div>
-        <h2 className="font-medium mb-2">Choose a Date</h2>
-        <DayPicker
-          mode="single"
-          selected={selectedDate}
-          onSelect={setSelectedDate}
-          disabled={{ before: new Date() }}
-        />
-      </div>
+      <div className="max-w-6xl mx-auto px-4 py-10">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Left Column - Session Details */}
+          <div className="lg:col-span-2 space-y-8">
+            {/* Date & Time Selection */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg font-semibold">Select Date & Time</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <Label className="text-sm font-medium mb-3 block">Choose Date</Label>
+                    <div className="border rounded-lg p-4">
+                      <DayPicker
+                        mode="single"
+                        selected={selectedDate}
+                        onSelect={setSelectedDate}
+                        disabled={{ before: new Date() }}
+                        className="rdp-custom"
+                      />
+                    </div>
+                  </div>
 
-      <div>
-        <h2 className="font-medium mb-2">Select Skill</h2>
-        <select
-          className="w-full border rounded px-3 py-2"
-          value={selectedSkillId ?? ""}
-          onChange={(e) => setSelectedSkillId(Number(e.target.value))}
-        >
-          <option value="" disabled>Select a skill</option>
-          {mentor.skills.map((skill) => (
-            <option key={skill.id} value={skill.id}>
-              {skill.skillName} - {skill.ratePerHour} credits/hour
-            </option>
-          ))}
-        </select>
-      </div>
+                  {selectedDate && (
+                    <div>
+                      <Label className="text-sm font-medium mb-3 block">
+                        Available Times - {format(selectedDate, "MMM d, yyyy")}
+                      </Label>
+                      {availableTimeSlotsForSelectedDay.length === 0 ? (
+                        <div className="text-center py-8 text-gray-500">
+                          <Clock className="w-8 h-8 mx-auto mb-2" />
+                          <p>No availability for this date</p>
+                        </div>
+                      ) : (
+                        <div className="grid gap-2 max-h-64 overflow-y-auto">
+                          {availableTimeSlotsForSelectedDay.map((slot, index) => (
+                            <button
+                              key={`${slot.startTime}-${index}`}
+                              className={cn(
+                                "p-3 rounded-lg border text-left transition-all",
+                                !slot.available
+                                  ? "border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed"
+                                  : selectedTimeSlot?.startTime === slot.startTime
+                                    ? "border-teal-600 bg-teal-50 text-teal-800"
+                                    : "border-gray-200 bg-white hover:border-teal-300",
+                              )}
+                              onClick={() => slot.available && setSelectedTimeSlot(slot)}
+                              disabled={!slot.available}
+                            >
+                              <div className="font-medium">
+                                {slot.startTime} – {slot.endTime}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
 
-      {selectedDate && (
-        <div>
-          <h2 className="font-medium mb-2">Available Time Slots on {format(selectedDate, "PPP")}</h2>
-          {availableTimeSlotsForSelectedDay.length === 0 ? (
-            <p className="text-gray-500">No availability for this date.</p>
-          ) : (
-            <div className="grid gap-3 grid-cols-2 md:grid-cols-3">
-              {availableTimeSlotsForSelectedDay.map((slot, index) => (
-                <button
-                  key={`${slot.startTime}-${index}`}
-                  className={`border px-4 py-2 rounded text-sm ${
-                    !slot.available
-                      ? "border-gray-300 bg-gray-100 text-gray-400 cursor-not-allowed"
-                      : selectedTimeSlot?.startTime === slot.startTime
-                      ? "border-purple-600 bg-purple-100 text-purple-800"
-                      : "hover:bg-gray-50 border-gray-300"
-                  }`}
-                  onClick={() => slot.available && setSelectedTimeSlot(slot)}
-                  disabled={!slot.available}
-                >
-                  {slot.startTime} – {slot.endTime}
-                  {!slot.available && <span className="block text-xs">Booked</span>}
-                </button>
-              ))}
+                      {selectedTimeSlot && (
+                        <>
+                          <div className="flex justify-between mt-4">
+                            <span className="text-gray-600">Duration</span>
+                            <div className="flex items-center space-x-2">
+                              <Select
+                                value={durationHours.toString()}
+                                onValueChange={(value) => handleDurationChange(Number(value), durationMinutes)}
+                              >
+                                <SelectTrigger className="w-20 h-8">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {Array.from({ length: Math.max(1, Math.floor(maxDuration / 60)) }, (_, i) => i + 1).map(
+                                    (hour) => (
+                                      <SelectItem key={hour} value={hour.toString()}>
+                                        {hour}h
+                                      </SelectItem>
+                                    ),
+                                  )}
+                                </SelectContent>
+                              </Select>
+                              <Select
+                                value={durationMinutes.toString()}
+                                onValueChange={(value) => handleDurationChange(durationHours, Number(value))}
+                              >
+                                <SelectTrigger className="w-20 h-8">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="0">0m</SelectItem>
+                                  <SelectItem value="30">30m</SelectItem>
+                                  <SelectItem value="45">45m</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+
+                          {maxDuration > 0 && (
+                            <div className="mt-4 text-sm text-gray-600 bg-gray-50 p-2 rounded">
+                              Maximum duration for this slot: {Math.floor(maxDuration / 60)}h {maxDuration % 60}m
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Session Notes */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="ml-1 text-lg font-semibold">Session Notes</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Textarea
+                  value={sessionNotes}
+                  onChange={(e) => setSessionNotes(e.target.value)}
+                  placeholder="Tell the mentor what you'd like to focus on during this session..."
+                  rows={4}
+                  className="resize-none h-30"
+                />
+                <p className="text-xs text-gray-500 mt-2">
+                  Tell the mentor what you'd like to focus on during this session
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Right Column - Booking Summary */}
+          <div className="lg:col-span-1">
+            <div className="sticky top-8">
+              <Card>
+                <CardContent className="p-6">
+                  {/* Session Header */}
+                  <div className="flex items-start space-x-4 mb-6">
+                    <img
+                      src={mentor.profilePicture || "/placeholder.svg?height=60&width=60"}
+                      alt={mentor.fullName}
+                      className="w-15 h-15 rounded-lg object-cover"
+                    />
+                    <div>
+                      <h3 className="font-semibold text-gray-900">
+                        {durationHours > 0 && `${durationHours} Hour`}
+                        {durationMinutes > 0 && ` ${durationMinutes} Minute`} Session
+                      </h3>
+                      <p className="text-sm text-gray-600">Carried out by {mentor.fullName}</p>
+                      {selectedSkill && <p className="text-sm text-gray-600 mt-1">Focus: {selectedSkill.skillName}</p>}
+                    </div>
+                  </div>
+
+                  {/* Skill Selection Grid */}
+                  <div className="mb-6">
+                    <Label className="text-sm font-medium mb-3 block">Select Skill Area</Label>
+                    <div className="grid gap-2">
+                      {mentor.skills.map((skill) => (
+                        <button
+                          key={skill.id}
+                          className={cn(
+                            "p-3 rounded-lg border text-left transition-all",
+                            selectedSkillId === skill.id
+                              ? "border-teal-600 bg-teal-50 text-teal-800"
+                              : "border-gray-200 bg-white hover:border-teal-300",
+                          )}
+                          onClick={() => setSelectedSkillId(skill.id)}
+                        >
+                          <div className="flex justify-between items-center">
+                            <div>
+                              <div className="font-medium text-sm">{skill.skillName}</div>
+                              <div className="text-xs text-gray-600">{skill.ratePerHour} credits/hour</div>
+                            </div>
+                            {selectedSkillId === skill.id && <CheckCircle className="w-4 h-4 text-teal-600" />}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Session Details */}
+                  <div className="space-y-4 mb-6">
+                    {estimatedCost !== null && (
+                      <div className="p-4 bg-purple-50 rounded-lg">
+                        <div className="flex items-center justify-between">
+                          <span className="text-purple-800 font-medium">Estimated Cost:</span>
+                          <span className="text-purple-900 font-bold text-lg">{estimatedCost} credits</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Checkout Button */}
+                  <Button
+                    onClick={handleBooking}
+                    disabled={submitting || !selectedDate || !selectedTimeSlot || !sessionNotes.trim()}
+                    className="w-full gradient-bg text-white py-3"
+                  >
+                    {submitting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                        Booking...
+                      </>
+                    ) : (
+                      <>
+                        Confirm & Book Session
+                        <ArrowRight className="w-4 h-4 ml-2" />
+                      </>
+                    )}
+                  </Button>
+
+                  {/* Terms */}
+                  <div className="mt-4 text-xs text-gray-500 text-center">
+                    By clicking "Confirm & Book Session", you agree to our{" "}
+                    <a href="#" className="text-teal-600 hover:underline">
+                      Terms of Service
+                    </a>{" "}
+                    and{" "}
+                    <a href="#" className="text-teal-600 hover:underline">
+                      Cancellation Policy
+                    </a>
+                    .
+                  </div>
+                </CardContent>
+              </Card>
             </div>
-          )}
+          </div>
         </div>
-      )}
-
-      {selectedTimeSlot && selectedTimeSlot.available && (
-        <>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block font-medium mb-1">Duration (Hours)</label>
-              <input
-                type="number"
-                min={1}
-                max={Math.floor(maxDuration / 60)}
-                value={durationHours}
-                onChange={(e) =>
-                  handleDurationChange(Number(e.target.value), durationMinutes)
-                }
-                className="w-full border rounded px-3 py-2"
-              />
-            </div>
-            <div>
-              <label className="block font-medium mb-1">Duration (Minutes)</label>
-              <select
-                className="w-full border rounded px-3 py-2"
-                value={durationMinutes}
-                onChange={(e) =>
-                  handleDurationChange(durationHours, Number(e.target.value))
-                }
-              >
-                {[0, 30, 45].map((min) => (
-                  <option key={min} value={min}>
-                    {min} min
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {maxDuration > 0 && (
-            <div className="text-sm text-gray-600">
-              Maximum duration for this slot: {Math.floor(maxDuration / 60)}h {maxDuration % 60}m
-            </div>
-          )}
-
-          {estimatedCost !== null && (
-            <div className="mt-3 text-sm text-purple-700 font-medium">
-              Estimated Cost: <span className="font-bold">{estimatedCost} credits</span>
-            </div>
-          )}
-
-          <div className="mt-4">
-            <label className="block font-medium mb-1">Session Notes</label>
-            <textarea
-              className="w-full border rounded px-3 py-2"
-              rows={4}
-              required
-              value={sessionNotes}
-              onChange={(e) => setSessionNotes(e.target.value)}
-              placeholder="e.g. I'd like help understanding React hooks and how to optimize rendering."
-            />
-          </div>
-
-          <button
-            onClick={handleBooking}
-            disabled={submitting}
-            className="mt-6 bg-purple-600 text-white px-6 py-2 rounded hover:bg-purple-700 disabled:opacity-50"
-          >
-            {submitting ? "Booking..." : "Confirm & Book Session"}
-          </button>
-        </>
-      )}
+      </div>
     </div>
   )
 }

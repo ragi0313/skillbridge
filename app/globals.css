@@ -123,6 +123,43 @@
 
 @layer utilities {
   .gradient-bg {
-    @apply bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-700 hover:to-purple-700 cursor-pointer; 
+    @apply bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-700 hover:to-purple-700 cursor-pointer;
+  }
+
+  .rdp-custom {
+    --rdp-cell-size: 32px;
+    --rdp-accent-color: rgb(20 184 166);
+    --rdp-background-color: rgb(20 184 166);
+    --rdp-accent-color-dark: rgb(15 118 110);
+    --rdp-background-color-dark: rgb(15 118 110);
+  }
+
+  .rdp-custom .rdp-day_selected {
+    background-color: rgb(20 184 166);
+    color: white;
+  }
+
+  .rdp-custom .rdp-day_selected:hover {
+    background-color: rgb(15 118 110);
+  }
+
+  .rdp-custom .rdp-day:hover {
+    background-color: rgb(240 253 250);
+    color: rgb(20 184 166);
+  }
+
+  .rdp-custom .rdp-day_today {
+    font-weight: bold;
+    color: rgb(20 184 166);
+  }
+
+  .rdp-custom .rdp-months {
+    display: flex;
+    justify-content: center;
+  }
+
+  .rdp-custom .rdp-month {
+    margin: 0;
   }
 }
+

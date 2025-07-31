@@ -1,11 +1,11 @@
 import { db } from "@/db";
 import { mentors, users, mentorAvailability, mentorSkills, bookingSessions } from "@/db/schema";
-import { eq, and, or } from "drizzle-orm";
+import { eq, and, or, gte, lte } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: Promise<{ id: string }> } // Note: params is now Promise<{ id: string }>
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // Await the params object before accessing its properties
@@ -79,20 +79,18 @@ export async function GET(
             eq(bookingSessions.status, "pending"),
             eq(bookingSessions.status, "confirmed"),
             eq(bookingSessions.status, "ongoing")
-          )
+          ),
+          // Add date range filter to optimize query
+          gte(bookingSessions.scheduledDate, pastWeek),
+          lte(bookingSessions.scheduledDate, nextMonth)
         )
       );
 
-    // Filter sessions within our date range and format for frontend
-    const relevantBookedSessions = bookedSessions
-      .filter(session => {
-        const sessionDate = new Date(session.scheduledDate);
-        return sessionDate >= pastWeek && sessionDate <= nextMonth;
-      })
-      .map(session => ({
-        scheduledDate: session.scheduledDate.toISOString(),
-        durationMinutes: session.durationMinutes
-      }));
+    // Format booked sessions for frontend
+    const relevantBookedSessions = bookedSessions.map(session => ({
+      scheduledDate: session.scheduledDate.toISOString(),
+      durationMinutes: session.durationMinutes
+    }));
 
     const response = {
       mentorId: mentor.id,

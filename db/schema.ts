@@ -74,6 +74,41 @@ export const mentorSkills = pgTable("mentor_skills", {
   ...timestamps,
 })
 
+// CREDIT SYSTEM TABLES
+export const creditPurchases = pgTable("credit_purchases", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  amountCredits: integer("amount_credits").notNull(),
+  amountPaidUsd: numeric("amount_paid_usd", { precision: 10, scale: 2 }).notNull(),
+  localAmount: numeric("local_amount", { precision: 10, scale: 2 }),
+  localCurrency: varchar("local_currency", { length: 10 }),
+  provider: varchar("provider", { length: 50 }).notNull(), // 'xendit', 'stripe'
+  paymentStatus: varchar("payment_status", { length: 20 }).default("pending"), // 'pending', 'completed', 'failed', 'cancelled'
+  paymentReference: varchar("payment_reference", { length: 255 }),
+  externalId: varchar("external_id", { length: 255 }),
+  invoiceUrl: varchar("invoice_url", { length: 512 }),
+  webhookData: json("webhook_data"), // Store webhook payload for debugging
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+})
+
+// BOOKING SESSIONS - Moved before mentorReviews
+export const bookingSessions = pgTable("booking_sessions", {
+  id: serial("id").primaryKey(),
+  learnerId: integer("learner_id").notNull().references(() => learners.id, { onDelete: "cascade" }),
+  mentorId: integer("mentor_id").notNull().references(() => mentors.id, { onDelete: "cascade" }),
+  mentorSkillId: integer("mentor_skill_id").notNull().references(() => mentorSkills.id),
+  scheduledDate: timestamp("scheduled_date", { withTimezone: true }).notNull(),
+  durationMinutes: integer("duration_minutes").notNull(),
+  totalCostCredits: integer("total_cost_credits").notNull(),
+  escrowCredits: integer("escrow_credits").notNull(),
+  sessionNotes: text("session_notes").notNull(),
+  status: varchar("status", { length: 20 }).default("pending"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+})
+
+// Now mentorReviews can safely reference bookingSessions
 export const mentorReviews = pgTable("mentor_reviews", {
   id: serial("id").primaryKey(),
   mentorId: integer("mentor_id").notNull().references(() => mentors.id),
@@ -82,6 +117,86 @@ export const mentorReviews = pgTable("mentor_reviews", {
   reviewText: text("review_text").notNull(),
   rating: integer("rating").notNull(), // 1-5 stars
   ...timestamps,
+})
+
+export const creditTransactions = pgTable("credit_transactions", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  type: varchar("type", { length: 50 }).notNull(), // 'purchase', 'session_payment', 'session_refund', 'mentor_payout', 'admin_adjustment'
+  direction: varchar("direction", { length: 10 }).notNull(), // 'credit', 'debit'
+  amount: integer("amount").notNull(),
+  balanceBefore: integer("balance_before").notNull(),
+  balanceAfter: integer("balance_after").notNull(),
+  relatedSessionId: integer("related_session_id").references(() => bookingSessions.id),
+  relatedPurchaseId: integer("related_purchase_id").references(() => creditPurchases.id),
+  description: text("description"),
+  metadata: json("metadata"), // Additional context data
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+})
+
+export const sessions = pgTable("sessions", {
+  id: serial("id").primaryKey(),
+  bookingSessionId: integer("booking_session_id").notNull().references(() => bookingSessions.id, { onDelete: "cascade" }),
+  meetingLink: varchar("meeting_link", { length: 512 }),
+  meetingId: varchar("meeting_id", { length: 255 }),
+  mentorResponseAt: timestamp("mentor_response_at", { withTimezone: true }),
+  mentorResponseMessage: text("mentor_response_message"),
+  sessionNotes: text("session_notes"),
+  learnerRating: integer("learner_rating"),
+  mentorRating: integer("mentor_rating"),
+  cancelledBy: varchar("cancelled_by", { length: 20 }),
+  cancellationReason: text("cancellation_reason"),
+  cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+})
+
+// MENTOR PAYOUTS
+export const mentorPayouts = pgTable("mentor_payouts", {
+  id: serial("id").primaryKey(),
+  mentorId: integer("mentor_id").notNull().references(() => mentors.id, { onDelete: "cascade" }),
+  sessionId: integer("session_id").notNull().references(() => bookingSessions.id, { onDelete: "cascade" }),
+  earnedCredits: integer("earned_credits").notNull(), 
+  platformFeeCredits: integer("platform_fee_credits").notNull(),
+  feePercentage: integer("fee_percentage").default(20),
+  status: varchar("status", { length: 20 }).default("pending"), // 'pending', 'released', 'paid_out', 'failed'
+  releasedAt: timestamp("released_at", { withTimezone: true }), // When credits were released from escrow
+  paidOutAt: timestamp("paid_out_at", { withTimezone: true }), // When actually paid to mentor
+  payoutMethod: varchar("payout_method", { length: 50 }), // 'bank_transfer', 'paypal', etc.
+  payoutReference: varchar("payout_reference", { length: 255 }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+})
+
+// WITHDRAWAL REQUESTS
+export const withdrawalRequests = pgTable("withdrawal_requests", {
+  id: serial("id").primaryKey(),
+  mentorId: integer("mentor_id").notNull().references(() => mentors.id, { onDelete: "cascade" }),
+  requestedCredits: integer("requested_credits").notNull(),
+  requestedAmountUsd: numeric("requested_amount_usd", { precision: 10, scale: 2 }).notNull(),
+  localAmount: numeric("local_amount", { precision: 10, scale: 2 }),
+  localCurrency: varchar("local_currency", { length: 10 }),
+  status: varchar("status", { length: 20 }).default("pending"), // 'pending', 'approved', 'processing', 'completed', 'rejected'
+  payoutMethod: varchar("payout_method", { length: 50 }).notNull(),
+  payoutDetails: json("payout_details"), // Bank details, PayPal email, etc.
+  adminNotes: text("admin_notes"),
+  processedBy: integer("processed_by").references(() => users.id),
+  processedAt: timestamp("processed_at", { withTimezone: true }),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+})
+
+// NOTIFICATIONS
+export const notifications = pgTable("notifications", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  type: varchar("type", { length: 50 }).notNull(), 
+  title: varchar("title", { length: 255 }).notNull(),
+  message: text("message").notNull(),
+  relatedEntityType: varchar("related_entity_type", { length: 50 }), // 'session', 'purchase', 'payout'
+  relatedEntityId: integer("related_entity_id"),
+  isRead: boolean("is_read").default(false),
+  readAt: timestamp("read_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 })
 
 // PENDING USERS TABLES
@@ -138,119 +253,5 @@ export const pendingMentorSkills = pgTable("pending_mentor_skills", {
   mentorId: integer("mentor_id").notNull().references(() => pendingMentors.id),
   skillName: varchar("skill_name", { length: 100 }).notNull(),
   ratePerHour: integer("rate_per_hour").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-})
-
-// CREDIT SYSTEM TABLES
-export const creditPurchases = pgTable("credit_purchases", {
-  id: serial("id").primaryKey(),
-  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  amountCredits: integer("amount_credits").notNull(),
-  amountPaidUsd: numeric("amount_paid_usd", { precision: 10, scale: 2 }).notNull(),
-  localAmount: numeric("local_amount", { precision: 10, scale: 2 }),
-  localCurrency: varchar("local_currency", { length: 10 }),
-  provider: varchar("provider", { length: 50 }).notNull(), // 'xendit', 'stripe'
-  paymentStatus: varchar("payment_status", { length: 20 }).default("pending"), // 'pending', 'completed', 'failed', 'cancelled'
-  paymentReference: varchar("payment_reference", { length: 255 }),
-  externalId: varchar("external_id", { length: 255 }),
-  invoiceUrl: varchar("invoice_url", { length: 512 }),
-  webhookData: json("webhook_data"), // Store webhook payload for debugging
-  completedAt: timestamp("completed_at", { withTimezone: true }),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-})
-
-export const creditTransactions = pgTable("credit_transactions", {
-  id: serial("id").primaryKey(),
-  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  type: varchar("type", { length: 50 }).notNull(), // 'purchase', 'session_payment', 'session_refund', 'mentor_payout', 'admin_adjustment'
-  direction: varchar("direction", { length: 10 }).notNull(), // 'credit', 'debit'
-  amount: integer("amount").notNull(),
-  balanceBefore: integer("balance_before").notNull(),
-  balanceAfter: integer("balance_after").notNull(),
-  relatedSessionId: integer("related_session_id").references(() => bookingSessions.id),
-  relatedPurchaseId: integer("related_purchase_id").references(() => creditPurchases.id),
-  description: text("description"),
-  metadata: json("metadata"), // Additional context data
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-})
-
-export const bookingSessions = pgTable("booking_sessions", {
-  id: serial("id").primaryKey(),
-  learnerId: integer("learner_id").notNull().references(() => learners.id, { onDelete: "cascade" }),
-  mentorId: integer("mentor_id").notNull().references(() => mentors.id, { onDelete: "cascade" }),
-  mentorSkillId: integer("mentor_skill_id").notNull().references(() => mentorSkills.id),
-  scheduledDate: timestamp("scheduled_date", { withTimezone: true }).notNull(),
-  durationMinutes: integer("duration_minutes").notNull(),
-  totalCostCredits: integer("total_cost_credits").notNull(),
-  escrowCredits: integer("escrow_credits").notNull(),
-  sessionNotes: text("session_notes").notNull(),
-  status: varchar("status", { length: 20 }).default("pending"),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
-})
-
-export const sessions = pgTable("sessions", {
-  id: serial("id").primaryKey(),
-  bookingSessionId: integer("booking_session_id").notNull().references(() => bookingSessions.id, { onDelete: "cascade" }),
-  meetingLink: varchar("meeting_link", { length: 512 }),
-  meetingId: varchar("meeting_id", { length: 255 }),
-  mentorResponseAt: timestamp("mentor_response_at", { withTimezone: true }),
-  mentorResponseMessage: text("mentor_response_message"),
-  sessionNotes: text("session_notes"),
-  learnerRating: integer("learner_rating"),
-  mentorRating: integer("mentor_rating"),
-  cancelledBy: varchar("cancelled_by", { length: 20 }),
-  cancellationReason: text("cancellation_reason"),
-  cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
-  completedAt: timestamp("completed_at", { withTimezone: true }),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-})
-
-
-// MENTOR PAYOUTS
-export const mentorPayouts = pgTable("mentor_payouts", {
-  id: serial("id").primaryKey(),
-  mentorId: integer("mentor_id").notNull().references(() => mentors.id, { onDelete: "cascade" }),
-  sessionId: integer("session_id").notNull().references(() => bookingSessions.id, { onDelete: "cascade" }),
-  earnedCredits: integer("earned_credits").notNull(), 
-  platformFeeCredits: integer("platform_fee_credits").notNull(),
-  feePercentage: integer("fee_percentage").default(20),
-  status: varchar("status", { length: 20 }).default("pending"), // 'pending', 'released', 'paid_out', 'failed'
-  releasedAt: timestamp("released_at", { withTimezone: true }), // When credits were released from escrow
-  paidOutAt: timestamp("paid_out_at", { withTimezone: true }), // When actually paid to mentor
-  payoutMethod: varchar("payout_method", { length: 50 }), // 'bank_transfer', 'paypal', etc.
-  payoutReference: varchar("payout_reference", { length: 255 }),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-})
-
-// WITHDRAWAL REQUESTS
-export const withdrawalRequests = pgTable("withdrawal_requests", {
-  id: serial("id").primaryKey(),
-  mentorId: integer("mentor_id").notNull().references(() => mentors.id, { onDelete: "cascade" }),
-  requestedCredits: integer("requested_credits").notNull(),
-  requestedAmountUsd: numeric("requested_amount_usd", { precision: 10, scale: 2 }).notNull(),
-  localAmount: numeric("local_amount", { precision: 10, scale: 2 }),
-  localCurrency: varchar("local_currency", { length: 10 }),
-  status: varchar("status", { length: 20 }).default("pending"), // 'pending', 'approved', 'processing', 'completed', 'rejected'
-  payoutMethod: varchar("payout_method", { length: 50 }).notNull(),
-  payoutDetails: json("payout_details"), // Bank details, PayPal email, etc.
-  adminNotes: text("admin_notes"),
-  processedBy: integer("processed_by").references(() => users.id),
-  processedAt: timestamp("processed_at", { withTimezone: true }),
-  completedAt: timestamp("completed_at", { withTimezone: true }),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-})
-
-// NOTIFICATIONS
-export const notifications = pgTable("notifications", {
-  id: serial("id").primaryKey(),
-  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  type: varchar("type", { length: 50 }).notNull(), 
-  title: varchar("title", { length: 255 }).notNull(),
-  message: text("message").notNull(),
-  relatedEntityType: varchar("related_entity_type", { length: 50 }), // 'session', 'purchase', 'payout'
-  relatedEntityId: integer("related_entity_id"),
-  isRead: boolean("is_read").default(false),
-  readAt: timestamp("read_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 })

@@ -8,30 +8,28 @@ import {
 } from "@/db/schema";
 import { and, eq, lte, gte, or } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
+import { toZonedTime } from "date-fns-tz";
 
-// Helper function to convert time string to minutes since midnight
+
 const timeToMinutes = (timeStr: string): number => {
-  // Handle 12-hour format (9:00 AM, 4:00 PM)
+
   if (timeStr.includes('AM') || timeStr.includes('PM')) {
     const [time, period] = timeStr.split(' ')
     const [hours, minutes] = time.split(':').map(Number)
-    
     let convertedHours = hours
     if (period === 'PM' && hours !== 12) {
       convertedHours = hours + 12
     } else if (period === 'AM' && hours === 12) {
       convertedHours = 0
     }
-    
     return convertedHours * 60 + (minutes || 0)
   }
-  
-  // Handle 24-hour format (09:00, 16:00)
+
   const [hours, minutes] = timeStr.split(':').map(Number)
   return hours * 60 + (minutes || 0)
 }
 
-// Helper function to check if two time ranges overlap
+
 const timeRangesOverlap = (
   start1: number, end1: number,
   start2: number, end2: number
@@ -51,6 +49,7 @@ export async function POST(req: NextRequest) {
       sessionNotes,
     } = body;
 
+
     if (
       !learnerId ||
       !mentorId ||
@@ -62,37 +61,57 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Missing or invalid fields." }, { status: 400 });
     }
 
+
+    if (durationMinutes < 60) {
+      return NextResponse.json({ error: "Session must be at least 60 minutes." }, { status: 400 });
+    }
+
+
     const [mentor, learner, skill] = await Promise.all([
       db.query.mentors.findFirst({
         where: eq(mentors.id, mentorId),
-        with: { user: true },
       }),
       db.query.learners.findFirst({
-        where: eq(learners.id, learnerId),
-        with: { user: true },
+        where: eq(learners.userId, learnerId),
       }),
       db.query.mentorSkills.findFirst({
-        where: eq(mentorSkills.id, mentorSkillId),
+        where: and(
+          eq(mentorSkills.id, mentorSkillId),
+          eq(mentorSkills.mentorId, mentorId),
+          eq(mentorSkills.isActive, true)
+        ),
       }),
     ]);
-
-    if (!mentor || !learner || !skill || !mentor.user || !learner.user) {
+    console.log("mentorId:", mentorId, "mentor:", mentor);
+    console.log("learnerId:", learnerId, "learner:", learner);
+    console.log("mentorSkillId:", mentorSkillId, "skill:", skill);
+    if (!mentor || !learner || !skill) {
       return NextResponse.json({ error: "Mentor, learner, or skill not found." }, { status: 404 });
     }
 
-    if (skill.mentorId !== mentor.id) {
-      return NextResponse.json({ error: "Skill does not belong to the mentor." }, { status: 400 });
-    }
 
     const ratePerMinute = skill.ratePerHour / 60;
     const totalCostCredits = Math.ceil(durationMinutes * ratePerMinute);
 
+
     if (learner.creditsBalance < totalCostCredits) {
-      return NextResponse.json({ error: "Insufficient credits." }, { status: 402 });
+      return NextResponse.json({
+        error: `Insufficient credits. Required: ${totalCostCredits}, Available: ${learner.creditsBalance}`
+      }, { status: 402 });
     }
+
 
     const scheduledStart = new Date(scheduledDate);
     const scheduledEnd = new Date(scheduledStart.getTime() + durationMinutes * 60000);
+
+
+    const mentorTimezone = mentor.timezone || "UTC";
+    const nowInMentorTz = toZonedTime(new Date(), mentorTimezone);
+    const scheduledStartInMentorTz = toZonedTime(scheduledStart, mentorTimezone);
+    if (scheduledStartInMentorTz < nowInMentorTz) {
+      return NextResponse.json({ error: "Cannot book sessions in the past." }, { status: 400 });
+    }
+
 
     const dayOfWeek = scheduledStart.toLocaleDateString("en-US", {
       weekday: "long",
@@ -113,6 +132,7 @@ export async function POST(req: NextRequest) {
       timeZone: mentor.timezone,
     });
 
+
     const availability = await db
       .select()
       .from(mentorAvailability)
@@ -127,8 +147,11 @@ export async function POST(req: NextRequest) {
       );
 
     if (availability.length === 0) {
-      return NextResponse.json({ error: "Mentor is not available at this time." }, { status: 400 });
+      return NextResponse.json({
+        error: `Mentor is not available on ${dayOfWeek} from ${startTimeStr} to ${endTimeStr}.`
+      }, { status: 400 });
     }
+
 
     const scheduledDateStr = scheduledStart.toISOString().split('T')[0];
     const scheduledStartTime = timeToMinutes(startTimeStr);
@@ -153,10 +176,12 @@ export async function POST(req: NextRequest) {
         )
       );
 
+
     const conflictingSessions = existingSessions.filter(session => {
       const existingDate = new Date(session.scheduledDate);
       const existingDateStr = existingDate.toISOString().split('T')[0];
-      
+
+   
       if (existingDateStr !== scheduledDateStr) return false;
 
       const existingStartTime = existingDate.getHours() * 60 + existingDate.getMinutes();
@@ -169,11 +194,12 @@ export async function POST(req: NextRequest) {
     });
 
     if (conflictingSessions.length > 0) {
-      return NextResponse.json({ 
-        error: "This time slot conflicts with an existing session." 
+      return NextResponse.json({
+        error: "This time slot conflicts with an existing session."
       }, { status: 409 });
     }
 
+    // Create the booking
     const booking = await db.insert(bookingSessions).values({
       learnerId,
       mentorId,
@@ -181,18 +207,20 @@ export async function POST(req: NextRequest) {
       scheduledDate: scheduledStart,
       durationMinutes,
       totalCostCredits,
-      escrowCredits: totalCostCredits,
+      escrowCredits: totalCostCredits, // Hold credits in escrow until session is completed
       sessionNotes,
-      status: "pending",
+      status: "pending", // Pending mentor approval
     }).returning();
 
-    return NextResponse.json({ 
-      message: "Session booked successfully",
-      session: booking[0] 
+    return NextResponse.json({
+      message: "Session booked successfully! Pending mentor approval.",
+      session: booking[0]
     }, { status: 201 });
 
   } catch (err) {
     console.error("Booking error:", err);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json({
+      error: "An unexpected error occurred while booking the session."
+    }, { status: 500 });
   }
 }

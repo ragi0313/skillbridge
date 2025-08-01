@@ -79,9 +79,9 @@ export default function Header() {
                 Browse Mentors
               </Link>
               <Link
-                href="/credits-pricing"
+                href="/pricing"
                 className={`px-3 py-2 rounded-md text-md font-medium transition-colors ${
-                  pathname === "/credits-pricing"
+                  pathname === "/pricing"
                     ? "bg-blue-600 text-white"
                     : "text-gray-300 hover:text-white hover:bg-gray-800"
                 }`}

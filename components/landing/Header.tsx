@@ -18,7 +18,7 @@ export default function Header() {
 
         <nav className="hidden md:flex items-center space-x-6">
               <Link
-                href="/credits/pricing"
+                href="/pricing"
                 className={`px-3 py-2 rounded-md text-md font-medium transition-colors ${
                   pathname === "/credits/pricing"
                     ? "bg-blue-600 text-white"

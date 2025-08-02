@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { Loader2, CreditCard, ArrowRight } from "lucide-react"
+import { Loader2, CreditCard, ArrowRight, Coins } from "lucide-react"
 import { creditPackages } from "@/lib/payments/creditPackages"
 import UnifiedHeader from "@/components/UnifiedHeader"
 
@@ -175,6 +175,11 @@ export default function PricingPage() {
                             </div>
                           )}
                         </div>
+                      </div>
+                      <div className="flex items-center justify-center mb-6">
+                        <Coins className="w-8 h-8 text-yellow-500 mr-2" />
+                        <span className="text-3xl font-bold text-gray-800">{pack.credits}</span>
+                        <span className="text-xl text-gray-600 ml-2">Credits</span>
                       </div>
                       {/* CTA Button */}
                       <button

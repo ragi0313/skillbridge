@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
       userId: user.id.toString(),
       credits: creditPack.credits.toString(),
     },
-    success_url: `${process.env.NEXT_PUBLIC_BASE_URL}/success`,
+    success_url: `${process.env.NEXT_PUBLIC_BASE_URL}/learner/dashboard`,
     cancel_url: `${process.env.NEXT_PUBLIC_BASE_URL}/pricing`,
   })
 

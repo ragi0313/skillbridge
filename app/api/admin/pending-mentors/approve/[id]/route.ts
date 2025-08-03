@@ -11,6 +11,16 @@ import {
 import { eq } from "drizzle-orm"
 import { NextResponse } from "next/server"
 
+// Helper to convert "09:00 AM" to "09:00" (24-hour format)
+function to24Hour(time: string): string {
+  if (!time) return ""
+  const [timePart, period] = time.split(" ")
+  let [hours, minutes] = timePart.split(":").map(Number)
+  if (period === "PM" && hours !== 12) hours += 12
+  if (period === "AM" && hours === 12) hours = 0
+  return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`
+}
+
 export async function POST(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id: idString } = await params
   const id = Number(idString)
@@ -67,7 +77,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
     )
   }
 
-  // Transfer availability slots
+  // Transfer availability slots (convert to 24-hour format)
   const pendingSlots = await db
     .select()
     .from(pendingMentorAvailability)
@@ -78,8 +88,8 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
       pendingSlots.map((slot) => ({
         mentorId: mentor.id,
         day: slot.day,
-        startTime: slot.startTime,
-        endTime: slot.endTime,
+        startTime: to24Hour(slot.startTime),
+        endTime: to24Hour(slot.endTime),
       }))
     )
   }

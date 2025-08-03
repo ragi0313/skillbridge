@@ -17,6 +17,7 @@ export default function LearnerSignupPage() {
     lastName: "",
     email: "",
     country: "",
+    timezone: "",
     password: "",
     confirmPassword: "",
     learningGoals: "",

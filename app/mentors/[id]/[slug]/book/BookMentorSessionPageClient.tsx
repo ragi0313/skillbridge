@@ -77,11 +77,13 @@ const timeToMinutes = (timeStr: string): number => {
   return hours * 60 + (minutes || 0)
 }
 
-// Helper function to convert minutes since midnight to time string (24h)
-const minutesToTime = (minutes: number): string => {
+// Helper function to convert minutes since midnight to 12-hour format
+const minutesToTime12Hour = (minutes: number): string => {
   const hours = Math.floor(minutes / 60)
   const mins = minutes % 60
-  return `${hours.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}`
+  const period = hours >= 12 ? "PM" : "AM"
+  const displayHours = hours === 0 ? 12 : hours > 12 ? hours - 12 : hours
+  return `${displayHours}:${mins.toString().padStart(2, "0")} ${period}`
 }
 
 // Helper function to check if two time ranges overlap
@@ -147,7 +149,7 @@ export default function BookMentorSessionPageClient({ session }: Props) {
     }
   }, [mentor, selectedSkillId])
 
-  // --- TIME SLOT LOGIC WITH TIMEZONE ---
+  // Fixed TIME SLOT LOGIC with proper AM/PM handling
   const availableTimeSlotsForSelectedDay = useMemo(() => {
     if (!mentor || !selectedDate) return []
     const mentorTz = mentor.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone
@@ -155,21 +157,22 @@ export default function BookMentorSessionPageClient({ session }: Props) {
     // Get "today" in mentor's timezone
     const now = toZonedTime(new Date(), mentorTz)
     const selectedDateInMentorTz = toZonedTime(selectedDate, mentorTz)
-    const isToday =
-      format(selectedDateInMentorTz, "yyyy-MM-dd") === format(now, "yyyy-MM-dd")
+    const isToday = format(selectedDateInMentorTz, "yyyy-MM-dd") === format(now, "yyyy-MM-dd")
 
     const day = format(selectedDateInMentorTz, "EEEE").toLowerCase()
-    const availabilitySlots =
-      mentor.availability?.filter((slot) => slot.day === day && slot.isActive) || []
+    const availabilitySlots = mentor.availability?.filter((slot) => slot.day === day && slot.isActive) || []
+
+    console.log("Debug - Day:", day, "Available slots:", availabilitySlots)
 
     if (availabilitySlots.length === 0) return []
 
     const selectedDateStr = format(selectedDateInMentorTz, "yyyy-MM-dd")
-    const bookedSessionsForDay =
-      mentor.bookedSessions?.filter((session) => {
-        const sessionDate = toZonedTime(new Date(session.scheduledDate), mentorTz)
-        return format(sessionDate, "yyyy-MM-dd") === selectedDateStr
-      }) || []
+    const bookedSessionsForDay = mentor.bookedSessions?.filter((session) => {
+      const sessionDate = toZonedTime(new Date(session.scheduledDate), mentorTz)
+      return format(sessionDate, "yyyy-MM-dd") === selectedDateStr
+    }) || []
+
+    console.log("Debug - Booked sessions for day:", bookedSessionsForDay)
 
     const timeSlots: TimeSlot[] = []
     const slotInterval = 60 // 1-hour intervals
@@ -177,12 +180,23 @@ export default function BookMentorSessionPageClient({ session }: Props) {
     availabilitySlots.forEach((availSlot) => {
       const startMinutes = timeToMinutes(availSlot.startTime)
       const endMinutes = timeToMinutes(availSlot.endTime)
-      if (isNaN(startMinutes) || isNaN(endMinutes)) return
+      
+      console.log("Debug - Processing slot:", {
+        startTime: availSlot.startTime,
+        endTime: availSlot.endTime,
+        startMinutes,
+        endMinutes
+      })
+
+      if (isNaN(startMinutes) || isNaN(endMinutes)) {
+        console.log("Debug - Invalid time format")
+        return
+      }
 
       for (let currentMinutes = startMinutes; currentMinutes < endMinutes; currentMinutes += slotInterval) {
         const slotEndMinutes = Math.min(currentMinutes + slotInterval, endMinutes)
 
-        // Build slot start/end as Date in mentor's timezone
+        // Build slot start time as Date in mentor's timezone
         const slotDate = new Date(selectedDateInMentorTz)
         slotDate.setHours(Math.floor(currentMinutes / 60), currentMinutes % 60, 0, 0)
 
@@ -191,6 +205,7 @@ export default function BookMentorSessionPageClient({ session }: Props) {
         // Block if slot is in the past (mentor's timezone)
         if (isToday && slotDate < now) {
           isAvailable = false
+          console.log("Debug - Slot in past:", minutesToTime12Hour(currentMinutes))
         }
 
         // Block if slot overlaps with a booked session
@@ -198,19 +213,27 @@ export default function BookMentorSessionPageClient({ session }: Props) {
           const bookedStart = toZonedTime(new Date(bookedSession.scheduledDate), mentorTz)
           const bookedStartMinutes = bookedStart.getHours() * 60 + bookedStart.getMinutes()
           const bookedEndMinutes = bookedStartMinutes + bookedSession.durationMinutes
+          
           if (timeRangesOverlap(currentMinutes, slotEndMinutes, bookedStartMinutes, bookedEndMinutes)) {
             isAvailable = false
+            console.log("Debug - Slot conflicts with booking:", {
+              slotStart: minutesToTime12Hour(currentMinutes),
+              slotEnd: minutesToTime12Hour(slotEndMinutes),
+              bookedStart: minutesToTime12Hour(bookedStartMinutes),
+              bookedEnd: minutesToTime12Hour(bookedEndMinutes)
+            })
           }
         })
 
         timeSlots.push({
-          startTime: minutesToTime(currentMinutes),
-          endTime: minutesToTime(slotEndMinutes),
+          startTime: minutesToTime12Hour(currentMinutes),
+          endTime: minutesToTime12Hour(slotEndMinutes),
           available: isAvailable,
         })
       }
     })
 
+    console.log("Debug - Generated time slots:", timeSlots)
     return timeSlots
   }, [mentor, selectedDate])
 
@@ -222,6 +245,7 @@ export default function BookMentorSessionPageClient({ session }: Props) {
     if (!selectedTimeSlot || !mentor || !selectedDate) return 0
     const mentorTz = mentor.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone
     const day = format(toZonedTime(selectedDate, mentorTz), "EEEE").toLowerCase()
+    
     const availabilitySlot = mentor.availability.find(
       (slot) =>
         slot.day === day &&
@@ -230,10 +254,12 @@ export default function BookMentorSessionPageClient({ session }: Props) {
         timeToMinutes(slot.endTime) >= timeToMinutes(selectedTimeSlot.endTime),
     )
     if (!availabilitySlot) return 0
+    
     const slotStartMinutes = timeToMinutes(selectedTimeSlot.startTime)
     const availabilityEndMinutes = timeToMinutes(availabilitySlot.endTime)
     const selectedDateInMentorTz = toZonedTime(selectedDate, mentorTz)
     const selectedDateStr = format(selectedDateInMentorTz, "yyyy-MM-dd")
+    
     const bookedSessionsAfter = mentor.bookedSessions
       .filter((session) => {
         const sessionDate = toZonedTime(new Date(session.scheduledDate), mentorTz)
@@ -242,6 +268,7 @@ export default function BookMentorSessionPageClient({ session }: Props) {
         return sessionStartMinutes > slotStartMinutes
       })
       .sort((a, b) => new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime())
+      
     if (bookedSessionsAfter.length > 0) {
       const nextBookedSession = bookedSessionsAfter[0]
       const nextSessionStart = toZonedTime(new Date(nextBookedSession.scheduledDate), mentorTz)
@@ -298,17 +325,22 @@ export default function BookMentorSessionPageClient({ session }: Props) {
       return
     }
     setSubmitting(true)
-    const [startH, startM] = selectedTimeSlot.startTime.split(":").map(Number)
+    
+    // Parse the 12-hour time format and convert to Date
     const mentorTz = mentor.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone
     const scheduledStart = toZonedTime(selectedDate, mentorTz)
-    scheduledStart.setHours(startH, startM, 0, 0)
+    
+    // Convert 12-hour time to 24-hour for Date object
+    const startMinutes = timeToMinutes(selectedTimeSlot.startTime)
+    scheduledStart.setHours(Math.floor(startMinutes / 60), startMinutes % 60, 0, 0)
+    
     try {
       const res = await fetch("/api/bookings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          learnerId: session.id,
-          mentorId: mentor.mentorId,
+          learnerUserId: session.id,         // <-- match backend
+          mentorUserId: mentor.mentorId,     // <-- match backend
           mentorSkillId: selectedSkillId,
           scheduledDate: scheduledStart.toISOString(),
           durationMinutes: totalMinutes,

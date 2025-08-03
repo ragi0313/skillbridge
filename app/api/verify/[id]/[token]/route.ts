@@ -61,6 +61,7 @@ export async function POST(
 
     await db.insert(learners).values({
       userId: newUser.id,
+      timezone: pending.timezone,
       experienceLevel: pending.experienceLevel,
       learningGoals: pending.learningGoals,
       country: pending.country,

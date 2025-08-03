@@ -121,7 +121,7 @@ export default function RecommendedMentors() {
                     </div>
 
                     <Button asChild className="w-full bg-blue-600 hover:bg-blue-700 text-white">
-                      <Link href={`/learner/mentors/${mentor.mentorId}`}>View Profile</Link>
+                      <Link href={`/mentor/${mentor.mentorId}`}>View Profile</Link>
                     </Button>
                   </CardContent>
                 </Card>
@@ -131,7 +131,7 @@ export default function RecommendedMentors() {
 
           <div className="text-center mt-12">
             <Button asChild variant="outline" size="lg" className="px-8 bg-transparent">
-              <Link href="/learner/browse-mentors">View All Mentors</Link>
+              <Link href="/find-mentors">View All Mentors</Link>
             </Button>
           </div>
         </div>

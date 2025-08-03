@@ -25,7 +25,6 @@ export async function GET() {
       experienceLevel: learners.experienceLevel,
       learningGoals: learners.learningGoals,
       creditsBalance: learners.creditsBalance,
-      socialLinks: learners.socialLinks,
       timezone: learners.timezone,
       createdAt: learners.createdAt,
       updatedAt: learners.updatedAt,

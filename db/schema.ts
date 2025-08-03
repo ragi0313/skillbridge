@@ -1,4 +1,4 @@
-import { pgTable, serial, varchar, text, timestamp, integer, json, numeric, boolean } from "drizzle-orm/pg-core"
+import { pgTable, serial, varchar, text, timestamp, integer, json, numeric, boolean, time } from "drizzle-orm/pg-core"
 
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
@@ -32,8 +32,7 @@ export const learners = pgTable("learners", {
   creditsBalance: integer("credits_balance").default(0).notNull(),
   profileUrl: varchar("profile_url", { length: 255 }),
   profilePictureUrl: varchar("profile_picture_url", { length: 255 }),
-  socialLinks: json("social_links"),
-  timezone: varchar("timezone", { length: 100 }),
+  timezone: varchar("timezone", { length: 100 }).notNull(),
   ...timestamps,
 })
 
@@ -59,8 +58,8 @@ export const mentorAvailability = pgTable("mentor_availability", {
   id: serial("id").primaryKey(),
   mentorId: integer("mentor_id").notNull().references(() => mentors.id),
   day: varchar("day", { length: 20 }).notNull(), // e.g. "monday"
-  startTime: varchar("start_time", { length: 10 }).notNull(), // e.g. "09:00"
-  endTime: varchar("end_time", { length: 10 }).notNull(), // e.g. "11:00"
+  startTime: time("start_time").notNull(), // e.g. "09:00 AM"
+  endTime: time("end_time").notNull(), // e.g. "11:00 PM"
   isActive: boolean("is_active").default(true),
   ...timestamps,
 })
@@ -209,6 +208,7 @@ export const pendingLearners = pgTable("pending_learners", {
   country: varchar("country", { length: 255 }).notNull(),
   experienceLevel: varchar("experience_level", { length: 100 }).notNull(),
   learningGoals: text("learning_goals").notNull(),
+  timezone: varchar("timezone", { length: 100 }).notNull(),
   verificationToken: varchar("verification_token", { length: 255 }),
   expiresAt: timestamp("expires_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
@@ -243,8 +243,8 @@ export const pendingMentorAvailability = pgTable("pending_mentor_availability", 
   id: serial("id").primaryKey(),
   mentorId: integer("mentor_id").notNull().references(() => pendingMentors.id),
   day: varchar("day", { length: 20 }).notNull(),
-  startTime: varchar("start_time", { length: 10 }).notNull(),
-  endTime: varchar("end_time", { length: 10 }).notNull(),
+  startTime: time("start_time").notNull(), // e.g. "09:00 AM"
+  endTime: time("end_time").notNull(), // e.g. "11:00 PM"
   ...timestamps,
 })
 

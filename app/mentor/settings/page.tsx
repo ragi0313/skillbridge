@@ -1,11 +1,6 @@
 "use client"
 
-import { Textarea } from "@/components/ui/textarea"
-
-import { Label } from "@/components/ui/label"
-
 import type React from "react"
-
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"

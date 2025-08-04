@@ -1,12 +1,13 @@
 import { db } from "@/db"
-import { 
-  mentors, 
-  users, 
-  mentorSkills, 
-  mentorReviews, 
-  learners 
+import {
+  mentors,
+  mentorAvailability,
+  mentorSkills,
+  mentorBlockedDates,
+  users,
+  bookingSessions,
 } from "@/db/schema"
-import { eq } from "drizzle-orm"
+import { eq, and, inArray } from "drizzle-orm"
 import { getSession } from "@/lib/auth/getSession"
 import { NextResponse } from "next/server"
 
@@ -17,8 +18,8 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  // Get mentor profile with user information
-  const [mentorProfile] = await db
+  // Get mentor core data
+  const [mentor] = await db
     .select({
       id: mentors.id,
       userId: mentors.userId,
@@ -28,15 +29,16 @@ export async function GET() {
       role: users.role,
       profilePictureUrl: mentors.profilePictureUrl,
       profileUrl: mentors.profileUrl,
-      languagesSpoken: mentors.languagesSpoken,
-      gender: mentors.gender,
       country: mentors.country,
-      professionalTitle: mentors.professionalTitle,
+      timezone: mentors.timezone,
       bio: mentors.bio,
-      yearsOfExperience: mentors.yearsOfExperience,
+      creditsBalance: mentors.creditsBalance,
       linkedInUrl: mentors.linkedInUrl,
       socialLinks: mentors.socialLinks,
-      creditsBalance: mentors.creditsBalance,
+      languagesSpoken: mentors.languagesSpoken,
+      gender: mentors.gender,
+      professionalTitle: mentors.professionalTitle,
+      yearsOfExperience: mentors.yearsOfExperience,
       createdAt: mentors.createdAt,
       updatedAt: mentors.updatedAt,
     })
@@ -44,58 +46,189 @@ export async function GET() {
     .innerJoin(users, eq(users.id, mentors.userId))
     .where(eq(mentors.userId, session.id))
 
-  if (!mentorProfile) {
+  if (!mentor) {
     return NextResponse.json({ error: "Mentor not found" }, { status: 404 })
   }
 
-  // Get mentor skills
+  const availability = await db
+    .select()
+    .from(mentorAvailability)
+    .where(eq(mentorAvailability.mentorId, mentor.id))
+
   const skills = await db
-    .select({
-      id: mentorSkills.id,
-      skillName: mentorSkills.skillName,
-      ratePerHour: mentorSkills.ratePerHour,
-      createdAt: mentorSkills.createdAt,
-      updatedAt: mentorSkills.updatedAt,
-    })
+    .select()
     .from(mentorSkills)
-    .where(eq(mentorSkills.mentorId, mentorProfile.id))
+    .where(eq(mentorSkills.mentorId, mentor.id))
 
+  const blockedDates = await db
+    .select()
+    .from(mentorBlockedDates)
+    .where(eq(mentorBlockedDates.mentorId, mentor.id))
 
-  // Get mentor reviews with learner information
-  const reviews = await db
-    .select({
-      id: mentorReviews.id,
-      reviewText: mentorReviews.reviewText,
-      rating: mentorReviews.rating,
-      createdAt: mentorReviews.createdAt,
-      updatedAt: mentorReviews.updatedAt,
-      learner: {
-        id: learners.id,
-        firstName: users.firstName,
-        lastName: users.lastName,
-        profilePictureUrl: learners.profilePictureUrl,
-      }
-    })
-    .from(mentorReviews)
-    .leftJoin(learners, eq(mentorReviews.learnerId, learners.id))
-    .leftJoin(users, eq(learners.userId, users.id))
-    .where(eq(mentorReviews.mentorId, mentorProfile.id))
+  return NextResponse.json({
+    mentor,
+    availability,
+    skills,
+    blockedDates,
+  })
+}
 
+export async function PATCH(req: Request) {
+  const session = await getSession()
 
-  const averageRating = reviews.length > 0 
-    ? reviews.reduce((sum, review) => sum + (review.rating || 0), 0) / reviews.length 
-    : 0
-
-  const completeProfile = {
-    ...mentorProfile,
-    skills: skills,
-    reviews: reviews,
-    stats: {
-      totalReviews: reviews.length,
-      averageRating: Math.round(averageRating * 10) / 10, 
-      totalSkills: skills.length,
-    }
+  if (!session || session.role !== "mentor") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  return NextResponse.json({ mentor: completeProfile })
+  const {
+    profilePictureUrl,
+    languagesSpoken,
+    gender,
+    country,
+    timezone,
+    professionalTitle,
+    bio,
+    yearsOfExperience,
+    linkedInUrl,
+    socialLinks,
+    skills = [],
+    availability = [],
+    blockedDates = [],
+    question1,
+    question2,
+    question3,
+  } = await req.json()
+
+  try {
+    const [mentorRecord] = await db
+      .select({ id: mentors.id })
+      .from(mentors)
+      .where(eq(mentors.userId, session.id))
+
+    if (!mentorRecord) {
+      return NextResponse.json({ error: "Mentor not found" }, { status: 404 })
+    }
+
+    const mentorId = mentorRecord.id
+
+    // === CORE FIELDS ===
+    await db
+      .update(mentors)
+      .set({
+        profilePictureUrl,
+        languagesSpoken,
+        gender,
+        country,
+        timezone,
+        professionalTitle,
+        bio,
+        yearsOfExperience,
+        linkedInUrl,
+        socialLinks,
+        updatedAt: new Date(),
+      })
+      .where(eq(mentors.userId, session.id))
+
+    // === SKILLS ===
+    const currentSkills = await db
+      .select()
+      .from(mentorSkills)
+      .where(eq(mentorSkills.mentorId, mentorId))
+
+    const currentSkillMap = new Map(
+      currentSkills.map((s) => [s.skillName.toLowerCase(), s])
+    )
+
+    const incomingSkillNames = new Set(skills.map((s: any) => s.skillName.toLowerCase()))
+
+    const toDeleteIds: number[] = []
+    const toAdd: typeof skills = []
+    const toUpdate: { id: number, data: any }[] = []
+
+    for (const skill of currentSkills) {
+      const name = skill.skillName.toLowerCase()
+      if (!incomingSkillNames.has(name)) {
+        toDeleteIds.push(skill.id)
+      }
+    }
+
+    for (const incoming of skills) {
+      const name = incoming.skillName.toLowerCase()
+      const match = currentSkillMap.get(name)
+
+      if (!match) {
+        toAdd.push(incoming)
+      } else if (
+        match.ratePerHour !== incoming.ratePerHour ||
+        match.isActive !== incoming.isActive
+      ) {
+        toUpdate.push({ id: match.id, data: incoming })
+      }
+    }
+
+    // Check usage in bookingSessions
+    const used = await db
+      .select({ mentorSkillId: bookingSessions.mentorSkillId })
+      .from(bookingSessions)
+      .where(eq(bookingSessions.mentorId, mentorId))
+
+    const usedSkillIds = new Set(used.map((b) => b.mentorSkillId))
+    const safeToDeleteIds = toDeleteIds.filter((id) => !usedSkillIds.has(id))
+
+    if (safeToDeleteIds.length > 0) {
+      await db
+        .delete(mentorSkills)
+        .where(inArray(mentorSkills.id, safeToDeleteIds))
+    }
+
+    if (toAdd.length > 0) {
+      await db.insert(mentorSkills).values(
+        toAdd.map((s: any) => ({
+          mentorId,
+          skillName: s.skillName,
+          ratePerHour: s.ratePerHour,
+          isActive: s.isActive ?? true,
+        }))
+      )
+    }
+
+    for (const { id, data } of toUpdate) {
+      await db.update(mentorSkills)
+        .set({
+          ratePerHour: data.ratePerHour,
+          isActive: data.isActive ?? true,
+        })
+        .where(eq(mentorSkills.id, id))
+    }
+
+   await db.delete(mentorAvailability).where(eq(mentorAvailability.mentorId, mentorId))
+    if (availability.length > 0) {
+      await db.insert(mentorAvailability).values(
+        availability.map((slot: any) => ({
+          mentorId,
+          day: slot.day,
+          startTime: slot.startTime,
+          endTime: slot.endTime,
+        })),
+      )
+    }
+    // === BLOCKED DATES ===
+    await db.delete(mentorBlockedDates).where(eq(mentorBlockedDates.mentorId, mentorId))
+
+    if (blockedDates.length > 0) {
+      await db.insert(mentorBlockedDates).values(
+        blockedDates.map((entry: string) => ({
+          mentorId,
+          blockedDate: new Date(entry),
+          reason: "",
+        }))
+      )
+    }
+
+    return NextResponse.json({ message: "Mentor profile updated successfully" })
+  } catch (error) {
+    console.error("Error updating mentor profile:", error)
+    return NextResponse.json({ error: "Failed to update mentor profile" }, { status: 500 })
+  }
 }
+

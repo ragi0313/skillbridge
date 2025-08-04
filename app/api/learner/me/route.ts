@@ -39,3 +39,30 @@ export async function GET() {
 
   return NextResponse.json({ learner: result })
 }
+
+export async function PATCH(req: Request) {
+  const session = await getSession()
+
+  if (!session || session.role !== "learner") {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  const body = await req.json()
+  const { country, experienceLevel, learningGoals, profilePictureUrl, timezone } = body
+
+  if (!country || !experienceLevel || !learningGoals || !timezone) {
+    return NextResponse.json({ error: "Missing or invalid required fields" }, { status: 400 })
+  }
+
+  try {
+    await db
+      .update(learners)
+      .set({ country, experienceLevel, learningGoals, profilePictureUrl, timezone })
+      .where(eq(learners.userId, session.id))
+
+    return NextResponse.json({ message: "Learner profile updated successfully" })
+  } catch (error) {
+    console.error("Error updating learner profile:", error)
+    return NextResponse.json({ error: "Failed to update learner profile" }, { status: 500 })
+  }
+}

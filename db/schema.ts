@@ -1,4 +1,4 @@
-import { pgTable, serial, varchar, text, timestamp, integer, json, numeric, boolean, time } from "drizzle-orm/pg-core"
+import { pgTable, serial, varchar, text, timestamp, integer, json, numeric, boolean, time, date } from "drizzle-orm/pg-core"
 
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
@@ -73,7 +73,13 @@ export const mentorSkills = pgTable("mentor_skills", {
   ...timestamps,
 })
 
-// CREDIT SYSTEM TABLES
+export const mentorBlockedDates = pgTable("mentor_blocked_dates", {
+  id: serial("id").primaryKey(),
+  mentorId: integer("mentor_id").notNull().references(() => mentors.id),
+  blockedDate: date("blocked_date", { mode: "date" }).notNull(), // Store as date only
+  reason: text("reason"),
+  ...timestamps,
+})
 export const creditPurchases = pgTable("credit_purchases", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
@@ -91,7 +97,7 @@ export const creditPurchases = pgTable("credit_purchases", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 })
 
-// BOOKING SESSIONS - Moved before mentorReviews
+
 export const bookingSessions = pgTable("booking_sessions", {
   id: serial("id").primaryKey(),
   learnerId: integer("learner_id").notNull().references(() => learners.id, { onDelete: "cascade" }),
@@ -107,7 +113,7 @@ export const bookingSessions = pgTable("booking_sessions", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 })
 
-// Now mentorReviews can safely reference bookingSessions
+
 export const mentorReviews = pgTable("mentor_reviews", {
   id: serial("id").primaryKey(),
   mentorId: integer("mentor_id").notNull().references(() => mentors.id),

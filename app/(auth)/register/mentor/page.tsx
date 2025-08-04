@@ -100,7 +100,7 @@ export default function MentorSignupPage() {
           <div className="backdrop-blur-sm p-8 pl-0 lg:pl-1">
             <form onSubmit={handleSubmit} className="space-y-8">
               {currentStep === 1 && (
-                <MentorBasicInfo formData={formData} setFormData={updateFormData} nextStep={nextStep} />
+                <MentorBasicInfo formData={formData} setFormData={updateFormData} nextStep={nextStep} isSettingsPage={false} />
               )}
               {currentStep === 2 && (
                 <MentorProfessionalDetails
@@ -108,6 +108,7 @@ export default function MentorSignupPage() {
                   setFormData={setFormData}
                   nextStep={nextStep}
                   prevStep={prevStep}
+                  isSettingsPage={false}
                 />
               )}
               {currentStep === 3 && (
@@ -124,6 +125,7 @@ export default function MentorSignupPage() {
                   setFormData={setFormData}
                   nextStep={nextStep}
                   prevStep={prevStep}
+                  isSettingsPage={false}
                 />
               )}
               {currentStep === 5 && (

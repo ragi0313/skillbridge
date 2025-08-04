@@ -31,9 +31,10 @@ type Props = {
   setFormData: (data: any) => void
   nextStep: () => void
   prevStep: () => void
+  isSettingsPage?: boolean // Add prop to identify if this is being used in settings
 }
 
-export default function MentorProfessionalDetails({ formData, setFormData, nextStep, prevStep }: Props) {
+export default function MentorProfessionalDetails({ formData, setFormData, nextStep, prevStep, isSettingsPage = false }: Props) {
   const [linkAttachments, setLinkAttachments] = useState<LinkAttachment[]>(() => {
     return formData.linkAttachments || []
   })
@@ -46,12 +47,16 @@ export default function MentorProfessionalDetails({ formData, setFormData, nextS
       formData.bio.length <= 1000 &&
       formData.yearsOfExperience &&
       formData.linkedinUrl
-      formData.linkAttachments
 
     const hasValidLinkedIn = formData.linkedinUrl && formData.linkedinUrl.includes("linkedin.com")
 
-    const hasValidAttachments = linkAttachments.length >= 1 && linkAttachments.every((link) => link.url && link.label)
+    // For settings page, make link attachments optional
+    if (isSettingsPage) {
+      return hasRequiredFields && hasValidLinkedIn
+    }
 
+    // For registration, require at least one link attachment
+    const hasValidAttachments = linkAttachments.length >= 1 && linkAttachments.every((link) => link.url && link.label)
     return hasRequiredFields && hasValidLinkedIn && hasValidAttachments
   }
 
@@ -146,6 +151,9 @@ export default function MentorProfessionalDetails({ formData, setFormData, nextS
           />
           <div className="flex justify-between items-center">
             <p className="text-sm text-gray-500">This will be visible on your mentor profile</p>
+            <span className={`text-sm ${formData.bio?.length >= 100 && formData.bio?.length <= 1000 ? "text-green-600" : "text-gray-400"}`}>
+              {formData.bio?.length || 0}/1000 characters
+            </span>
           </div>
         </CardContent>
       </Card>
@@ -193,9 +201,15 @@ export default function MentorProfessionalDetails({ formData, setFormData, nextS
             value={formData.linkedinUrl}
             onChange={(e) => setFormData({ ...formData, linkedinUrl: e.target.value })}
             className="h-12 text-base"
+            disabled={isSettingsPage} // Disable LinkedIn editing in settings if desired
             required
           />
-          <p className="text-sm text-gray-500">We require LinkedIn to verify your professional background</p>
+          <p className="text-sm text-gray-500">
+            {isSettingsPage 
+              ? "LinkedIn URL cannot be changed from settings" 
+              : "We require LinkedIn to verify your professional background"
+            }
+          </p>
           {formData.linkedinUrl && !formData.linkedinUrl.includes("linkedin.com") && (
             <p className="text-sm text-red-600">Please enter a valid LinkedIn URL</p>
           )}
@@ -208,7 +222,9 @@ export default function MentorProfessionalDetails({ formData, setFormData, nextS
           <CardTitle className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <Link className="w-5 h-5 text-purple-600" />
-              <span>Website/Portfolio Links* ({linkAttachments.length})</span>
+              <span>
+                Website/Portfolio Links{!isSettingsPage && "*"} ({linkAttachments.length})
+              </span>
             </div>
             <Button
               type="button"
@@ -220,7 +236,10 @@ export default function MentorProfessionalDetails({ formData, setFormData, nextS
             </Button>
           </CardTitle>
           <p className="text-sm text-gray-600">
-            Add at least one additional link to showcase your work (portfolio, GitHub, etc.)
+            {isSettingsPage 
+              ? "Add links to showcase your work (portfolio, GitHub, etc.)" 
+              : "Add at least one additional link to showcase your work (portfolio, GitHub, etc.)"
+            }
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -297,7 +316,7 @@ export default function MentorProfessionalDetails({ formData, setFormData, nextS
             </div>
           )}
 
-          {linkAttachments.length === 0 && (
+          {linkAttachments.length === 0 && !isSettingsPage && (
             <div className="p-3 bg-amber-50 rounded-lg border border-amber-200">
               <p className="text-sm text-amber-800">
                 <strong>Required:</strong> Please add at least one additional link to showcase your work or professional
@@ -325,7 +344,7 @@ export default function MentorProfessionalDetails({ formData, setFormData, nextS
           disabled={!isFormValid()}
           className="w-[15%] h-14 gradient-bg text-white font-semibold text-lg rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-[1.02] disabled:opacity-50 disabled:transform-none"
         >
-          Continue
+          {isSettingsPage ? "Save Changes" : "Continue"}
         </Button>
       </div>
     </div>

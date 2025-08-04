@@ -1,8 +1,9 @@
 "use client"
 
-import React, { useState, useCallback, useRef, useEffect } from "react"
+import type React from "react"
+import { useState, useCallback, useRef, useEffect } from "react"
 import Image from "next/image"
-import Cropper, { Area } from "react-easy-crop"
+import Cropper, { type Area } from "react-easy-crop"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
@@ -10,13 +11,14 @@ import { Upload, Trash, User } from "lucide-react"
 import getCroppedImg from "@/lib/cropImage"
 
 interface Props {
-  value: string | null
-  onChange: (url: string | null) => void
+  initialImageUrl: string | null
+  onUploadSuccess: (url: string, publicId: string) => void
+  onDeleteSuccess: () => void
 }
 
-export default function ProfilePictureUpload({ value, onChange }: Props) {
-  const [previewUrl, setPreviewUrl] = useState<string | null>(value)
-  const [publicId, setPublicId] = useState<string | null>(null)
+export default function ProfilePictureUpload({ initialImageUrl, onUploadSuccess, onDeleteSuccess }: Props) {
+  const [previewUrl, setPreviewUrl] = useState<string | null>(initialImageUrl)
+  const [publicId, setPublicId] = useState<string | null>(null) // This needs to be managed if initialImageUrl comes with publicId
   const [cropModalOpen, setCropModalOpen] = useState(false)
   const [imageSrc, setImageSrc] = useState<string | null>(null)
   const [crop, setCrop] = useState({ x: 0, y: 0 })
@@ -25,6 +27,23 @@ export default function ProfilePictureUpload({ value, onChange }: Props) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [isUploading, setIsUploading] = useState(false)
   const [isRemoving, setIsRemoving] = useState(false)
+
+  // Update previewUrl when initialImageUrl prop changes
+  useEffect(() => {
+    setPreviewUrl(initialImageUrl)
+    // If initialImageUrl is present, we assume the publicId is derived from it
+    // For simplicity, we'll extract a potential publicId from the URL if it's a Cloudinary URL
+    if (initialImageUrl && initialImageUrl.includes("res.cloudinary.com")) {
+      const parts = initialImageUrl.split("/")
+      const folderAndId = parts
+        .slice(parts.indexOf("upload") + 2)
+        .join("/")
+        .split(".")[0]
+      setPublicId(folderAndId)
+    } else {
+      setPublicId(null)
+    }
+  }, [initialImageUrl])
 
   useEffect(() => {
     return () => {
@@ -60,8 +79,6 @@ export default function ProfilePictureUpload({ value, onChange }: Props) {
     setCroppedAreaPixels(croppedArea)
   }, [])
 
-  
-
   const handleCropSave = async () => {
     if (!imageSrc || !croppedAreaPixels || isUploading) return
 
@@ -82,7 +99,7 @@ export default function ProfilePictureUpload({ value, onChange }: Props) {
       if (data.secure_url) {
         setPreviewUrl(data.secure_url)
         setPublicId(data.public_id)
-        onChange(data.secure_url)
+        onUploadSuccess(data.secure_url, data.public_id)
         setCropModalOpen(false)
       } else {
         alert("Upload failed")
@@ -90,32 +107,38 @@ export default function ProfilePictureUpload({ value, onChange }: Props) {
     } catch (err) {
       console.error("Crop or upload error", err)
       alert("Something went wrong.")
-      } finally {
-        setIsUploading(false)
-      }
+    } finally {
+      setIsUploading(false)
+    }
   }
 
   const handleRemove = async () => {
     if (!publicId) {
       setPreviewUrl(null)
-      setPublicId(null)
-      onChange(null)
+      onDeleteSuccess()
+      inputRef.current && (inputRef.current.value = "") // Clear file input
       return
     }
 
     setIsRemoving(true)
     try {
-      await fetch("/api/picture/delete", {
+      const res = await fetch("/api/picture/delete", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ publicId }),
       })
-      setPreviewUrl(null)
-      setPublicId(null)
-      onChange(null)
-      inputRef.current?.value && (inputRef.current.value = "")
+
+      if (res.ok) {
+        setPreviewUrl(null)
+        setPublicId(null)
+        onDeleteSuccess()
+        inputRef.current && (inputRef.current.value = "") // Clear file input
+      } else {
+        const errorData = await res.json()
+        throw new Error(errorData.error || "Failed to delete image from Cloudinary")
+      }
     } catch (err) {
       console.error("Failed to delete image from Cloudinary", err)
       alert("Failed to delete image. Please try again.")
@@ -124,15 +147,14 @@ export default function ProfilePictureUpload({ value, onChange }: Props) {
     }
   }
 
-
   return (
     <div>
-      <Label className="mb-2">Profile Picture*</Label>
+      <Label className="mb-2">Profile Picture</Label>
       <div className="flex items-center space-x-4">
         <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center overflow-hidden">
           {previewUrl ? (
             <Image
-              src={previewUrl}
+              src={previewUrl || "/placeholder.svg"}
               alt="Preview"
               width={80}
               height={80}
@@ -143,13 +165,7 @@ export default function ProfilePictureUpload({ value, onChange }: Props) {
           )}
         </div>
         <div>
-          <input
-            type="file"
-            accept="image/*"
-            ref={inputRef}
-            onChange={handleFileChange}
-            className="hidden"
-          />
+          <input type="file" accept="image/*" ref={inputRef} onChange={handleFileChange} className="hidden" />
           <div className="flex gap-2">
             <Button
               type="button"
@@ -196,17 +212,10 @@ export default function ProfilePictureUpload({ value, onChange }: Props) {
             )}
           </div>
           <div className="flex justify-end space-x-2 pt-4">
-            <Button
-              variant="outline"
-              disabled={isUploading}
-              onClick={() => setCropModalOpen(false)}
-            >
+            <Button variant="outline" disabled={isUploading} onClick={() => setCropModalOpen(false)}>
               Cancel
             </Button>
-            <Button
-              onClick={handleCropSave}
-              disabled={isUploading}
-            >
+            <Button onClick={handleCropSave} disabled={isUploading}>
               {isUploading ? "Uploading..." : "Save"}
             </Button>
           </div>

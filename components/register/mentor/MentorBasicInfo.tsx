@@ -15,29 +15,30 @@ import { usePasswordVisibility } from "@/app/hooks/usePasswordVisibility"
 import { commonTimeZones, getDefaultTimezone } from "@/lib/timeZones"
 import { useState } from "react"
 
-type FormData = {
+type MentorBasicInfoFormData = {
   profilePicture: string | null
   firstName: string
   lastName: string
   email: string
   country: string
-  password: string
-  confirmPassword: string
+  password?: string // Make password optional for settings page
+  confirmPassword?: string // Make confirmPassword optional for settings page
   timezone: string
   gender: string
   languages: string[]
 }
 
 type Props = {
-  formData: FormData
-  setFormData: (data: Partial<FormData>) => void
+  formData: MentorBasicInfoFormData
+  setFormData: (data: Partial<MentorBasicInfoFormData>) => void
   nextStep: () => void
+  isSettingsPage?: boolean // Add prop to identify if this is being used in settings
 }
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/
 
-export default function MentorBasicInfo({ formData, setFormData, nextStep }: Props) {
+export default function MentorBasicInfo({ formData, setFormData, nextStep, isSettingsPage = false }: Props) {
   const [languageInput, setLanguageInput] = useState("")
 
   const countryOptions = countries.map((country) => ({
@@ -79,24 +80,42 @@ export default function MentorBasicInfo({ formData, setFormData, nextStep }: Pro
     }
   }
 
-  const isFormValid = () =>
-    formData.profilePicture &&
-    formData.firstName &&
-    formData.lastName &&
-    emailRegex.test(formData.email) &&
-    emailAvailable === true &&
-    formData.country &&
-    passwordRegex.test(formData.password) &&
-    formData.password === formData.confirmPassword &&
-    formData.timezone &&
-    formData.gender &&
-    formData.languages.length > 0
+  const isFormValid = () => {
+    const basicValidation = 
+      formData.profilePicture &&
+      formData.firstName &&
+      formData.lastName &&
+      emailRegex.test(formData.email) &&
+      emailAvailable === true &&
+      formData.country &&
+      formData.timezone &&
+      formData.gender &&
+      formData.languages.length > 0
+
+    // For settings page, password validation is optional
+    if (isSettingsPage) {
+      // If password fields are empty, skip password validation
+      if (!formData.password && !formData.confirmPassword) {
+        return basicValidation
+      }
+      // If password fields have content, validate them
+      return basicValidation && 
+        passwordRegex.test(formData.password || '') &&
+        formData.password === formData.confirmPassword
+    }
+
+    // For registration, password is required
+    return basicValidation &&
+      passwordRegex.test(formData.password || '') &&
+      formData.password === formData.confirmPassword
+  }
 
   return (
     <div className="space-y-6">
-      <ProfilePictureUpload
-        value={formData.profilePicture}
-        onChange={(file) => setFormData({ profilePicture: file })}
+       <ProfilePictureUpload
+        initialImageUrl={formData.profilePicture}
+        onUploadSuccess={(url) => setFormData({ profilePicture: url })}
+        onDeleteSuccess={() => setFormData({ profilePicture: null })}
       />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -137,6 +156,7 @@ export default function MentorBasicInfo({ formData, setFormData, nextStep }: Pro
               onChange={(e) => setFormData({ email: e.target.value })}
               placeholder="Enter your email"
               className="h-14 pr-11"
+              disabled={isSettingsPage} // Disable email editing in settings
             />
             {emailRegex.test(formData.email) && isChecking && (
               <Loader2 className="absolute right-3 top-4 h-5 w-5 text-gray-400 animate-spin" />
@@ -147,6 +167,9 @@ export default function MentorBasicInfo({ formData, setFormData, nextStep }: Pro
           </div>
           {emailRegex.test(formData.email) && !isChecking && emailAvailable === false && (
             <p className="text-sm text-red-600 mt-1 ml-1">Email is already taken.</p>
+          )}
+          {isSettingsPage && (
+            <p className="text-sm text-gray-500 mt-1">Email cannot be changed from settings</p>
           )}
         </div>
 
@@ -264,59 +287,124 @@ export default function MentorBasicInfo({ formData, setFormData, nextStep }: Pro
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* Password */}
-        <div>
-          <Label htmlFor="password" className="text-sm font-semibold mb-2">
-            Password*
-          </Label>
-          <div className="relative">
-            <Input
-              id="password"
-              type={showPassword ? "text" : "password"}
-              value={formData.password}
-              onChange={(e) => setFormData({ password: e.target.value })}
-              placeholder="Create a strong password"
-              className={`h-14 pr-11 ${
-                formData.password && !passwordRegex.test(formData.password) ? "border-red-500" : ""
-              }`}
-              required
-            />
-            <button type="button" onClick={togglePassword} className="absolute right-3 top-4 text-gray-400">
-              {showPassword ? <EyeOff className="w-6 h-6" /> : <Eye className="w-6 h-6" />}
-            </button>
+      {/* Password Section - Show different behavior for settings vs registration */}
+      {!isSettingsPage && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Password */}
+          <div>
+            <Label htmlFor="password" className="text-sm font-semibold mb-2">
+              Password*
+            </Label>
+            <div className="relative">
+              <Input
+                id="password"
+                type={showPassword ? "text" : "password"}
+                value={formData.password || ''}
+                onChange={(e) => setFormData({ password: e.target.value })}
+                placeholder="Create a strong password"
+                className={`h-14 pr-11 ${
+                  formData.password && !passwordRegex.test(formData.password) ? "border-red-500" : ""
+                }`}
+                required
+              />
+              <button type="button" onClick={togglePassword} className="absolute right-3 top-4 text-gray-400">
+                {showPassword ? <EyeOff className="w-6 h-6" /> : <Eye className="w-6 h-6" />}
+              </button>
+            </div>
+            {formData.password && !passwordRegex.test(formData.password) && (
+              <p className="text-sm text-red-600 mt-1">
+                Must include uppercase, lowercase, number, and special character.
+              </p>
+            )}
           </div>
-          {formData.password && !passwordRegex.test(formData.password) && (
-            <p className="text-sm text-red-600 mt-1">
-              Must include uppercase, lowercase, number, and special character.
-            </p>
-          )}
-        </div>
 
-        {/* Confirm Password */}
-        <div>
-          <Label htmlFor="confirmPassword" className="text-sm font-semibold mb-2">
-            Confirm Password*
-          </Label>
-          <div className="relative">
-            <Input
-              id="confirmPassword"
-              type={showConfirmPassword ? "text" : "password"}
-              value={formData.confirmPassword}
-              onChange={(e) => setFormData({ confirmPassword: e.target.value })}
-              placeholder="Confirm your password"
-              className="h-14 pr-11"
-              required
-            />
-            <button type="button" onClick={toggleConfirmPassword} className="absolute right-3 top-4 text-gray-400">
-              {showConfirmPassword ? <EyeOff className="w-6 h-6" /> : <Eye className="w-6 h-6" />}
-            </button>
+          {/* Confirm Password */}
+          <div>
+            <Label htmlFor="confirmPassword" className="text-sm font-semibold mb-2">
+              Confirm Password*
+            </Label>
+            <div className="relative">
+              <Input
+                id="confirmPassword"
+                type={showConfirmPassword ? "text" : "password"}
+                value={formData.confirmPassword || ''}
+                onChange={(e) => setFormData({ confirmPassword: e.target.value })}
+                placeholder="Confirm your password"
+                className="h-14 pr-11"
+                required
+              />
+              <button type="button" onClick={toggleConfirmPassword} className="absolute right-3 top-4 text-gray-400">
+                {showConfirmPassword ? <EyeOff className="w-6 h-6" /> : <Eye className="w-6 h-6" />}
+              </button>
+            </div>
+            {formData.confirmPassword && formData.confirmPassword !== formData.password && (
+              <p className="text-sm text-red-600 mt-1">Passwords do not match.</p>
+            )}
           </div>
-          {formData.confirmPassword && formData.confirmPassword !== formData.password && (
-            <p className="text-sm text-red-600 mt-1">Passwords do not match.</p>
-          )}
         </div>
-      </div>
+      )}
+
+      {/* Password change section for settings page */}
+      {isSettingsPage && (
+        <div className="space-y-4">
+          <div className="border-t pt-6">
+            <h3 className="text-lg font-semibold mb-4">Change Password (Optional)</h3>
+            <p className="text-sm text-gray-600 mb-4">Leave blank if you don't want to change your password</p>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* New Password */}
+              <div>
+                <Label htmlFor="password" className="text-sm font-semibold mb-2">
+                  New Password
+                </Label>
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    value={formData.password || ''}
+                    onChange={(e) => setFormData({ password: e.target.value })}
+                    placeholder="Enter new password (optional)"
+                    className={`h-14 pr-11 ${
+                      formData.password && !passwordRegex.test(formData.password) ? "border-red-500" : ""
+                    }`}
+                  />
+                  <button type="button" onClick={togglePassword} className="absolute right-3 top-4 text-gray-400">
+                    {showPassword ? <EyeOff className="w-6 h-6" /> : <Eye className="w-6 h-6" />}
+                  </button>
+                </div>
+                {formData.password && !passwordRegex.test(formData.password) && (
+                  <p className="text-sm text-red-600 mt-1">
+                    Must include uppercase, lowercase, number, and special character.
+                  </p>
+                )}
+              </div>
+
+              {/* Confirm New Password */}
+              <div>
+                <Label htmlFor="confirmPassword" className="text-sm font-semibold mb-2">
+                  Confirm New Password
+                </Label>
+                <div className="relative">
+                  <Input
+                    id="confirmPassword"
+                    type={showConfirmPassword ? "text" : "password"}
+                    value={formData.confirmPassword || ''}
+                    onChange={(e) => setFormData({ confirmPassword: e.target.value })}
+                    placeholder="Confirm new password"
+                    className="h-14 pr-11"
+                  />
+                  <button type="button" onClick={toggleConfirmPassword} className="absolute right-3 top-4 text-gray-400">
+                    {showConfirmPassword ? <EyeOff className="w-6 h-6" /> : <Eye className="w-6 h-6" />}
+                  </button>
+                </div>
+                {formData.confirmPassword && formData.confirmPassword !== formData.password && (
+                  <p className="text-sm text-red-600 mt-1">Passwords do not match.</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="flex justify-end w-full">
         <Button

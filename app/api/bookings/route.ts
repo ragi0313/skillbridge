@@ -5,6 +5,7 @@ import {
   mentors,
   learners,
   mentorSkills,
+  mentorBlockedDates, // Add this import
 } from "@/db/schema";
 import { and, eq, or } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
@@ -109,6 +110,24 @@ export async function POST(req: NextRequest) {
       const nowInMentorTz = toZonedTime(new Date(), mentorTimezone);
       const scheduledStartInMentorTz = toZonedTime(scheduledStart, mentorTimezone);
       if (scheduledStartInMentorTz < nowInMentorTz) throw new Error("Cannot book sessions in the past.");
+
+      // Check if the booking date is blocked by the mentor
+      const scheduledDateOnly = new Date(scheduledStart.toISOString().split('T')[0] + 'T00:00:00.000Z');
+      const blockedDate = await tx.query.mentorBlockedDates.findFirst({
+        where: and(
+          eq(mentorBlockedDates.mentorId, mentor.id),
+          eq(mentorBlockedDates.blockedDate, scheduledDateOnly)
+        )
+      });
+      
+      if (blockedDate) {
+        const dateStr = scheduledDateOnly.toLocaleDateString('en-US', { 
+          year: 'numeric', 
+          month: 'long', 
+          day: 'numeric' 
+        });
+        throw new Error(`This date (${dateStr}) is blocked by the mentor and not available for booking.`);
+      }
 
       // Get day of week in mentor's timezone
       const dayOfWeek = scheduledStart.toLocaleDateString("en-US", {

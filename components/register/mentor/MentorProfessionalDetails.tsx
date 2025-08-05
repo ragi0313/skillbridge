@@ -328,25 +328,24 @@ export default function MentorProfessionalDetails({ formData, setFormData, nextS
       </Card>
 
       {/* Navigation Buttons */}
-      <div className="flex flex-col sm:flex-row justify-between gap-4 pt-6">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={prevStep}
-          className="h-14 px-8 text-base border-2 hover:bg-gray-50 rounded-xl transition-all duration-300 bg-transparent cursor-pointer"
-        >
-          <ArrowLeft className="w-5 h-5 mr-2" />
-          Previous Step
-        </Button>
-        <Button
-          type="button"
-          onClick={nextStep}
-          disabled={!isFormValid()}
-          className="w-[15%] h-14 gradient-bg text-white font-semibold text-lg rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-[1.02] disabled:opacity-50 disabled:transform-none"
-        >
-          {isSettingsPage ? "Save Changes" : "Continue"}
-        </Button>
-      </div>
+      {!isSettingsPage && (
+          <div className="flex flex-col sm:flex-row gap-4 pt-6 border-t border-gray-100">
+            <Button type="button" variant="outline" onClick={prevStep} className="h-12 px-6 text-base bg-transparent">
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Previous Step
+            </Button>
+            <div className="flex justify-end w-full">
+              <Button
+                type="button"
+                onClick={nextStep}
+                disabled={!isFormValid()}
+                className="w-[15%] h-14 gradient-bg text-white font-semibold text-base rounded-lg"
+              >
+                Continue
+              </Button>
+            </div>
+          </div>
+        )}
     </div>
   )
 }

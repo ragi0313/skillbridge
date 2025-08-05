@@ -14,9 +14,10 @@ interface Props {
   initialImageUrl: string | null
   onUploadSuccess: (url: string, publicId: string) => void
   onDeleteSuccess: () => void
+  showRemoveButton?: boolean 
 }
 
-export default function ProfilePictureUpload({ initialImageUrl, onUploadSuccess, onDeleteSuccess }: Props) {
+export default function ProfilePictureUpload({ initialImageUrl, onUploadSuccess, onDeleteSuccess, showRemoveButton = true }: Props) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(initialImageUrl)
   const [publicId, setPublicId] = useState<string | null>(null) // This needs to be managed if initialImageUrl comes with publicId
   const [cropModalOpen, setCropModalOpen] = useState(false)
@@ -176,7 +177,7 @@ export default function ProfilePictureUpload({ initialImageUrl, onUploadSuccess,
               <Upload className="w-4 h-4" />
               <span>{previewUrl ? "Change Photo" : "Upload Photo"}</span>
             </Button>
-            {previewUrl && (
+            {previewUrl && showRemoveButton && (
               <Button
                 type="button"
                 variant="destructive"

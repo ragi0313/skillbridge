@@ -116,6 +116,7 @@ export default function MentorBasicInfo({ formData, setFormData, nextStep, isSet
         initialImageUrl={formData.profilePicture}
         onUploadSuccess={(url) => setFormData({ profilePicture: url })}
         onDeleteSuccess={() => setFormData({ profilePicture: null })}
+        showRemoveButton={!isSettingsPage}
       />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -128,6 +129,7 @@ export default function MentorBasicInfo({ formData, setFormData, nextStep, isSet
             value={formData.firstName}
             onChange={(e) => setFormData({ firstName: e.target.value })}
             className="h-12"
+            disabled={isSettingsPage}
           />
         </div>
         <div>
@@ -139,6 +141,7 @@ export default function MentorBasicInfo({ formData, setFormData, nextStep, isSet
             value={formData.lastName}
             onChange={(e) => setFormData({ lastName: e.target.value })}
             className="h-12"
+            disabled={isSettingsPage}
           />
         </div>
       </div>
@@ -158,18 +161,17 @@ export default function MentorBasicInfo({ formData, setFormData, nextStep, isSet
               className="h-14 pr-11"
               disabled={isSettingsPage} // Disable email editing in settings
             />
-            {emailRegex.test(formData.email) && isChecking && (
+            {!isSettingsPage && emailRegex.test(formData.email) && isChecking && (
               <Loader2 className="absolute right-3 top-4 h-5 w-5 text-gray-400 animate-spin" />
             )}
-            {emailRegex.test(formData.email) && !isChecking && emailAvailable && (
+            {!isSettingsPage && emailRegex.test(formData.email) && !isChecking && emailAvailable && (
               <CheckCircle className="absolute right-3 top-4 h-6 w-6 text-green-500" />
             )}
           </div>
-          {emailRegex.test(formData.email) && !isChecking && emailAvailable === false && (
+
+          {/* Validation message only if not in settings */}
+          {!isSettingsPage && emailRegex.test(formData.email) && !isChecking && emailAvailable === false && (
             <p className="text-sm text-red-600 mt-1 ml-1">Email is already taken.</p>
-          )}
-          {isSettingsPage && (
-            <p className="text-sm text-gray-500 mt-1">Email cannot be changed from settings</p>
           )}
         </div>
 
@@ -406,7 +408,8 @@ export default function MentorBasicInfo({ formData, setFormData, nextStep, isSet
         </div>
       )}
 
-      <div className="flex justify-end w-full">
+      {!isSettingsPage && (
+        <div className="flex justify-end w-full">
         <Button
           type="button"
           onClick={nextStep}
@@ -416,6 +419,7 @@ export default function MentorBasicInfo({ formData, setFormData, nextStep, isSet
           Continue
         </Button>
       </div>
+      )}
     </div>
   )
 }

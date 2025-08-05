@@ -177,22 +177,24 @@ export default function MentorAvailability({ formData, setFormData, nextStep, pr
 
 
       {/* Navigation Buttons */}
-      <div className="flex flex-col sm:flex-row gap-4 pt-6 border-t border-gray-100">
-        <Button type="button" variant="outline" onClick={prevStep} className="h-12 px-6 text-base bg-transparent">
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          Previous Step
-        </Button>
-        <div className="flex justify-end w-full">
-          <Button
-            type="button"
-            onClick={nextStep}
-            disabled={!isFormValid()}
-            className="w-[15%] h-14 gradient-bg text-white font-semibold text-base rounded-lg"
-          >
-            {isSettingsPage ? "Save Changes" : "Continue"}
+      {!isSettingsPage && (
+        <div className="flex flex-col sm:flex-row gap-4 pt-6 border-t border-gray-100">
+          <Button type="button" variant="outline" onClick={prevStep} className="h-12 px-6 text-base bg-transparent">
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Previous Step
           </Button>
+          <div className="flex justify-end w-full">
+            <Button
+              type="button"
+              onClick={nextStep}
+              disabled={!isFormValid()}
+              className="w-[15%] h-14 gradient-bg text-white font-semibold text-base rounded-lg"
+            >
+              Continue
+            </Button>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }

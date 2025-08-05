@@ -14,14 +14,14 @@ import MentorAvailability from "@/components/register/mentor/MentorAvailability"
 import BlockedDatesSelector from "@/components/settings/BlockedDateSelector"
 import { Loader2, Save } from "lucide-react"
 
-// Define the expected form data structure
+
 type FormData = {
   profilePicture: string | null
   firstName: string
   lastName: string
   email: string
   country: string
-  password?: string // Password is not updated here, but kept for type compatibility if needed
+  password?: string 
   confirmPassword?: string
   timezone: string
   gender: string
@@ -34,9 +34,6 @@ type FormData = {
   skills: Array<{ name: string; rate: number }>
   availability: { [key: string]: Array<{ id: string; start: string; end: string }> }
   blockedDates: Date[]
-  whyFreelancer: string
-  whyMentor: string
-  greatestAchievement: string
 }
 
 export default function MentorSettingsPage() {
@@ -58,9 +55,6 @@ export default function MentorSettingsPage() {
     skills: [],
     availability: {},
     blockedDates: [],
-    whyFreelancer: "",
-    whyMentor: "",
-    greatestAchievement: "",
   })
   const [loading, setLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
@@ -121,9 +115,6 @@ export default function MentorSettingsPage() {
           }, {}),
           // Map blockedDates to Date objects
           blockedDates: blockedDates.map((bd: any) => new Date(bd.blockedDate)),
-          whyFreelancer: mentor.question1 || "", // Assuming these are stored in mentor object
-          whyMentor: mentor.question2 || "",
-          greatestAchievement: mentor.question3 || "",
         })
       } catch (err) {
         console.error("Failed to fetch mentor data", err)
@@ -174,9 +165,6 @@ export default function MentorSettingsPage() {
         ),
         // Map blockedDates (Date objects) to YYYY-MM-DD strings
         blockedDates: formData.blockedDates.map((date) => date.toISOString().split("T")[0]),
-        question1: formData.whyFreelancer,
-        question2: formData.whyMentor,
-        question3: formData.greatestAchievement,
       }
 
       const res = await fetch("/api/mentor/me", {
@@ -274,6 +262,7 @@ export default function MentorSettingsPage() {
                 setFormData={handleFormChange}
                 nextStep={() => {}}
                 prevStep={() => {}}
+                isSettingsPage={true}
               />
             </CardContent>
           </Card>

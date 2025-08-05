@@ -117,6 +117,7 @@ export default function MentorSignupPage() {
                   setFormData={setFormData}
                   nextStep={nextStep}
                   prevStep={prevStep}
+                  isSettingsPage={false}
                 />
               )}
               {currentStep === 4 && (

@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { mentors, users, mentorAvailability, mentorSkills, bookingSessions } from "@/db/schema";
+import { mentors, users, mentorAvailability, mentorSkills, bookingSessions, mentorBlockedDates } from "@/db/schema";
 import { eq, and, or, gte, lte } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -86,10 +86,34 @@ export async function GET(
         )
       );
 
+    // Get mentor blocked dates
+    // Only get future blocked dates (past ones are irrelevant for booking)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Set to beginning of today
+
+    const blockedDates = await db
+      .select({
+        blockedDate: mentorBlockedDates.blockedDate,
+        reason: mentorBlockedDates.reason
+      })
+      .from(mentorBlockedDates)
+      .where(
+        and(
+          eq(mentorBlockedDates.mentorId, mentorId),
+          gte(mentorBlockedDates.blockedDate, today)
+        )
+      );
+
     // Format booked sessions for frontend
     const relevantBookedSessions = bookedSessions.map(session => ({
       scheduledDate: session.scheduledDate.toISOString(),
       durationMinutes: session.durationMinutes
+    }));
+
+    // Format blocked dates for frontend
+    const formattedBlockedDates = blockedDates.map(blocked => ({
+      date: blocked.blockedDate.toISOString().split('T')[0], // YYYY-MM-DD format
+      reason: blocked.reason
     }));
 
     const response = {
@@ -109,7 +133,8 @@ export async function GET(
         skillName: skill.skillName,
         ratePerHour: skill.ratePerHour
       })),
-      bookedSessions: relevantBookedSessions
+      bookedSessions: relevantBookedSessions,
+      blockedDates: formattedBlockedDates
     };
 
     return NextResponse.json(response);

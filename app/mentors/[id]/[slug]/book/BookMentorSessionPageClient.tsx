@@ -42,6 +42,11 @@ interface BookedSession {
   durationMinutes: number
 }
 
+interface BlockedDate {
+  date: string // YYYY-MM-DD format
+  reason?: string
+}
+
 interface MentorData {
   mentorId: number
   fullName: string
@@ -50,6 +55,7 @@ interface MentorData {
   availability: MentorAvailability[]
   skills: MentorSkill[]
   bookedSessions: BookedSession[]
+  blockedDates: BlockedDate[]
 }
 
 interface TimeSlot {
@@ -149,9 +155,35 @@ export default function BookMentorSessionPageClient({ session }: Props) {
     }
   }, [mentor, selectedSkillId])
 
+  // Create disabled dates array for DayPicker
+  const disabledDates = useMemo(() => {
+    if (!mentor?.blockedDates) return { before: new Date() }
+    
+    // Convert blocked dates to Date objects
+    const blockedDateObjects = mentor.blockedDates.map(blocked => new Date(blocked.date + 'T00:00:00'))
+    
+    return {
+      before: new Date(),
+      disabled: blockedDateObjects
+    }
+  }, [mentor?.blockedDates])
+
+  // Check if a date is blocked
+  const isDateBlocked = useCallback((date: Date): boolean => {
+    if (!mentor?.blockedDates) return false
+    const dateStr = format(date, 'yyyy-MM-dd')
+    return mentor.blockedDates.some(blocked => blocked.date === dateStr)
+  }, [mentor?.blockedDates])
+
   // Fixed TIME SLOT LOGIC with proper AM/PM handling
   const availableTimeSlotsForSelectedDay = useMemo(() => {
     if (!mentor || !selectedDate) return []
+    
+    // Check if selected date is blocked
+    if (isDateBlocked(selectedDate)) {
+      return []
+    }
+    
     const mentorTz = mentor.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone
 
     // Get "today" in mentor's timezone
@@ -235,7 +267,7 @@ export default function BookMentorSessionPageClient({ session }: Props) {
 
     console.log("Debug - Generated time slots:", timeSlots)
     return timeSlots
-  }, [mentor, selectedDate])
+  }, [mentor, selectedDate, isDateBlocked])
 
   useEffect(() => {
     setSelectedTimeSlot(null)
@@ -315,6 +347,13 @@ export default function BookMentorSessionPageClient({ session }: Props) {
       toast.error("Missing required booking information.")
       return
     }
+    
+    // Check if date is blocked before proceeding
+    if (isDateBlocked(selectedDate)) {
+      toast.error("Selected date is blocked and not available for booking.")
+      return
+    }
+    
     const totalMinutes = durationHours * 60 + durationMinutes
     if (totalMinutes < 60 || totalMinutes > maxDuration) {
       toast.error("Invalid session duration.")
@@ -420,10 +459,25 @@ export default function BookMentorSessionPageClient({ session }: Props) {
                         mode="single"
                         selected={selectedDate}
                         onSelect={setSelectedDate}
-                        disabled={{ before: new Date() }}
+                        disabled={disabledDates}
                         className="rdp-custom"
+                        modifiers={{
+                          blocked: mentor?.blockedDates?.map(blocked => new Date(blocked.date + 'T00:00:00')) || []
+                        }}
+                        modifiersStyles={{
+                          blocked: {
+                            backgroundColor: '#fee2e2',
+                            color: '#991b1b',
+                            textDecoration: 'line-through'
+                          }
+                        }}
                       />
                     </div>
+                    {mentor?.blockedDates && mentor.blockedDates.length > 0 && (
+                      <p className="text-xs text-gray-500 mt-2">
+                        Red strikethrough dates are blocked by the mentor
+                      </p>
+                    )}
                   </div>
 
                   {selectedDate && (
@@ -431,7 +485,13 @@ export default function BookMentorSessionPageClient({ session }: Props) {
                       <Label className="text-sm font-medium mb-3 block">
                         Available Times - {format(selectedDate, "MMM d, yyyy")}
                       </Label>
-                      {availableTimeSlotsForSelectedDay.length === 0 ? (
+                      
+                      {isDateBlocked(selectedDate) ? (
+                        <div className="text-center py-8 text-red-500">
+                          <Clock className="w-8 h-8 mx-auto mb-2" />
+                          <p className="font-medium">The mentor is not available on this date</p>
+                        </div>
+                      ) : availableTimeSlotsForSelectedDay.length === 0 ? (
                         <div className="text-center py-8 text-gray-500">
                           <Clock className="w-8 h-8 mx-auto mb-2" />
                           <p>No availability for this date</p>
@@ -460,7 +520,7 @@ export default function BookMentorSessionPageClient({ session }: Props) {
                         </div>
                       )}
 
-                      {selectedTimeSlot && (
+                      {selectedTimeSlot && !isDateBlocked(selectedDate) && (
                         <>
                           <div className="flex justify-between mt-4">
                             <span className="text-gray-600">Duration</span>
@@ -595,7 +655,7 @@ export default function BookMentorSessionPageClient({ session }: Props) {
                   {/* Checkout Button */}
                   <Button
                     onClick={handleBooking}
-                    disabled={submitting || !selectedDate || !selectedTimeSlot || !sessionNotes.trim()}
+                    disabled={submitting || !selectedDate || !selectedTimeSlot || !sessionNotes.trim() || (selectedDate && isDateBlocked(selectedDate))}
                     className="w-full gradient-bg text-white py-3"
                   >
                     {submitting ? (

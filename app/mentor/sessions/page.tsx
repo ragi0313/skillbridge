@@ -31,6 +31,18 @@ export default function MentorSessionsPage() {
   const [error, setError] = useState<string | null>(null)
   const [processingSessionId, setProcessingSessionId] = useState<number | null>(null)
 
+  const formatSessionDate = (dateString: string) => {
+     return new Intl.DateTimeFormat("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "numeric",
+      minute: "numeric",
+      hour12: true,
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    }).format(new Date(dateString))
+  }
+
   const fetchMentorSessions = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -135,7 +147,7 @@ export default function MentorSessionsPage() {
                   <CardContent className="space-y-2">
                     <div className="flex items-center text-sm text-gray-700">
                       <Calendar className="mr-2 h-4 w-4 text-blue-600" />
-                      <span>{new Date(session.scheduledDate).toLocaleString()}</span>
+                       <span>{formatSessionDate(session.scheduledDate)}</span>
                     </div>
                     <div className="flex items-center text-sm text-gray-700">
                       <Clock className="mr-2 h-4 w-4 text-purple-600" />

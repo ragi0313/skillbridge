@@ -378,8 +378,8 @@ export default function BookMentorSessionPageClient({ session }: Props) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          learnerUserId: session.id,         // <-- match backend
-          mentorUserId: mentor.mentorId,     // <-- match backend
+          learnerUserId: session.id,        
+          mentorUserId: mentor.mentorId,     
           mentorSkillId: selectedSkillId,
           scheduledDate: scheduledStart.toISOString(),
           durationMinutes: totalMinutes,
@@ -391,7 +391,7 @@ export default function BookMentorSessionPageClient({ session }: Props) {
         toast.error(data.error || "Booking failed.")
       } else {
         toast.success("Session booked! Pending mentor approval.")
-        router.push("/learner/dashboard/sessions")
+        router.push("/learner/sessions")
       }
     } catch (err: any) {
       toast.error("Something went wrong. Please try again.")

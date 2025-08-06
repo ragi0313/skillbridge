@@ -89,19 +89,16 @@ export default function MentorSettingsPage() {
           bio: mentor.bio || "",
           yearsOfExperience: mentor.yearsOfExperience || "",
           linkedinUrl: mentor.linkedInUrl || "",
-          // Convert socialLinks (JSON) to linkAttachments (array with temporary IDs)
           linkAttachments: (mentor.socialLinks || []).map((link: any) => ({
-            id: `${link.type}-${Date.now()}-${Math.random()}`, // Add unique ID for React keys
+            id: `${link.type}-${Date.now()}-${Math.random()}`, 
             type: link.type,
             label: link.label,
             url: link.url,
           })),
-          // Map mentorSkills to skills
           skills: skills.map((s: any) => ({
             name: s.skillName,
             rate: s.ratePerHour,
           })),
-          // Map mentorAvailability to availability object
           availability: availability.reduce((acc: any, curr: any) => {
             if (!acc[curr.day]) {
               acc[curr.day] = []

@@ -4,7 +4,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { CheckCircle, Star, Award, Users, MapPin, Languages, Coins, Calendar, MessageCircle } from "lucide-react"
+import { CheckCircle, Star, Award, Users, MapPin, Languages, Coins } from "lucide-react"
 import type { Mentor } from "./types"
 import Link from "next/link"
 

@@ -32,8 +32,6 @@ export default function ProfilePictureUpload({ initialImageUrl, onUploadSuccess,
   // Update previewUrl when initialImageUrl prop changes
   useEffect(() => {
     setPreviewUrl(initialImageUrl)
-    // If initialImageUrl is present, we assume the publicId is derived from it
-    // For simplicity, we'll extract a potential publicId from the URL if it's a Cloudinary URL
     if (initialImageUrl && initialImageUrl.includes("res.cloudinary.com")) {
       const parts = initialImageUrl.split("/")
       const folderAndId = parts

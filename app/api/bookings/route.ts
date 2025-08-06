@@ -1,12 +1,5 @@
 import { db } from "@/db";
-import {
-  bookingSessions,
-  mentorAvailability,
-  mentors,
-  learners,
-  mentorSkills,
-  mentorBlockedDates, // Add this import
-} from "@/db/schema";
+import { bookingSessions, mentorAvailability, mentors, learners, mentorSkills, mentorBlockedDates, notifications } from "@/db/schema";
 import { and, eq, or } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { toZonedTime } from "date-fns-tz";
@@ -218,6 +211,16 @@ export async function POST(req: NextRequest) {
         sessionNotes,
         status: "pending",
       }).returning();
+
+      await tx.insert(notifications).values({
+        userId: mentor.userId, // Notify the mentor
+        type: "session_request",
+        title: "New Session Request!",
+        message: `You have a new session request from a learner for ${skill.skillName} on ${scheduledStart.toLocaleDateString()} at ${startTimeStr}.`,
+        relatedEntityType: "session",
+        relatedEntityId: booking[0].id,
+        createdAt: new Date(),
+      })
 
       return booking[0];
     });

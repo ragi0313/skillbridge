@@ -44,9 +44,10 @@ export async function POST(req: NextRequest) {
     const tempPath = path.join("C:", "tmp", file.name)
     await fs.promises.writeFile(tempPath, buffer)
 
+    // Remove the public_id to let Cloudinary generate a unique one
     const upload = await cloudinary.uploader.upload(tempPath, {
       folder: "skillbridge/profile_pictures",
-      public_id: path.parse(file.name).name,
+      // No public_id specified - Cloudinary will generate a unique one
     })
 
     // Clean up the temporary file

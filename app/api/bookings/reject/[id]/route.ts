@@ -1,7 +1,6 @@
-// app/api/bookings/reject/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/db" 
-import { bookingSessions, sessions, learners, creditTransactions, notifications, mentors } from "@/db/schema"
+import { bookingSessions, learners, creditTransactions, notifications, mentors } from "@/db/schema"
 import { eq, and } from "drizzle-orm"
 import { getSession } from "@/lib/auth/getSession"
 
@@ -19,7 +18,6 @@ export async function POST(
       )
     }
 
-    // Get the current user session (mentor)
     const session = await getSession()
     if (!session?.id || session.role !== "mentor") {
       return NextResponse.json(
@@ -28,7 +26,6 @@ export async function POST(
       )
     }
 
-    // Get mentor ID from the session
     const [mentor] = await db
       .select({ id: mentors.id })
       .from(mentors)
@@ -41,22 +38,14 @@ export async function POST(
       )
     }
 
-    // Get rejection reason from request body (optional)
+    // Get rejection reason from request body
     const body = await request.json().catch(() => ({}))
     const rejectionReason = body.reason || "Session rejected by mentor"
 
-    // Start transaction
     const result = await db.transaction(async (tx) => {
       // Get the booking session with mentor validation
       const [bookingSession] = await tx
-        .select({
-          id: bookingSessions.id,
-          mentorId: bookingSessions.mentorId,
-          learnerId: bookingSessions.learnerId,
-          totalCostCredits: bookingSessions.totalCostCredits,
-          escrowCredits: bookingSessions.escrowCredits,
-          status: bookingSessions.status,
-        })
+        .select()
         .from(bookingSessions)
         .where(
           and(
@@ -73,26 +62,6 @@ export async function POST(
         throw new Error("Session is not in pending status")
       }
 
-      // Update booking session status to rejected
-      await tx
-        .update(bookingSessions)
-        .set({ 
-          status: "rejected",
-          updatedAt: new Date()
-        })
-        .where(eq(bookingSessions.id, sessionId))
-
-      // Create session record with rejection details
-      await tx.insert(sessions).values({
-        bookingSessionId: sessionId,
-        mentorResponseAt: new Date(),
-        mentorResponseMessage: rejectionReason,
-        cancelledBy: "mentor",
-        cancellationReason: rejectionReason,
-        cancelledAt: new Date(),
-        createdAt: new Date(),
-      })
-
       // Get learner's current credit balance
       const [learner] = await tx
         .select({ 
@@ -105,9 +74,24 @@ export async function POST(
         throw new Error("Learner not found")
       }
 
-      // Refund credits to learner
-      const newBalance = learner.creditsBalance + bookingSession.escrowCredits
+      // Calculate refund (full refund for rejection)
+      const refundAmount = bookingSession.escrowCredits
+      const newBalance = learner.creditsBalance + refundAmount
 
+      // Update booking session status to rejected
+      await tx
+        .update(bookingSessions)
+        .set({ 
+          status: "rejected",
+          mentorResponseAt: new Date(),
+          mentorResponseMessage: rejectionReason,
+          rejectionReason: rejectionReason,
+          refundAmount: refundAmount,
+          updatedAt: new Date()
+        })
+        .where(eq(bookingSessions.id, sessionId))
+
+      // Refund credits to learner
       await tx
         .update(learners)
         .set({ 
@@ -121,7 +105,7 @@ export async function POST(
         userId: bookingSession.learnerId,
         type: "session_refund",
         direction: "credit",
-        amount: bookingSession.escrowCredits,
+        amount: refundAmount,
         balanceBefore: learner.creditsBalance,
         balanceAfter: newBalance,
         relatedSessionId: sessionId,
@@ -135,7 +119,7 @@ export async function POST(
         userId: bookingSession.learnerId,
         type: "session_rejected",
         title: "Session Request Declined",
-        message: `Your session request has been declined by the mentor. Your ${bookingSession.escrowCredits} credits have been refunded.`,
+        message: `Your session request has been declined. Reason: ${rejectionReason}. Your ${refundAmount} credits have been refunded.`,
         relatedEntityType: "session",
         relatedEntityId: sessionId,
         createdAt: new Date(),
@@ -143,8 +127,9 @@ export async function POST(
 
       return {
         sessionId,
-        refundedCredits: bookingSession.escrowCredits,
+        refundedCredits: refundAmount,
         newBalance,
+        rejectionReason
       }
     })
 

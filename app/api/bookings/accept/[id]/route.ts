@@ -1,7 +1,6 @@
-// app/api/bookings/accept/[id]/route.ts
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/db" 
-import { bookingSessions, sessions, mentorPayouts, creditTransactions, notifications, mentors } from "@/db/schema"
+import { bookingSessions, mentorPayouts, notifications, mentors } from "@/db/schema"
 import { eq, and } from "drizzle-orm"
 import { getSession } from "@/lib/auth/getSession"
 
@@ -39,20 +38,14 @@ export async function POST(
       )
     }
 
-    // Start transaction
+    // Get optional acceptance message
+    const body = await request.json().catch(() => ({}))
+    const acceptanceMessage = body.message || "Session accepted by mentor"
+
     const result = await db.transaction(async (tx) => {
       // Get the booking session with mentor validation
       const [bookingSession] = await tx
-        .select({
-          id: bookingSessions.id,
-          mentorId: bookingSessions.mentorId,
-          learnerId: bookingSessions.learnerId,
-          totalCostCredits: bookingSessions.totalCostCredits,
-          escrowCredits: bookingSessions.escrowCredits,
-          status: bookingSessions.status,
-          scheduledDate: bookingSessions.scheduledDate,
-          durationMinutes: bookingSessions.durationMinutes,
-        })
+        .select()
         .from(bookingSessions)
         .where(
           and(
@@ -69,36 +62,35 @@ export async function POST(
         throw new Error("Session is not in pending status")
       }
 
+      // Check if session has expired
+      if (bookingSession.expiresAt && bookingSession.expiresAt < new Date()) {
+        throw new Error("Session request has expired")
+      }
+
       // Update booking session status to confirmed
       await tx
         .update(bookingSessions)
         .set({ 
           status: "confirmed",
+          mentorResponseAt: new Date(),
+          mentorResponseMessage: acceptanceMessage,
           updatedAt: new Date()
         })
         .where(eq(bookingSessions.id, sessionId))
 
-      // Create session record
-      await tx.insert(sessions).values({
-        bookingSessionId: sessionId,
-        mentorResponseAt: new Date(),
-        mentorResponseMessage: "Session accepted by mentor",
-        createdAt: new Date(),
-      })
-
-      // Calculate mentor earnings (assuming 80% goes to mentor, 20% platform fee)
+      // Calculate mentor earnings (80% goes to mentor, 20% platform fee)
       const platformFeePercentage = 20
       const earnedCredits = Math.floor(bookingSession.totalCostCredits * (100 - platformFeePercentage) / 100)
       const platformFeeCredits = bookingSession.totalCostCredits - earnedCredits
 
-      // Create mentor payout record (in escrow)
+      // Create mentor payout record (in escrow until session completion)
       await tx.insert(mentorPayouts).values({
         mentorId: bookingSession.mentorId,
         sessionId: sessionId,
         earnedCredits: earnedCredits,
         platformFeeCredits: platformFeeCredits,
         feePercentage: platformFeePercentage,
-        status: "pending", // Will be released after session completion
+        status: "pending",
         createdAt: new Date(),
       })
 
@@ -107,7 +99,7 @@ export async function POST(
         userId: bookingSession.learnerId,
         type: "session_confirmed",
         title: "Session Confirmed!",
-        message: "Your mentor has accepted your session request. Get ready for your upcoming session!",
+        message: `Your mentor has accepted your session request! ${acceptanceMessage}`,
         relatedEntityType: "session",
         relatedEntityId: sessionId,
         createdAt: new Date(),
@@ -117,6 +109,7 @@ export async function POST(
         sessionId,
         earnedCredits,
         scheduledDate: bookingSession.scheduledDate,
+        message: acceptanceMessage
       }
     })
 

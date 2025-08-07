@@ -108,7 +108,19 @@ export const bookingSessions = pgTable("booking_sessions", {
   totalCostCredits: integer("total_cost_credits").notNull(),
   escrowCredits: integer("escrow_credits").notNull(),
   sessionNotes: text("session_notes").notNull(),
-  status: varchar("status", { length: 20 }).default("pending"),
+  status: varchar("status", { length: 20 }).default("pending"), // pending, confirmed, rejected, expired, cancelled, completed
+  videoRoomUrl: varchar("video_room_url", { length: 512 }),
+  videoRoomCreatedAt: timestamp("video_room_created_at", { withTimezone: true }),
+  videoStartedAt: timestamp("video_started_at", { withTimezone: true }),
+  videoEndedAt: timestamp("video_ended_at", { withTimezone: true }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }), // Auto-expire after 24 hours
+  mentorResponseAt: timestamp("mentor_response_at", { withTimezone: true }), // When mentor responded
+  mentorResponseMessage: text("mentor_response_message"), // Acceptance/rejection message
+  rejectionReason: text("rejection_reason"), // Specific rejection reason
+  cancelledBy: varchar("cancelled_by", { length: 20 }), // learner, mentor, system
+  cancellationReason: text("cancellation_reason"),
+  cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+  refundAmount: integer("refund_amount").default(0), // Amount refunded to learner
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
 })

@@ -4,7 +4,6 @@ import { and, eq, or } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { toZonedTime } from "date-fns-tz";
 
-// Improved time parsing with validation
 const timeToMinutes = (timeStr: string): number => {
   if (!timeStr || typeof timeStr !== "string") return 0;
   if (timeStr.includes("AM") || timeStr.includes("PM")) {
@@ -52,14 +51,6 @@ export async function POST(req: NextRequest) {
       !durationMinutes ||
       !sessionNotes?.trim()
     ) {
-      console.log("Validation failed:", {
-        learnerUserId,
-        mentorUserId,
-        mentorSkillId,
-        scheduledDate,
-        durationMinutes,
-        sessionNotes,
-      });
       return NextResponse.json({ error: "Missing or invalid fields." }, { status: 400 });
     }
     if (durationMinutes < 60 || durationMinutes > 240) {
@@ -77,9 +68,6 @@ export async function POST(req: NextRequest) {
         tx.query.learners.findFirst({ where: eq(learners.userId, learnerUserId) }),
         tx.query.mentorSkills.findFirst({ where: eq(mentorSkills.id, mentorSkillId) }),
       ]);
-      console.log("Mentor found:", mentor);
-      console.log("Learner found:", learner);
-      console.log("Skill found:", skill);
 
       if (!mentor || !learner) throw new Error("Mentor or learner not found.");
       if (!skill || skill.mentorId !== mentor.id) throw new Error("Skill not found or doesn't belong to this mentor.");
@@ -96,15 +84,18 @@ export async function POST(req: NextRequest) {
         .set({ creditsBalance: learner.creditsBalance - totalCostCredits })
         .where(eq(learners.id, learner.id));
 
-      // Timezone logic
+      // Timezone and validation logic (your existing code)
       const scheduledStart = new Date(scheduledDate);
       const scheduledEnd = new Date(scheduledStart.getTime() + durationMinutes * 60000);
       const mentorTimezone = mentor.timezone || "UTC";
       const nowInMentorTz = toZonedTime(new Date(), mentorTimezone);
       const scheduledStartInMentorTz = toZonedTime(scheduledStart, mentorTimezone);
-      if (scheduledStartInMentorTz < nowInMentorTz) throw new Error("Cannot book sessions in the past.");
+      
+      if (scheduledStartInMentorTz < nowInMentorTz) {
+        throw new Error("Cannot book sessions in the past.");
+      }
 
-      // Check if the booking date is blocked by the mentor
+      // Check blocked dates (your existing logic)
       const scheduledDateOnly = new Date(scheduledStart.toISOString().split('T')[0] + 'T00:00:00.000Z');
       const blockedDate = await tx.query.mentorBlockedDates.findFirst({
         where: and(
@@ -122,13 +113,12 @@ export async function POST(req: NextRequest) {
         throw new Error(`This date (${dateStr}) is blocked by the mentor and not available for booking.`);
       }
 
-      // Get day of week in mentor's timezone
+      // Availability and conflict checking (your existing logic)
       const dayOfWeek = scheduledStart.toLocaleDateString("en-US", {
         weekday: "long",
         timeZone: mentor.timezone,
       }).toLowerCase();
 
-      // Convert times to AM/PM format to match database
       const startTimeStr = scheduledStart.toLocaleTimeString("en-US", {
         hour: "numeric",
         minute: "2-digit",
@@ -142,7 +132,7 @@ export async function POST(req: NextRequest) {
         timeZone: mentor.timezone,
       });
 
-      // Check mentor availability
+      // Check availability and conflicts (your existing logic)
       const availabilitySlots = await tx
         .select()
         .from(mentorAvailability)
@@ -153,9 +143,11 @@ export async function POST(req: NextRequest) {
             eq(mentorAvailability.isActive, true)
           )
         );
-      if (availabilitySlots.length === 0) throw new Error(`Mentor has no availability on ${dayOfWeek}.`);
+      
+      if (availabilitySlots.length === 0) {
+        throw new Error(`Mentor has no availability on ${dayOfWeek}.`);
+      }
 
-      // Ensure booking fits exactly within a slot
       const requestedStartMinutes = timeToMinutes(startTimeStr);
       const requestedEndMinutes = timeToMinutes(endTimeStr);
       const validSlot = availabilitySlots.find(slot => {
@@ -163,9 +155,12 @@ export async function POST(req: NextRequest) {
         const slotEndMinutes = timeToMinutes(slot.endTime);
         return requestedStartMinutes >= slotStartMinutes && requestedEndMinutes <= slotEndMinutes;
       });
-      if (!validSlot) throw new Error(`Mentor is not available on ${dayOfWeek} from ${startTimeStr} to ${endTimeStr}.`);
+      
+      if (!validSlot) {
+        throw new Error(`Mentor is not available on ${dayOfWeek} from ${startTimeStr} to ${endTimeStr}.`);
+      }
 
-      // Check for conflicts with existing sessions
+      // Check conflicts with existing sessions
       const scheduledDateStr = scheduledStart.toISOString().split('T')[0];
       const existingSessions = await tx
         .select({
@@ -185,6 +180,7 @@ export async function POST(req: NextRequest) {
             )
           )
         );
+
       const conflictingSessions = existingSessions.filter(session => {
         const existingDate = new Date(session.scheduledDate);
         const existingDateStr = existingDate.toISOString().split('T')[0];
@@ -197,9 +193,12 @@ export async function POST(req: NextRequest) {
           existingStartMinutes, existingEndMinutes
         );
       });
-      if (conflictingSessions.length > 0) throw new Error("This time slot conflicts with an existing session.");
+      
+      if (conflictingSessions.length > 0) {
+        throw new Error("This time slot conflicts with an existing session.");
+      }
 
-      // Create booking
+      // Create booking with expiry
       const booking = await tx.insert(bookingSessions).values({
         learnerId: learner.id,
         mentorId: mentor.id,
@@ -210,17 +209,19 @@ export async function POST(req: NextRequest) {
         escrowCredits: totalCostCredits,
         sessionNotes,
         status: "pending",
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours from now
       }).returning();
 
+      // Notify mentor
       await tx.insert(notifications).values({
-        userId: mentor.userId, // Notify the mentor
+        userId: mentor.userId,
         type: "session_request",
         title: "New Session Request!",
         message: `You have a new session request from a learner for ${skill.skillName} on ${scheduledStart.toLocaleDateString()} at ${startTimeStr}.`,
         relatedEntityType: "session",
         relatedEntityId: booking[0].id,
         createdAt: new Date(),
-      })
+      });
 
       return booking[0];
     });

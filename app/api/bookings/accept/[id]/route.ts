@@ -1,128 +1,127 @@
 import { NextRequest, NextResponse } from "next/server"
-import { db } from "@/db" 
-import { bookingSessions, mentorPayouts, notifications, mentors } from "@/db/schema"
+import { db } from "@/db"
+import { bookingSessions, mentors, learners, users, notifications, creditTransactions } from "@/db/schema"
 import { eq, and } from "drizzle-orm"
 import { getSession } from "@/lib/auth/getSession"
+import { VideoRoomService } from "@/lib/sessions/video-room"
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const sessionId = parseInt(params.id)
-    
-    if (isNaN(sessionId)) {
-      return NextResponse.json(
-        { error: "Invalid session ID" },
-        { status: 400 }
-      )
+    if (!sessionId || isNaN(sessionId)) {
+      return NextResponse.json({ error: "Invalid session ID" }, { status: 400 })
     }
 
     const session = await getSession()
     if (!session?.id || session.role !== "mentor") {
-      return NextResponse.json(
-        { error: "Unauthorized" },
-        { status: 401 }
-      )
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    // Get mentor ID from user ID
     const [mentor] = await db
       .select({ id: mentors.id })
       .from(mentors)
       .where(eq(mentors.userId, session.id))
 
     if (!mentor) {
-      return NextResponse.json(
-        { error: "Mentor not found" },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: "Mentor profile not found" }, { status: 404 })
     }
 
-    // Get optional acceptance message
-    const body = await request.json().catch(() => ({}))
-    const acceptanceMessage = body.message || "Session accepted by mentor"
-
     const result = await db.transaction(async (tx) => {
-      // Get the booking session with mentor validation
-      const [bookingSession] = await tx
-        .select()
-        .from(bookingSessions)
-        .where(
-          and(
-            eq(bookingSessions.id, sessionId),
-            eq(bookingSessions.mentorId, mentor.id)
-          )
-        )
-
-      if (!bookingSession) {
-        throw new Error("Session not found or unauthorized")
-      }
-
-      if (bookingSession.status !== "pending") {
-        throw new Error("Session is not in pending status")
-      }
-
-      // Check if session has expired
-      if (bookingSession.expiresAt && bookingSession.expiresAt < new Date()) {
-        throw new Error("Session request has expired")
-      }
-
-      // Update booking session status to confirmed
-      await tx
-        .update(bookingSessions)
-        .set({ 
-          status: "confirmed",
-          mentorResponseAt: new Date(),
-          mentorResponseMessage: acceptanceMessage,
-          updatedAt: new Date()
+      // Get booking session details
+      const [booking] = await tx
+        .select({
+          id: bookingSessions.id,
+          mentorId: bookingSessions.mentorId,
+          learnerId: bookingSessions.learnerId,
+          status: bookingSessions.status,
+          scheduledDate: bookingSessions.scheduledDate,
+          durationMinutes: bookingSessions.durationMinutes,
+          totalCostCredits: bookingSessions.totalCostCredits,
+          expiresAt: bookingSessions.expiresAt,
         })
+        .from(bookingSessions)
         .where(eq(bookingSessions.id, sessionId))
 
-      // Calculate mentor earnings (80% goes to mentor, 20% platform fee)
-      const platformFeePercentage = 20
-      const earnedCredits = Math.floor(bookingSession.totalCostCredits * (100 - platformFeePercentage) / 100)
-      const platformFeeCredits = bookingSession.totalCostCredits - earnedCredits
+      if (!booking) {
+        throw new Error("Booking session not found")
+      }
 
-      // Create mentor payout record (in escrow until session completion)
-      await tx.insert(mentorPayouts).values({
-        mentorId: bookingSession.mentorId,
-        sessionId: sessionId,
-        earnedCredits: earnedCredits,
-        platformFeeCredits: platformFeeCredits,
-        feePercentage: platformFeePercentage,
-        status: "pending",
-        createdAt: new Date(),
-      })
+      // Verify this mentor owns the booking
+      if (booking.mentorId !== mentor.id) {
+        throw new Error("You are not authorized to accept this booking")
+      }
 
-      // Create notification for learner
-      await tx.insert(notifications).values({
-        userId: bookingSession.learnerId,
-        type: "session_confirmed",
-        title: "Session Confirmed!",
-        message: `Your mentor has accepted your session request! ${acceptanceMessage}`,
-        relatedEntityType: "session",
-        relatedEntityId: sessionId,
-        createdAt: new Date(),
-      })
+      // Check if booking is still pending
+      if (booking.status !== "pending") {
+        throw new Error(`Cannot accept booking with status: ${booking.status}`)
+      }
+
+      // Check if booking has expired
+      const now = new Date()
+      if (booking.expiresAt < now) {
+        throw new Error("This booking request has expired")
+      }
+
+      // Create video room for the session
+      // const videoRoomService = VideoRoomService.getInstance()
+      // const videoRoom = await videoRoomService.createRoom(
+      //   sessionId.toString(),
+      //   booking.scheduledDate,
+      //   booking.durationMinutes
+      // )
+
+      // // Update booking status to confirmed
+      // await tx
+      //   .update(bookingSessions)
+      //   .set({
+      //     status: "confirmed",
+      //     mentorResponseAt: now,
+      //     mentorResponseMessage: "Session accepted by mentor",
+      //     videoRoomUrl: videoRoom.roomUrl,
+      //     videoRoomExternalId: videoRoom.externalRoomId,
+      //     videoRoomCreatedAt: now,
+      //     updatedAt: now,
+      //   })
+      //   .where(eq(bookingSessions.id, sessionId))
+
+      // Get learner details for notification
+      const [learnerData] = await tx
+        .select({
+          userId: learners.userId,
+          firstName: users.firstName,
+          lastName: users.lastName,
+        })
+        .from(learners)
+        .innerJoin(users, eq(learners.userId, users.id))
+        .where(eq(learners.id, booking.learnerId))
+
+      if (learnerData) {
+        // Notify learner that session was accepted
+        await tx.insert(notifications).values({
+          userId: learnerData.userId,
+          type: "booking_accepted",
+          title: "Session Confirmed!",
+          message: `Your mentoring session has been confirmed. The session will start on ${booking.scheduledDate.toLocaleDateString()} at ${booking.scheduledDate.toLocaleTimeString()}.`,
+          relatedEntityType: "session",
+          relatedEntityId: sessionId,
+          createdAt: now,
+        })
+      }
 
       return {
-        sessionId,
-        earnedCredits,
-        scheduledDate: bookingSession.scheduledDate,
-        message: acceptanceMessage
+        success: true,
+        message: "Session accepted successfully",
+        // videoRoomUrl: videoRoom.roomUrl,
       }
     })
 
-    return NextResponse.json({
-      success: true,
-      message: "Session accepted successfully!",
-      data: result,
-    })
+    return NextResponse.json(result)
 
   } catch (error: any) {
-    console.error("Error accepting session:", error)
+    console.error("Error accepting booking:", error)
     return NextResponse.json(
-      { error: error.message || "Failed to accept session" },
+      { error: error.message || "Failed to accept booking" },
       { status: 500 }
     )
   }

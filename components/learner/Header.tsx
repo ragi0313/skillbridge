@@ -161,7 +161,17 @@ export default function Header() {
               >
                 Find a Mentor
               </Link>
-              {/* Removed "Buy Credits" link as it's often handled via a dedicated page or within settings */}
+              <Link
+                href="/pricing"
+                className={cn(
+                  "px-3 py-2 rounded-md text-md font-medium transition-colors",
+                  pathname === "/pricing"
+                    ? "bg-blue-600 text-white"
+                    : "text-gray-300 hover:text-white hover:bg-gray-800",
+                )}
+              >
+                Buy Credits
+              </Link>
             </nav>
           </div>
           {/* Right: Credits, Notifications, Profile */}

@@ -258,3 +258,14 @@ export const pendingMentorSkills = pgTable("pending_mentor_skills", {
   ratePerHour: integer("rate_per_hour").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 })
+
+export const passwordResetTokens = pgTable("password_reset_tokens", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  token: varchar("token", { length: 6 }).notNull(), // 6-digit verification code
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  isUsed: boolean("is_used").default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+})

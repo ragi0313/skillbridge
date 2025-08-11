@@ -110,11 +110,11 @@ export const bookingSessions = pgTable("booking_sessions", {
   sessionNotes: text("session_notes").notNull(),
   status: varchar("status", { length: 20 }).default("pending"), 
   videoRoomUrl: varchar("video_room_url", { length: 512 }),
-  videoRoomExternalId: varchar("video_room_external_id", { length: 255 }), // External provider's room ID (Daily.co room name, etc.)
+  videoRoomExternalId: varchar("video_room_external_id", { length: 255 }), 
   videoRoomCreatedAt: timestamp("video_room_created_at", { withTimezone: true }),
   videoStartedAt: timestamp("video_started_at", { withTimezone: true }),
   videoEndedAt: timestamp("video_ended_at", { withTimezone: true }),
-  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(), // Always set, never NULL
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(), 
   mentorResponseAt: timestamp("mentor_response_at", { withTimezone: true }), // When mentor responded
   mentorResponseMessage: text("mentor_response_message"), // Acceptance/rejection message
   rejectionReason: text("rejection_reason"), // Specific rejection reason

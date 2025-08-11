@@ -17,7 +17,7 @@ export default function VerifyResetCodePage() {
   const [isLoading, setIsLoading] = useState(false)
   const [isResending, setIsResending] = useState(false)
   const [error, setError] = useState("")
-  const [timeLeft, setTimeLeft] = useState(900) // 15 minutes in seconds
+  const [timeLeft, setTimeLeft] = useState(300) // 15 minutes in seconds
   const [canResend, setCanResend] = useState(false)
   const router = useRouter()
   const searchParams = useSearchParams()

@@ -4,6 +4,7 @@ import { useState } from "react"
 import AdminSidebar from "@/components/admin/AdminSidebar"
 import AdminTopbar from "@/components/admin/AdminTopbar"
 import PendingMentorApproval from "@/components/admin/PendingMentorApproval"
+import SkillCategoriesManagementPage from "@/components/admin/skill-categories/SkillCategoriesManagement"
 import PlatformSettings from "@/components/admin/PlatformSettings"
 
 export default function AdminDashboard() {
@@ -14,6 +15,8 @@ export default function AdminDashboard() {
     switch (activeSection) {
       case "pending-mentors":
         return <PendingMentorApproval />
+      case "skill-categories":
+        return <SkillCategoriesManagementPage />
       // case "users":
       //   return <UsersManagement />
       // case "learner-insights":

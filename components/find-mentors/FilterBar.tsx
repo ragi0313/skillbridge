@@ -7,13 +7,22 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
 import { Label } from "@/components/ui/label"
-import { Filter, ChevronDown, X, Star, DollarSign, Award, Globe, Users, Languages } from "lucide-react"
+import { Filter, ChevronDown, X, Star, DollarSign, Award, Globe, Users, Languages, Layers } from "lucide-react"
+
+interface CategoryWithCount {
+  id: number
+  name: string
+  description?: string
+  mentorCount: number
+  skills: string[]
+}
 
 interface FilterBarProps {
   searchQuery: string
   selectedSkills: string[]
   selectedLanguages: string[]
   selectedCountries: string[]
+  selectedCategories: string[]
   experienceRange: [number, number]
   rateRange: [number, number]
   ratingRange: [number, number]
@@ -21,10 +30,12 @@ interface FilterBarProps {
   allSkills: string[]
   allLanguages: string[]
   allCountries: string[]
+  categories: CategoryWithCount[]
   hasActiveFilters: boolean
   handleSkillToggle: (skill: string) => void
   handleLanguageToggle: (language: string) => void
   handleCountryToggle: (country: string) => void
+  handleCategoryToggle: (categoryId: string) => void
   setExperienceRange: (range: [number, number]) => void
   setRateRange: (range: [number, number]) => void
   setRatingRange: (range: [number, number]) => void
@@ -36,17 +47,20 @@ export function FilterBar({
   selectedSkills,
   selectedLanguages,
   selectedCountries,
+  selectedCategories,
   experienceRange,
   rateRange,
   ratingRange,
   sortBy,
-  allSkills,
-  allLanguages,
-  allCountries,
+  allSkills = [],
+  allLanguages = [],
+  allCountries = [],
+  categories = [],
   hasActiveFilters,
   handleSkillToggle,
   handleLanguageToggle,
   handleCountryToggle,
+  handleCategoryToggle,
   setExperienceRange,
   setRateRange,
   setRatingRange,
@@ -63,6 +77,60 @@ export function FilterBar({
           </div>
           <span className="text-lg font-semibold text-gray-800">Filters:</span>
         </div>
+
+        {/* Categories Filter */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              className="h-12 px-6 border-2 border-gray-200 hover:border-purple-300 hover:bg-purple-50 bg-white rounded-xl font-medium transition-all duration-200"
+            >
+              <Layers className="mr-2 h-4 w-4 text-purple-500" />
+              {selectedCategories.length > 0 ? (
+                <Badge variant="secondary" className="mr-2 bg-purple-100 text-purple-700">
+                  {selectedCategories.length}
+                </Badge>
+              ) : null}
+              Categories
+              <ChevronDown className="ml-2 h-4 w-4" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-96 p-6 rounded-2xl shadow-xl border-0 z-50">
+            <div className="space-y-4">
+              <h4 className="font-semibold text-gray-800 mb-4">Select Categories</h4>
+              <div className="space-y-3 max-h-80 overflow-y-auto">
+                {categories && categories.length > 0 ? (
+                  categories.map((category) => (
+                    <div
+                      key={category.id}
+                      className="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg"
+                    >
+                      <div className="flex items-center space-x-3">
+                        <Checkbox
+                          id={`category-${category.id}`}
+                          checked={selectedCategories.includes(category.id.toString())}
+                          onCheckedChange={() => handleCategoryToggle(category.id.toString())}
+                          className="border-2"
+                        />
+                        <div>
+                          <Label htmlFor={`category-${category.id}`} className="text-sm cursor-pointer font-medium">
+                            {category.name}
+                          </Label>
+                          {category.description && <p className="text-xs text-gray-500 mt-1">{category.description}</p>}
+                        </div>
+                      </div>
+                      <Badge variant="outline" className="text-xs">
+                        {category.mentorCount}
+                      </Badge>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-sm text-gray-500 text-center py-4">No categories available</div>
+                )}
+              </div>
+            </div>
+          </PopoverContent>
+        </Popover>
 
         {/* Skills Filter */}
         <Popover>
@@ -85,19 +153,23 @@ export function FilterBar({
             <div className="space-y-4">
               <h4 className="font-semibold text-gray-800 mb-4">Select Skills</h4>
               <div className="grid grid-cols-2 gap-3 max-h-80 overflow-y-auto">
-                {allSkills.map((skill) => (
-                  <div key={skill} className="flex items-center space-x-3 p-2 hover:bg-gray-50 rounded-lg">
-                    <Checkbox
-                      id={`skill-${skill}`}
-                      checked={selectedSkills.includes(skill)}
-                      onCheckedChange={() => handleSkillToggle(skill)}
-                      className="border-2"
-                    />
-                    <Label htmlFor={`skill-${skill}`} className="text-sm cursor-pointer font-medium">
-                      {skill}
-                    </Label>
-                  </div>
-                ))}
+                {allSkills && allSkills.length > 0 ? (
+                  allSkills.map((skill) => (
+                    <div key={skill} className="flex items-center space-x-3 p-2 hover:bg-gray-50 rounded-lg">
+                      <Checkbox
+                        id={`skill-${skill}`}
+                        checked={selectedSkills.includes(skill)}
+                        onCheckedChange={() => handleSkillToggle(skill)}
+                        className="border-2"
+                      />
+                      <Label htmlFor={`skill-${skill}`} className="text-sm cursor-pointer font-medium">
+                        {skill}
+                      </Label>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-sm text-gray-500 text-center py-4 col-span-2">No skills available</div>
+                )}
               </div>
             </div>
           </PopoverContent>
@@ -157,19 +229,23 @@ export function FilterBar({
             <div className="space-y-4">
               <h4 className="font-semibold text-gray-800 mb-4">Select Languages</h4>
               <div className="space-y-3 max-h-64 overflow-y-auto">
-                {allLanguages.map((language) => (
-                  <div key={language} className="flex items-center space-x-3 p-2 hover:bg-gray-50 rounded-lg">
-                    <Checkbox
-                      id={`language-${language}`}
-                      checked={selectedLanguages.includes(language)}
-                      onCheckedChange={() => handleLanguageToggle(language)}
-                      className="border-2"
-                    />
-                    <Label htmlFor={`language-${language}`} className="text-sm cursor-pointer font-medium">
-                      {language}
-                    </Label>
-                  </div>
-                ))}
+                {allLanguages && allLanguages.length > 0 ? (
+                  allLanguages.map((language) => (
+                    <div key={language} className="flex items-center space-x-3 p-2 hover:bg-gray-50 rounded-lg">
+                      <Checkbox
+                        id={`language-${language}`}
+                        checked={selectedLanguages.includes(language)}
+                        onCheckedChange={() => handleLanguageToggle(language)}
+                        className="border-2"
+                      />
+                      <Label htmlFor={`language-${language}`} className="text-sm cursor-pointer font-medium">
+                        {language}
+                      </Label>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-sm text-gray-500 text-center py-4">No languages available</div>
+                )}
               </div>
             </div>
           </PopoverContent>
@@ -206,25 +282,29 @@ export function FilterBar({
                     Country
                   </Label>
                   <div className="space-y-3 max-h-48 overflow-y-auto">
-                    {allCountries.map((country) => (
-                      <div
-                        key={country}
-                        className="flex items-center space-x-3 p-3 hover:bg-gray-50 rounded-lg transition-colors"
-                      >
-                        <Checkbox
-                          id={`country-${country}`}
-                          checked={selectedCountries.includes(country)}
-                          onCheckedChange={() => handleCountryToggle(country)}
-                          className="border-2 border-gray-300"
-                        />
-                        <Label
-                          htmlFor={`country-${country}`}
-                          className="text-sm cursor-pointer font-medium text-gray-700"
+                    {allCountries && allCountries.length > 0 ? (
+                      allCountries.map((country) => (
+                        <div
+                          key={country}
+                          className="flex items-center space-x-3 p-3 hover:bg-gray-50 rounded-lg transition-colors"
                         >
-                          {country}
-                        </Label>
-                      </div>
-                    ))}
+                          <Checkbox
+                            id={`country-${country}`}
+                            checked={selectedCountries.includes(country)}
+                            onCheckedChange={() => handleCountryToggle(country)}
+                            className="border-2 border-gray-300"
+                          />
+                          <Label
+                            htmlFor={`country-${country}`}
+                            className="text-sm cursor-pointer font-medium text-gray-700"
+                          >
+                            {country}
+                          </Label>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-sm text-gray-500 text-center py-4">No countries available</div>
+                    )}
                   </div>
                 </div>
 
@@ -349,6 +429,21 @@ export function FilterBar({
       {hasActiveFilters && (
         <div className="border-t border-gray-100 pt-6 mt-6">
           <div className="flex flex-wrap gap-3">
+            {selectedCategories.map((categoryId) => {
+              const category = categories?.find((c) => c.id.toString() === categoryId)
+              return category ? (
+                <Badge
+                  key={categoryId}
+                  className="bg-purple-100 text-purple-700 border-purple-200 px-4 py-2 rounded-full text-sm font-medium"
+                >
+                  {category.name}
+                  <X
+                    className="ml-2 h-4 w-4 cursor-pointer hover:text-purple-900 transition-colors"
+                    onClick={() => handleCategoryToggle(categoryId)}
+                  />
+                </Badge>
+              ) : null
+            })}
             {selectedSkills.map((skill) => (
               <Badge
                 key={skill}

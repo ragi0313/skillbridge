@@ -4,23 +4,32 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Separator } from "@/components/ui/separator"
-import { CheckCircle, XCircle, Eye, ExternalLink, Clock, Mail, MapPin, Globe, Star } from "lucide-react"
-import type { PendingMentor, Availability } from "./types"
+import { CheckCircle, XCircle, Eye, ExternalLink, Clock, Mail, MapPin, Globe, Star, Layers } from "lucide-react"
+import type { PendingMentor, SkillCategoryAssignment } from "./types"
 import { CreditsDisplay } from "./CreditsDisplay"
+import { SkillCategoryManager } from "./SkillCategoryManager"
 
 interface MentorReviewDialogProps {
   mentor: PendingMentor
-  onApprove: (id: number, notes: string) => void
+  onApprove: (id: number, notes: string, skillCategoryAssignments?: SkillCategoryAssignment[]) => void
   onReject: (id: number, notes: string) => void
 }
 
 export function MentorReviewDialog({ mentor, onApprove, onReject }: MentorReviewDialogProps) {
   const [reviewNotes, setReviewNotes] = useState("")
   const [isOpen, setIsOpen] = useState(false)
+  const [skillCategoryAssignments, setSkillCategoryAssignments] = useState<SkillCategoryAssignment[]>([])
 
   const name = `${mentor.firstName} ${mentor.lastName}`
 
@@ -28,15 +37,17 @@ export function MentorReviewDialog({ mentor, onApprove, onReject }: MentorReview
   const availabilityData = mentor.availability || {}
 
   const handleApprove = () => {
-    onApprove(mentor.id, reviewNotes)
+    onApprove(mentor.id, reviewNotes, skillCategoryAssignments)
     setIsOpen(false)
     setReviewNotes("")
+    setSkillCategoryAssignments([])
   }
 
   const handleReject = () => {
     onReject(mentor.id, reviewNotes)
     setIsOpen(false)
     setReviewNotes("")
+    setSkillCategoryAssignments([])
   }
 
   return (
@@ -56,12 +67,15 @@ export function MentorReviewDialog({ mentor, onApprove, onReject }: MentorReview
         </DialogHeader>
 
         <Tabs defaultValue="profile" className="w-full">
-          <TabsList className="grid w-full grid-cols-4 mb-6">
+          <TabsList className="grid w-full grid-cols-5 mb-6">
             <TabsTrigger value="profile" className="text-sm">
               Profile
             </TabsTrigger>
             <TabsTrigger value="skills" className="text-sm">
               Skills & Rates
+            </TabsTrigger>
+            <TabsTrigger value="categories" className="text-sm">
+              Categories
             </TabsTrigger>
             <TabsTrigger value="availability" className="text-sm">
               Availability
@@ -177,6 +191,21 @@ export function MentorReviewDialog({ mentor, onApprove, onReject }: MentorReview
             </div>
           </TabsContent>
 
+          <TabsContent value="categories" className="space-y-6">
+            <div>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2 bg-purple-100 rounded-xl">
+                  <Layers className="h-5 w-5 text-purple-600" />
+                </div>
+                <h4 className="font-semibold text-lg text-gray-900">Skill Categories</h4>
+              </div>
+              <p className="text-gray-600 mb-6">
+                Assign this mentor's skills to appropriate categories to help learners find them more easily.
+              </p>
+              <SkillCategoryManager mentorSkills={mentor.skills} onAssignmentsChange={setSkillCategoryAssignments} />
+            </div>
+          </TabsContent>
+
           <TabsContent value="availability" className="space-y-6">
             <div>
               <h4 className="font-semibold text-lg text-gray-900 mb-4">Weekly Availability</h4>
@@ -185,7 +214,7 @@ export function MentorReviewDialog({ mentor, onApprove, onReject }: MentorReview
                   {Object.entries(availabilityData).map(([day, slots]) => {
                     // Ensure slots is an array
                     const slotsArray = Array.isArray(slots) ? slots : []
-                    
+
                     return (
                       <div key={day} className="bg-gray-50 rounded-lg p-4">
                         <div className="flex items-center justify-between mb-3">
@@ -232,9 +261,7 @@ export function MentorReviewDialog({ mentor, onApprove, onReject }: MentorReview
                 </div>
               </div>
               <div>
-                <h5 className="font-medium text-gray-900 mb-3">
-                  Why dou you want to become a mentor?
-                </h5>
+                <h5 className="font-medium text-gray-900 mb-3">Why do you want to become a mentor?</h5>
                 <div className="bg-green-50 border-l-4 border-green-400 p-4 rounded-r-lg">
                   <p className="text-gray-700 leading-relaxed">{mentor.question2}</p>
                 </div>

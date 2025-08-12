@@ -8,13 +8,13 @@ export class BookingLifecycleService {
   private static instance: BookingLifecycleService
   
   // Configuration constants
-  private static readonly EXPIRY_HOURS = 48 // 48 hours for mentor response
-  private static readonly MIN_BOOKING_BUFFER_MINUTES = 30 // Minimum time before session start
-  private static readonly MAX_DAILY_REQUESTS_PER_LEARNER = 10 // Rate limiting
-  private static readonly FULL_REFUND_HOURS = 24 // Full refund if cancelled 24+ hours before
-  private static readonly PARTIAL_REFUND_HOURS = 2 // Partial refund if cancelled 2-24 hours before
-  private static readonly NO_SHOW_GRACE_MINUTES = 15 // Grace period for no-shows
-  private static readonly PLATFORM_FEE_PERCENTAGE = 20 // 20% platform fee
+  private static readonly EXPIRY_HOURS = 48 
+  private static readonly MIN_BOOKING_BUFFER_MINUTES = 30 
+  private static readonly MAX_DAILY_REQUESTS_PER_LEARNER = 10 
+  private static readonly FULL_REFUND_HOURS = 24 
+  private static readonly PARTIAL_REFUND_HOURS = 2 
+  private static readonly NO_SHOW_GRACE_MINUTES = 15 
+  private static readonly PLATFORM_FEE_PERCENTAGE = 20 
 
   static getInstance(): BookingLifecycleService {
     if (!BookingLifecycleService.instance) {
@@ -23,9 +23,7 @@ export class BookingLifecycleService {
     return BookingLifecycleService.instance
   }
 
-  /**
-   * Calculate expiry time for a booking request
-   */
+
   calculateExpiryTime(sessionStartTime: Date): Date {
     const now = new Date()
     const standardExpiry = new Date(now.getTime() + BookingLifecycleService.EXPIRY_HOURS * 60 * 60 * 1000)
@@ -36,9 +34,6 @@ export class BookingLifecycleService {
     return new Date(Math.min(standardExpiry.getTime(), sessionBufferTime.getTime()))
   }
 
-  /**
-   * Calculate refund amount based on cancellation policy
-   */
   private calculateRefundPolicy(
     scheduledDateTime: Date,
     totalCostCredits: number,
@@ -54,7 +49,6 @@ export class BookingLifecycleService {
     const mentorEarnings = Math.floor(totalCostCredits * (100 - BookingLifecycleService.PLATFORM_FEE_PERCENTAGE) / 100)
 
     if (cancelledBy === 'system') {
-      // Auto-cancellations (expired requests, payment issues)
       return {
         refundAmount: totalCostCredits,
         mentorPayout: 0,

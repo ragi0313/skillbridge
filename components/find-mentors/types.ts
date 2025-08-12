@@ -2,7 +2,7 @@ export interface Mentor {
   id: string
   name: string
   title: string
-  avatar: string | null
+  avatar: string
   rating: number
   reviewCount: number
   hourlyRate: number

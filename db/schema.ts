@@ -73,6 +73,21 @@ export const mentorSkills = pgTable("mentor_skills", {
   ...timestamps,
 })
 
+export const skillCategories = pgTable("skill_categories", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 100 }).notNull().unique(),
+  description: text("description"),
+  ...timestamps,
+})
+
+export const mentorSkillCategories = pgTable("mentor_skill_categories", {
+  id: serial("id").primaryKey(),
+  mentorSkillId: integer("mentor_skill_id").notNull().references(() => mentorSkills.id, { onDelete: "cascade" }),
+  categoryId: integer("category_id").notNull().references(() => skillCategories.id, { onDelete: "cascade" }),
+  createdBy: integer("created_by").notNull().references(() => users.id),
+  ...timestamps,
+})
+
 export const mentorBlockedDates = pgTable("mentor_blocked_dates", {
   id: serial("id").primaryKey(),
   mentorId: integer("mentor_id").notNull().references(() => mentors.id),

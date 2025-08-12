@@ -1,12 +1,25 @@
 export type AvailabilitySlot = {
   id: string
   start: string // "HH:mm"
-  end: string   // "HH:mm"
+  end: string // "HH:mm"
 }
 
 export type Availability = Record<string, AvailabilitySlot[]>
 
 export type RawAvailability = string | Availability
+
+export type SkillCategory = {
+  id: number
+  name: string
+  description?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export type SkillCategoryAssignment = {
+  skillName: string
+  categoryId: number
+}
 
 export type PendingMentor = {
   id: number
@@ -32,4 +45,10 @@ export type PendingMentor = {
     ratePerHour: number
   }>
   createdAt: string
+}
+
+export interface MentorApplicationCardProps {
+  mentor: PendingMentor
+  onApprove: (id: number, notes: string, skillCategoryAssignments?: SkillCategoryAssignment[]) => void
+  onReject: (id: number, notes: string) => void
 }

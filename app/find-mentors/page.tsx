@@ -8,36 +8,64 @@ import { MentorList } from "@/components/find-mentors/MentorList"
 import type { Mentor } from "@/components/find-mentors/types"
 import UnifiedHeader from "@/components/UnifiedHeader"
 
+interface CategoryWithCount {
+  id: number
+  name: string
+  description?: string
+  mentorCount: number
+  skills: string[]
+}
+
 export default function FindMentorsPage() {
   const searchParams = useSearchParams()
   const initialSearchQuery = searchParams.get("search") || ""
   const [mentors, setMentors] = useState<Mentor[]>([])
   const [filteredMentors, setFilteredMentors] = useState<Mentor[]>([])
+  const [categories, setCategories] = useState<CategoryWithCount[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState(initialSearchQuery)
   const [selectedSkills, setSelectedSkills] = useState<string[]>([])
   const [selectedLanguages, setSelectedLanguages] = useState<string[]>([])
   const [selectedCountries, setSelectedCountries] = useState<string[]>([])
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([])
   const [experienceRange, setExperienceRange] = useState<[number, number]>([0, 20])
   const [rateRange, setRateRange] = useState<[number, number]>([0, 1000])
   const [ratingRange, setRatingRange] = useState<[number, number]>([0, 5])
   const [sortBy, setSortBy] = useState<string>("highest-rated")
   const [currentPage, setCurrentPage] = useState(1)
-  
+
   const MENTORS_PER_PAGE = 8
 
-  // Fetch mentors from API
+  // Fetch mentors from API with enhanced search and category support
   useEffect(() => {
     const fetchMentors = async () => {
       setIsLoading(true)
       try {
-        const response = await fetch("/api/find-mentor")
+        const params = new URLSearchParams()
+
+        // Add search query if present
+        if (searchQuery.trim()) {
+          params.append("search", searchQuery.trim())
+          console.log("Frontend: Adding search query:", searchQuery.trim())
+        }
+
+        // Add selected categories if present
+        if (selectedCategories.length > 0) {
+          params.append("categories", selectedCategories.join(","))
+          console.log("Frontend: Adding categories:", selectedCategories.join(","))
+        }
+
+        const url = `/api/find-mentor${params.toString() ? `?${params.toString()}` : ""}`
+        console.log("Frontend: Fetching from URL:", url)
+
+        const response = await fetch(url)
         if (response.ok) {
           const data = await response.json()
+          console.log("Frontend: Received mentors:", data.length)
           setMentors(data)
           setFilteredMentors(data)
         } else {
-          console.error("Failed to fetch mentors")
+          console.error("Failed to fetch mentors:", response.status, response.statusText)
           setMentors([])
           setFilteredMentors([])
         }
@@ -50,47 +78,71 @@ export default function FindMentorsPage() {
       }
     }
     fetchMentors()
+  }, [searchQuery, selectedCategories]) // Re-fetch when search or categories change
+
+  // Fetch categories from API
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        const response = await fetch("/api/find-mentor/categories")
+        if (response.ok) {
+          const data = await response.json()
+          setCategories(data.categories || [])
+          console.log("Frontend: Loaded categories:", data.categories?.length || 0)
+        } else {
+          console.error("Failed to fetch categories")
+        }
+      } catch (error) {
+        console.error("Error fetching categories:", error)
+      }
+    }
+    fetchCategories()
   }, [])
 
-  // Filter logic
+  // Client-side filtering for remaining filters (skills, languages, countries, etc.)
   useEffect(() => {
     let filtered = mentors.filter((mentor) => {
-      const matchesSearch =
-        searchQuery === "" ||
-        mentor.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        mentor.skills.some((skill) => skill.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        mentor.title.toLowerCase().includes(searchQuery.toLowerCase())
-      const matchesSkills = selectedSkills.length === 0 || selectedSkills.some((skill) => mentor.skills.includes(skill))
+      const skills = Array.isArray(mentor.skills) ? mentor.skills : []
+      const languages = Array.isArray(mentor.languages) ? mentor.languages : []
+
+      // Skills filter
+      const matchesSkills = selectedSkills.length === 0 || selectedSkills.some((skill) => skills.includes(skill))
+
+      // Languages filter
       const matchesLanguages =
-        selectedLanguages.length === 0 || selectedLanguages.some((lang) => mentor.languages.includes(lang))
+        selectedLanguages.length === 0 ||
+        selectedLanguages.some((lang) =>
+          languages.some((mentorLang) => mentorLang.toLowerCase() === lang.toLowerCase()),
+        )
+
+      // Country filter
       const matchesCountry = selectedCountries.length === 0 || selectedCountries.includes(mentor.country)
+
+      // Experience filter
       const matchesExperience = mentor.experience >= experienceRange[0] && mentor.experience <= experienceRange[1]
-      const matchesRate = true
+
+      // Rate filter
+      const matchesRate = mentor.hourlyRate >= rateRange[0] && mentor.hourlyRate <= rateRange[1]
+
+      // Rating filter
       const matchesRating = mentor.rating >= ratingRange[0] && mentor.rating <= ratingRange[1]
-      return (
-        matchesSearch &&
-        matchesSkills &&
-        matchesLanguages &&
-        matchesCountry &&
-        matchesExperience &&
-        matchesRate &&
-        matchesRating
-      )
+
+      return matchesSkills && matchesLanguages && matchesCountry && matchesExperience && matchesRate && matchesRating
     })
 
     // Apply sorting
     filtered = filtered.sort((a, b) => {
       switch (sortBy) {
         case "highest-rated":
-          return b.rating - a.rating
+          return (b.rating || 0) - (a.rating || 0)
         case "lowest-price":
-          return a.hourlyRate - b.hourlyRate
+          return (a.hourlyRate || 0) - (b.hourlyRate || 0)
         case "highest-price":
-          return b.hourlyRate - a.hourlyRate
+          return (b.hourlyRate || 0) - (a.hourlyRate || 0)
         case "most-experienced":
-          return b.experience - a.experience
+          return (b.experience || 0) - (a.experience || 0)
         case "most-sessions":
-          return b.reviewCount - a.reviewCount
+          return (b.reviewCount || 0) - (a.reviewCount || 0)
         default:
           return 0
       }
@@ -98,34 +150,32 @@ export default function FindMentorsPage() {
 
     setFilteredMentors(filtered)
     setCurrentPage(1)
-  }, [
-    mentors,
-    searchQuery,
-    selectedSkills,
-    selectedLanguages,
-    selectedCountries,
-    experienceRange,
-    rateRange,
-    ratingRange,
-    sortBy,
-  ])
+  }, [mentors, selectedSkills, selectedLanguages, selectedCountries, experienceRange, rateRange, ratingRange, sortBy])
 
   const totalPages = Math.ceil(filteredMentors.length / MENTORS_PER_PAGE)
   const startIndex = (currentPage - 1) * MENTORS_PER_PAGE
   const paginatedMentors = filteredMentors.slice(startIndex, startIndex + MENTORS_PER_PAGE)
   const handleLoadMore = () => setCurrentPage((prev) => prev + 1)
 
-  const allSkills = Array.from(new Set(mentors.flatMap((mentor) => mentor.skills)))
-  const allLanguages = Array.from(new Set(mentors.flatMap((mentor) => mentor.languages)))
-  const allCountries = Array.from(new Set(mentors.map((mentor) => mentor.country)))
+  // Extract unique values for filters from current mentors
+  const allSkills = Array.from(
+    new Set(mentors.flatMap((mentor) => (Array.isArray(mentor.skills) ? mentor.skills : []))),
+  ).filter(Boolean)
+
+  const allLanguages = Array.from(
+    new Set(mentors.flatMap((mentor) => (Array.isArray(mentor.languages) ? mentor.languages : []))),
+  ).filter(Boolean)
+
+  const allCountries = Array.from(new Set(mentors.map((mentor) => mentor.country))).filter(Boolean)
 
   const clearAllFilters = () => {
     setSearchQuery("")
     setSelectedSkills([])
     setSelectedLanguages([])
     setSelectedCountries([])
+    setSelectedCategories([])
     setExperienceRange([0, 20])
-    setRateRange([0, 200])
+    setRateRange([0, 1000])
     setRatingRange([0, 5])
     setSortBy("highest-rated")
   }
@@ -135,10 +185,11 @@ export default function FindMentorsPage() {
     selectedSkills.length > 0 ||
     selectedLanguages.length > 0 ||
     selectedCountries.length > 0 ||
+    selectedCategories.length > 0 ||
     experienceRange[0] > 0 ||
     experienceRange[1] < 20 ||
     rateRange[0] > 0 ||
-    rateRange[1] < 200 ||
+    rateRange[1] < 1000 ||
     ratingRange[0] > 0 ||
     ratingRange[1] < 5
 
@@ -164,6 +215,14 @@ export default function FindMentorsPage() {
     )
   }
 
+  const handleCategoryToggle = (categoryId: string) => {
+    setSelectedCategories(
+      selectedCategories.includes(categoryId)
+        ? selectedCategories.filter((id) => id !== categoryId)
+        : [...selectedCategories, categoryId],
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-purple-50">
       <UnifiedHeader />
@@ -174,6 +233,7 @@ export default function FindMentorsPage() {
           selectedSkills={selectedSkills}
           selectedLanguages={selectedLanguages}
           selectedCountries={selectedCountries}
+          selectedCategories={selectedCategories}
           experienceRange={experienceRange}
           rateRange={rateRange}
           ratingRange={ratingRange}
@@ -181,10 +241,12 @@ export default function FindMentorsPage() {
           allSkills={allSkills}
           allLanguages={allLanguages}
           allCountries={allCountries}
+          categories={categories}
           hasActiveFilters={hasActiveFilters}
           handleSkillToggle={handleSkillToggle}
           handleLanguageToggle={handleLanguageToggle}
           handleCountryToggle={handleCountryToggle}
+          handleCategoryToggle={handleCategoryToggle}
           setExperienceRange={setExperienceRange}
           setRateRange={setRateRange}
           setRatingRange={setRatingRange}

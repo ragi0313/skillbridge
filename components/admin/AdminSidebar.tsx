@@ -1,6 +1,7 @@
 "use client"
 
 import { Clock, Users, TrendingUp, UserCheck, MessageSquare, Megaphone, Settings, LogOut, X, Video, FileText }  from "lucide-react"
+import { Layers } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
@@ -17,6 +18,7 @@ type Props = {
 const menuItems = [
   { id: "pending-mentors", label: "Pending Approvals", icon: Clock, badge: "12" },
   { id: "users", label: "Users Management", icon: Users },
+  { id: "skill-categories", label: "Skill Categories", icon: Layers },
   { id: "learner-insights", label: "Learner Insights", icon: TrendingUp },
   { id: "mentor-directory", label: "Mentor Directory", icon: UserCheck },
   { id: "session-logs", label: "Session Logs", icon: Video },

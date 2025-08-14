@@ -1,4 +1,3 @@
-// middleware.ts
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 import { jwtVerify } from "jose"
@@ -31,7 +30,6 @@ export async function middleware(req: NextRequest) {
     "/register/mentor",
   ].includes(pathname)
 
-  // 🔒 Not logged in
   if (!session) {
     if (
       pathname.startsWith("/learner") ||
@@ -45,22 +43,18 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next()
   }
 
-  // ✅ Logged in
   const role = session.role as string
 
-  // 🔁 Redirect from `/` to correct dashboard
   if (pathname === "/") {
     url.pathname = `/${role}/dashboard`
     return NextResponse.redirect(url)
   }
 
-  // 🚫 Prevent access to login/register if logged in
   if (isPublicPath) {
     url.pathname = `/${role}/dashboard`
     return NextResponse.redirect(url)
   }
 
-  // 🔐 Role-based route protection
   if (
     (pathname.startsWith("/learner") && role !== "learner") ||
     (pathname.startsWith("/mentor") && role !== "mentor") ||

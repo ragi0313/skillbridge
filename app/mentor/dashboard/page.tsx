@@ -296,7 +296,7 @@ export default function MentorDashboardPage() {
               Connect with learners, earn credits, and grow as a mentor!
             </p>
 
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mb-8 max-w-3xl mx-auto">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-10 md:gap-2 pt-5 md:pt-0 mb-8 max-w-3xl mx-auto">
               <div className="text-center">
                 <div className="text-3xl font-bold text-white mb-2">{stats.totalSessions}</div>
                 <div className="text-purple-200 text-sm">Total Sessions</div>

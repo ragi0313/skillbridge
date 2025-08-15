@@ -90,10 +90,6 @@ export default function BookingWidget({ mentor, averageRate }: BookingWidgetProp
                 </Button>
               </Link>
             </div>
-
-            <p className="text-xs text-gray-400 text-center">
-              Payment processed securely through credits
-            </p>
           </div>
         </CardContent>
       </Card>

@@ -40,8 +40,6 @@ export default function ForgotPasswordPage() {
       if (response.ok) {
         setSuccess(true)
         toast.success("Check your email for the verification code.")
-
-        // Redirect to verification page after a short delay
         setTimeout(() => {
           router.push(`/forgot-password/verify?email=${encodeURIComponent(email)}`)
         }, 2000)

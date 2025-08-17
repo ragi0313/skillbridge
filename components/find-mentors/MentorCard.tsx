@@ -38,16 +38,6 @@ const formattedBio = mentor.bio
 
   return (
     <Card className="group hover:shadow-2xl transition-all duration-500 cursor-pointer border-0 shadow-lg hover:-translate-y-2 bg-white rounded-3xl overflow-hidden relative">
-      {/* Availability Badge */}
-      {mentor.isAvailable && (
-        <div className="absolute top-6 right-6 z-10">
-          <Badge className="bg-green-100 text-green-700 border-green-200 font-medium px-4 py-2">
-            <CheckCircle className="w-4 h-4 mr-2" />
-            Available Now
-          </Badge>
-        </div>
-      )}
-
       <CardContent className="p-8">
         <div className="flex items-start gap-8">
           {/* Left Section - Avatar and Basic Info */}
@@ -59,9 +49,6 @@ const formattedBio = mentor.bio
                   {initials}
                 </AvatarFallback>
               </Avatar>
-              <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-2 shadow-lg">
-                <div className="w-6 h-6 bg-green-600 rounded-full"></div>
-              </div>
             </div>
             {/* Location */}
             <div className="flex items-center justify-center text-sm text-gray-500 mt-4">

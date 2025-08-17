@@ -6,6 +6,7 @@ import AdminTopbar from "@/components/admin/AdminTopbar"
 import PendingMentorApproval from "@/components/admin/PendingMentorApproval"
 import SkillCategoriesManagementPage from "@/components/admin/skill-categories/SkillCategoriesManagement"
 import PlatformSettings from "@/components/admin/PlatformSettings"
+import UserManagementPage from "@/components/admin/user-management/UserManagement"
 
 export default function AdminDashboard() {
   const [activeSection, setActiveSection] = useState("pending-mentors")
@@ -15,6 +16,8 @@ export default function AdminDashboard() {
     switch (activeSection) {
       case "pending-mentors":
         return <PendingMentorApproval />
+      case "user-management":
+        return <UserManagementPage />
       case "skill-categories":
         return <SkillCategoriesManagementPage />
       // case "users":
@@ -53,7 +56,7 @@ export default function AdminDashboard() {
 
       {/* Mobile overlay */}
       {sidebarOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />
+        <div className="fixed inset-0 bg-black/60 z-40 lg:hidden" onClick={() => setSidebarOpen(false)} />
       )}
     </div>
   )

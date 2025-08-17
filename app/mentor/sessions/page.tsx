@@ -1,179 +1,241 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import MentorHeader from "@/components/mentor/Header"
 import Footer from "@/components/landing/Footer"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
-import { Calendar, Clock, DollarSign, User, CheckCircle, XCircle, Loader2, Video, X, AlertTriangle } from 'lucide-react'
+import { Avatar, AvatarImage } from "@/components/ui/avatar"
+import { Loader2, Video, MessageSquare, CheckCircle, XCircle, AlertTriangle, FileText, X } from "lucide-react"
 import { toast } from "sonner"
-import { Separator } from "@/components/ui/separator"
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { Textarea } from "@/components/ui/textarea"
+import { Label } from "@/components/ui/label"
 
-interface BookingSession {
+interface Session {
   id: number
   learnerFirstName: string
   learnerLastName: string
-  learnerProfilePicture: string
+  learnerEmail: string
+  learnerProfilePicture?: string
   skillName: string
   scheduledDate: string
   durationMinutes: number
-  earnedCredits: number
-  status: string
+  totalCostCredits: number
   sessionNotes: string
+  status: string
+  rejectionReason?: string
+  earnedCredits?: number
+  archived?: boolean
+  cancellationReason?: string
 }
+
+type SessionFilter = "all" | "upcoming" | "pending" | "cancelled" | "rejected"
 
 export default function MentorSessionsPage() {
   const router = useRouter()
+  const [sessions, setSessions] = useState<Session[]>([])
   const [loading, setLoading] = useState(true)
-  const [sessions, setSessions] = useState<BookingSession[]>([])
-  const [error, setError] = useState<string | null>(null)
-  const [processingSessionId, setProcessingSessionId] = useState<number | null>(null)
-  const [cancellingSessionId, setCancellingSessionId] = useState<number | null>(null)
-  const [cancellationReason, setCancellationReason] = useState("")
+  const [actionLoading, setActionLoading] = useState<number | null>(null)
+  const [cancelReason, setCancelReason] = useState("")
+  const [rejectReason, setRejectReason] = useState("")
+  const [activeFilter, setActiveFilter] = useState<SessionFilter>("all")
 
-  const formatSessionDate = (dateString: string) => {
-    return new Intl.DateTimeFormat("en-US", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-      hour: "numeric",
-      minute: "numeric",
-      hour12: true,
-      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    }).format(new Date(dateString))
-  }
+  useEffect(() => {
+    fetchSessions()
+  }, [])
 
-  const getRefundPolicy = (scheduledDate: string) => {
-    const now = new Date()
-    const sessionDate = new Date(scheduledDate)
-    const hoursUntilSession = (sessionDate.getTime() - now.getTime()) / (1000 * 60 * 60)
-
-    if (hoursUntilSession >= 24) {
-      return { type: "full", message: "Full refund to learner (100%)", color: "text-green-600" }
-    } else if (hoursUntilSession >= 2) {
-      return { type: "partial", message: "Partial refund to learner (50%)", color: "text-yellow-600" }
-    } else {
-      return { type: "none", message: "No refund to learner", color: "text-red-600" }
-    }
-  }
-
-  const fetchMentorSessions = useCallback(async () => {
-    setLoading(true)
-    setError(null)
+  const fetchSessions = async () => {
     try {
-      const res = await fetch("/api/mentor/sessions", { cache: "no-store" })
-      if (!res.ok) {
-        if (res.status === 401) {
-          toast.error("Unauthorized", {
-            description: "Please log in to view your sessions.",
-          })
-          router.push("/login")
-          return
-        }
-        throw new Error("Failed to fetch sessions")
+      const response = await fetch("/api/mentor/sessions")
+      if (response.ok) {
+        const data = await response.json()
+        setSessions(data.sessions)
+      } else {
+        toast.error("Failed to load sessions")
       }
-      const data = await res.json()
-      setSessions(data.sessions)
-    } catch (err: any) {
-      console.error("Error fetching mentor sessions:", err)
-      setError(err.message || "Failed to load sessions.")
-      toast.error("Error", {
-        description: err.message || "Failed to load your sessions. Please try again.",
-      })
+    } catch (error) {
+      toast.error("Error loading sessions")
     } finally {
       setLoading(false)
     }
-  }, [router])
+  }
 
-  useEffect(() => {
-    fetchMentorSessions()
-  }, [fetchMentorSessions])
+  const canJoinSession = (session: Session) => {
+    if (session.status !== "confirmed") return false
+    const now = new Date()
+    const sessionDate = new Date(session.scheduledDate)
+    const minutesUntilSession = (sessionDate.getTime() - now.getTime()) / (1000 * 60)
+    const sessionEndTime = new Date(sessionDate.getTime() + session.durationMinutes * 60 * 1000)
+    const minutesAfterEnd = (now.getTime() - sessionEndTime.getTime()) / (1000 * 60)
+    return minutesUntilSession <= 10 && minutesAfterEnd <= 10
+  }
 
-  const handleSessionAction = async (sessionId: number, action: "accept" | "reject") => {
-    setProcessingSessionId(sessionId)
+  const handleAcceptSession = async (sessionId: number) => {
+    setActionLoading(sessionId)
     try {
-      const res = await fetch(`/api/bookings/${action}/${sessionId}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        throw new Error(data.error || `Failed to ${action} session.`)
+      const response = await fetch(`/api/bookings/accept/${sessionId}`, { method: "POST" })
+      if (response.ok) {
+        toast.success("Session accepted successfully")
+        fetchSessions()
+      } else {
+        toast.error("Failed to accept session")
       }
-      toast.success(`Session ${action === "accept" ? "confirmed" : "rejected"} successfully!`, {
-        description: data.message,
-      })
-      fetchMentorSessions() // Re-fetch sessions to update UI
-    } catch (err: any) {
-      console.error(`Error ${action}ing session:`, err)
-      toast.error("Action Failed", {
-        description: err.message || `Could not ${action} the session. Please try again.`,
-      })
+    } catch (error) {
+      toast.error("Error accepting session")
     } finally {
-      setProcessingSessionId(null)
+      setActionLoading(null)
     }
   }
 
-  const handleCancelSession = async (sessionId: number) => {
-    setCancellingSessionId(sessionId)
+  const handleRejectSession = async (sessionId: number, reason: string) => {
+    if (!reason.trim()) {
+      toast.error("Please provide a rejection reason")
+      return
+    }
+
+    setActionLoading(sessionId)
     try {
-      const res = await fetch(`/api/bookings/cancel/${sessionId}`, {
+      const response = await fetch(`/api/bookings/reject/${sessionId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason: cancellationReason }),
+        body: JSON.stringify({ reason: reason.trim() }),
       })
-      
-      const data = await res.json()
-      if (!res.ok) {
+
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to reject session")
+      }
+
+      toast.success("Session rejected successfully")
+      fetchSessions()
+      setRejectReason("")
+    } catch (error: any) {
+      toast.error("Error rejecting session", {
+        description: error.message,
+      })
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  const handleCancelSession = async (sessionId: number, reason: string) => {
+    if (!reason.trim()) {
+      toast.error("Please provide a cancellation reason")
+      return
+    }
+
+    setActionLoading(sessionId)
+    try {
+      const response = await fetch(`/api/bookings/cancel/${sessionId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: reason.trim() }),
+      })
+
+      const data = await response.json()
+      if (!response.ok) {
         throw new Error(data.error || "Failed to cancel session")
       }
 
-      toast.success("Session cancelled successfully!", {
-        description: `Session cancelled. ${data.refundAmount || 0} credits refunded to learner.`,
+      toast.success("Session cancelled successfully", {
+        description: `${data.refundType} refund processed for learner.`,
       })
-
-      setCancellationReason("")
-      fetchMentorSessions() // Refresh sessions
-    } catch (err: any) {
-      toast.error("Cancellation failed", {
-        description: err.message,
+      fetchSessions()
+      setCancelReason("")
+    } catch (error: any) {
+      toast.error("Error cancelling session", {
+        description: error.message,
       })
     } finally {
-      setCancellingSessionId(null)
+      setActionLoading(null)
     }
   }
 
-  const getJoinSessionUrl = async (sessionId: number) => {
-    try {
-      const res = await fetch(`/api/sessions/${sessionId}/join`)
-      if (!res.ok) {
-        const errorData = await res.json()
-        throw new Error(errorData.error || "Failed to get session join URL")
+  const handleJoinSession = (sessionId: number) => {
+    router.push(`/sessions/${sessionId}/video`)
+  }
+
+  const filterSessions = (filter: SessionFilter) => {
+    const now = new Date()
+    return sessions.filter((session) => {
+      if (session.archived) return false
+      const sessionDate = new Date(session.scheduledDate)
+
+      switch (filter) {
+        case "all":
+          return true
+        case "pending":
+          return session.status === "pending"
+        case "upcoming":
+          return session.status === "confirmed" && sessionDate > now
+        case "cancelled":
+          return session.status === "cancelled"
+        case "rejected":
+          return session.status === "rejected"
+        default:
+          return true
       }
-      const data = await res.json()
-      return data.joinUrl
-    } catch (err: any) {
-      toast.error("Error joining session", { description: err.message })
-      return null
+    })
+  }
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "pending":
+        return "bg-yellow-100 text-yellow-800"
+      case "confirmed":
+        return "bg-green-100 text-green-800"
+      case "completed":
+        return "bg-blue-100 text-blue-800"
+      case "cancelled":
+        return "bg-red-100 text-red-800"
+      case "rejected":
+        return "bg-gray-100 text-gray-800"
+      default:
+        return "bg-gray-100 text-gray-800"
     }
   }
 
-  const pendingSessions = sessions.filter((session) => session.status === "pending")
-  const otherSessions = sessions.filter((session) => session.status !== "pending")
+  const formatTime = (dateString: string) => {
+    return new Date(dateString).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+  }
+
+  const formatEndTime = (dateString: string, duration: number) => {
+    const endTime = new Date(new Date(dateString).getTime() + duration * 60 * 1000)
+    return endTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+  }
+
+  const canCancelSession = (status: string, scheduledDate: string) => {
+    return status === "confirmed" && new Date(scheduledDate) > new Date()
+  }
+
+  const filteredSessions = filterSessions(activeFilter)
+  const filters = [
+    { key: "all" as const, label: "All Sessions", count: filterSessions("all").length },
+    { key: "upcoming" as const, label: "Upcoming", count: filterSessions("upcoming").length },
+    { key: "pending" as const, label: "Pending", count: filterSessions("pending").length },
+    { key: "cancelled" as const, label: "Cancelled", count: filterSessions("cancelled").length },
+    { key: "rejected" as const, label: "Rejected", count: filterSessions("rejected").length },
+  ]
 
   if (loading) {
     return (
-      <div className="flex flex-col min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+      <div className="flex flex-col min-h-screen bg-gray-50">
         <MentorHeader />
         <main className="flex-1 flex items-center justify-center">
-          <div className="text-center text-gray-600 text-lg">
-            <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4" />
-            Loading sessions...
-          </div>
+          <Loader2 className="w-8 h-8 animate-spin" />
         </main>
         <Footer />
       </div>
@@ -181,218 +243,282 @@ export default function MentorSessionsPage() {
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+    <div className="flex flex-col min-h-screen bg-gray-50">
       <MentorHeader />
-      <main className="flex-1 container mx-auto px-4 py-8">
-        <h1 className="text-4xl font-bold text-gray-900 mb-8">My Sessions</h1>
-        
-        {pendingSessions.length > 0 && (
-          <section className="mb-10">
-            <h2 className="text-2xl font-bold text-gray-800 mb-6">Pending Sessions</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {pendingSessions.map((session) => (
-                <Card key={session.id} className="shadow-md border-yellow-500 bg-yellow-50">
-                  <CardHeader className="flex flex-row items-center space-x-4 pb-2">
-                    <Avatar className="h-12 w-12">
-                      <AvatarImage src={session.learnerProfilePicture || "/default-avatar.png"} />
-                      <AvatarFallback>{session.learnerFirstName[0]}{session.learnerLastName[0]}</AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <CardTitle className="text-lg font-semibold">
-                        {session.learnerFirstName} {session.learnerLastName}
-                      </CardTitle>
-                      <CardDescription className="text-sm text-gray-700">{session.skillName}</CardDescription>
+      <main className="flex-1 container mx-auto px-6 py-8">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">My Sessions</h1>
+          <p className="text-gray-600">Manage your mentoring sessions and track your earnings</p>
+        </div>
+
+        <div className="flex gap-2 mb-8">
+          {filters.map((filter) => (
+            <Button
+              key={filter.key}
+              variant={activeFilter === filter.key ? "default" : "outline"}
+              onClick={() => setActiveFilter(filter.key)}
+              className={`rounded-full ${
+                activeFilter === filter.key
+                  ? "bg-blue-600 text-white hover:bg-blue-700"
+                  : "bg-white text-gray-700 hover:bg-gray-50"
+              }`}
+            >
+              {filter.label}
+              {filter.count > 0 && (
+                <Badge variant="secondary" className="ml-2 bg-gray-100 text-gray-800">
+                  {filter.count}
+                </Badge>
+              )}
+            </Button>
+          ))}
+        </div>
+
+        {filteredSessions.length === 0 ? (
+          <div className="text-center py-16">
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">No sessions found</h3>
+            <p className="text-gray-600">
+              {activeFilter === "pending"
+                ? "No pending session requests at the moment."
+                : `No ${activeFilter} sessions to display.`}
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {filteredSessions.map((session) => {
+              const canJoin = canJoinSession(session)
+              const canCancel = canCancelSession(session.status, session.scheduledDate)
+
+              return (
+                <Card key={session.id} className="bg-white shadow-sm hover:shadow-md transition-shadow">
+                  <CardContent className="p-6">
+                    <div className="flex items-center justify-left mb-4">
+                      <Avatar className="h-24 w-24">
+                        <AvatarImage src={session.learnerProfilePicture || "/placeholder.svg"} />
+                      </Avatar>
+                      <div className="ml-4 mb-4">
+                        <h3 className="font-semibold text-gray-900 text-lg">
+                          {session.learnerFirstName} {session.learnerLastName}
+                        </h3>
+                      </div>
                     </div>
-                  </CardHeader>
-                  <CardContent className="space-y-2">
-                    <div className="flex items-center text-sm text-gray-700">
-                      <Calendar className="mr-2 h-4 w-4 text-blue-600" />
-                      <span>{formatSessionDate(session.scheduledDate)}</span>
+
+
+                    <div className="space-y-2 mb-4 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Skill/Service:</span>
+                        <span className="font-medium">{session.skillName}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Date:</span>
+                        <span className="font-medium">{new Date(session.scheduledDate).toLocaleDateString()}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Time:</span>
+                        <span className="font-medium">
+                          {formatTime(session.scheduledDate)} -{" "}
+                          {formatEndTime(session.scheduledDate, session.durationMinutes)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Duration:</span>
+                        <span className="font-medium">{session.durationMinutes} min</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Credits:</span>
+                        <span className="font-medium">{session.totalCostCredits}</span>
+                      </div>
+                      {session.earnedCredits && (
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Earned:</span>
+                          <span className="font-medium text-green-600">{session.earnedCredits}</span>
+                        </div>
+                      )}
                     </div>
-                    <div className="flex items-center text-sm text-gray-700">
-                      <Clock className="mr-2 h-4 w-4 text-purple-600" />
-                      <span>{session.durationMinutes} minutes</span>
+
+                    {/* Session Notes */}
+                    {session.sessionNotes && (
+                      <div className="mb-4 p-3 border rounded-lg">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-sm font-medium text-gray-800">Session Notes</span>
+                        </div>
+                        <p className="text-sm text-gray-800">{session.sessionNotes}</p>
+                      </div>
+                    )}
+
+                    {/* Cancellation Reason */}
+                    {session.cancellationReason && session.status === "cancelled" && (
+                      <div className="mb-4 p-3 bg-red-50 rounded-lg">
+                        <div className="flex items-center gap-2 mb-2">
+                          <AlertTriangle className="w-4 h-4 text-red-600" />
+                          <span className="text-sm font-medium text-red-800">Cancellation Reason</span>
+                        </div>
+                        <p className="text-sm text-red-700">{session.cancellationReason}</p>
+                      </div>
+                    )}
+
+                    {/* Rejection Reason */}
+                    {session.rejectionReason && session.status === "rejected" && (
+                      <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+                        <div className="flex items-center gap-2 mb-2">
+                          <X className="w-4 h-4 text-gray-600" />
+                          <span className="text-sm font-medium text-gray-800">Rejection Reason</span>
+                        </div>
+                        <p className="text-sm text-gray-700">{session.rejectionReason}</p>
+                      </div>
+                    )}
+
+                    <div className="flex justify-center mb-4">
+                      <Badge className={`${getStatusColor(session.status)} border-0`}>
+                        {session.status === "confirmed"
+                          ? "Confirmed"
+                          : session.status === "pending"
+                            ? "Pending"
+                            : session.status === "cancelled"
+                              ? "Cancelled"
+                              : session.status === "rejected"
+                                ? "Rejected"
+                                : "Completed"}
+                      </Badge>
                     </div>
-                    <div className="flex items-center text-sm text-gray-700">
-                      <DollarSign className="mr-2 h-4 w-4 text-green-600" />
-                      <span>Earn: {session.earnedCredits} credits</span>
-                    </div>
-                    <p className="text-sm text-gray-700 mt-2">
-                      <span className="font-medium">Notes:</span> {session.sessionNotes}
-                    </p>
-                    <div className="flex gap-2 mt-4">
-                      <Button
-                        onClick={() => handleSessionAction(session.id, "accept")}
-                        disabled={processingSessionId === session.id}
-                        className="flex-1 bg-green-600 hover:bg-green-700 text-white"
-                      >
-                        {processingSessionId === session.id ? (
-                          <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                        ) : (
-                          <CheckCircle className="w-4 h-4 mr-2" />
+
+                    <div className="space-y-2">
+                      {session.status === "pending" && (
+                        <div className="flex gap-2">
+                          <Button
+                            onClick={() => handleAcceptSession(session.id)}
+                            disabled={actionLoading === session.id}
+                            className="flex-1 bg-green-600 hover:bg-green-700"
+                            size="sm"
+                          >
+                            {actionLoading === session.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                            ) : (
+                              <CheckCircle className="h-4 w-4 mr-2" />
+                            )}
+                            Accept
+                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="flex-1 text-red-600 hover:text-red-700 bg-transparent"
+                              >
+                                <XCircle className="h-4 w-4 mr-2" />
+                                Reject
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Reject Session Request</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Please provide a reason for rejecting this session. The learner will receive a full
+                                  refund.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <div className="py-4">
+                                <Label htmlFor="rejection-reason" className="text-sm font-medium">
+                                  Rejection Reason *
+                                </Label>
+                                <Textarea
+                                  id="rejection-reason"
+                                  placeholder="Please explain why you're rejecting this session..."
+                                  value={rejectReason}
+                                  onChange={(e) => setRejectReason(e.target.value)}
+                                  className="mt-2"
+                                  required
+                                />
+                              </div>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel onClick={() => setRejectReason("")}>Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => handleRejectSession(session.id, rejectReason)}
+                                  className="bg-red-600 hover:bg-red-700"
+                                  disabled={actionLoading === session.id || !rejectReason.trim()}
+                                >
+                                  {actionLoading === session.id ? (
+                                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                  ) : null}
+                                  Reject Session
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      )}
+
+                      {canJoin && (
+                        <Button
+                          onClick={() => handleJoinSession(session.id)}
+                          className="w-full bg-green-600 hover:bg-green-700"
+                          size="sm"
+                        >
+                          <Video className="w-4 h-4 mr-2" />
+                          Join Session
+                        </Button>
+                      )}
+
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm" className="flex-1 bg-transparent">
+                          <MessageSquare className="w-4 h-4 mr-2" />
+                          Message
+                        </Button>
+
+                        {canCancel && (
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-orange-600 hover:text-orange-700 bg-transparent"
+                              >
+                                <AlertTriangle className="w-4 h-4" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Cancel Session</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Are you sure you want to cancel this session? Please provide a reason for
+                                  cancellation.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <div className="py-4">
+                                <Label htmlFor="cancel-reason" className="text-sm font-medium">
+                                  Cancellation Reason *
+                                </Label>
+                                <Textarea
+                                  id="cancel-reason"
+                                  placeholder="Please explain why you're cancelling this session..."
+                                  value={cancelReason}
+                                  onChange={(e) => setCancelReason(e.target.value)}
+                                  className="mt-2"
+                                  required
+                                />
+                              </div>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel onClick={() => setCancelReason("")}>Keep Session</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => handleCancelSession(session.id, cancelReason)}
+                                  className="bg-orange-600 hover:bg-orange-700"
+                                  disabled={actionLoading === session.id || !cancelReason.trim()}
+                                >
+                                  {actionLoading === session.id ? (
+                                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                  ) : null}
+                                  Cancel Session
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
                         )}
-                        Accept
-                      </Button>
-                      <Button
-                        onClick={() => handleSessionAction(session.id, "reject")}
-                        disabled={processingSessionId === session.id}
-                        variant="outline"
-                        className="flex-1 border-red-500 text-red-500 hover:bg-red-50 hover:text-red-600"
-                      >
-                        {processingSessionId === session.id ? (
-                          <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                        ) : (
-                          <XCircle className="w-4 h-4 mr-2" />
-                        )}
-                        Reject
-                      </Button>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {sessions.length === 0 ? (
-          <Card className="shadow-lg border-0 bg-white p-6 text-center">
-            <CardHeader>
-              <CardTitle className="text-2xl font-bold text-gray-900">No Sessions Yet</CardTitle>
-              <CardDescription className="text-gray-600">
-                You don't have any upcoming or past mentoring sessions.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button onClick={() => router.push("/mentor/settings")} className="gradient-bg text-white">
-                Update Your Availability to Get Bookings!
-              </Button>
-            </CardContent>
-          </Card>
-        ) : (
-          <>
-            {pendingSessions.length > 0 && otherSessions.length > 0 && <Separator className="my-8" />}
-            {otherSessions.length > 0 && (
-              <>
-                <h2 className="text-2xl font-bold text-gray-800 mb-6">All Sessions</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {otherSessions.map((session) => {
-                    const sessionDate = new Date(session.scheduledDate)
-                    const now = new Date()
-                    const canJoin = session.status === "confirmed" && Math.abs(sessionDate.getTime() - now.getTime()) <= 10 * 60 * 1000 // 10 minutes window
-                    const canCancel = ['confirmed'].includes(session.status) && sessionDate > now
-                    const refundPolicy = getRefundPolicy(session.scheduledDate)
-                    
-                    return (
-                      <Card key={session.id} className="shadow-md hover:shadow-lg transition-shadow duration-300">
-                        <CardHeader className="flex flex-row items-center space-x-4 pb-2">
-                          <Avatar className="h-12 w-12">
-                            <AvatarImage src={session.learnerProfilePicture || "/default-avatar.png"} />
-                            <AvatarFallback>{session.learnerFirstName[0]}{session.learnerLastName[0]}</AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <CardTitle className="text-lg font-semibold">{session.learnerFirstName} {session.learnerLastName}</CardTitle>
-                            <CardDescription className="text-sm text-gray-600">{session.skillName}</CardDescription>
-                          </div>
-                        </CardHeader>
-                        <CardContent className="space-y-2">
-                          <div className="flex items-center text-sm text-gray-700">
-                            <Calendar className="mr-2 h-4 w-4 text-blue-600" />
-                            <span>{formatSessionDate(session.scheduledDate)}</span>
-                          </div>
-                          <div className="flex items-center text-sm text-gray-700">
-                            <Clock className="mr-2 h-4 w-4 text-purple-600" />
-                            <span>{session.durationMinutes} minutes</span>
-                          </div>
-                          <div className="flex items-center text-sm text-gray-700">
-                            <DollarSign className="mr-2 h-4 w-4 text-green-600" />
-                            <span>Earned: {session.earnedCredits} credits</span>
-                          </div>
-                          <div className="flex items-center text-sm text-gray-700">
-                            <User className="mr-2 h-4 w-4 text-orange-600" />
-                            <span>Status: {session.status}</span>
-                          </div>
-                          <div className="flex gap-2 mt-4">
-                            {canJoin && (
-                              <Button
-                                size="sm"
-                                className="gradient-bg text-white"
-                                onClick={async () => {
-                                  const joinUrl = await getJoinSessionUrl(session.id)
-                                  if (joinUrl) {
-                                    window.open(joinUrl, "_blank")
-                                  }
-                                }}
-                              >
-                                <Video className="mr-2 h-4 w-4" />
-                                Join Session
-                              </Button>
-                            )}
-                            
-                            {canCancel && (
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50">
-                                    <X className="mr-2 h-4 w-4" />
-                                    Cancel
-                                  </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle className="flex items-center gap-2">
-                                      <AlertTriangle className="h-5 w-5 text-yellow-600" />
-                                      Cancel Session
-                                    </AlertDialogTitle>
-                                    <AlertDialogDescription className="space-y-2">
-                                      <p>Are you sure you want to cancel this session with {session.learnerFirstName} {session.learnerLastName}?</p>
-                                      <div className={`font-medium ${refundPolicy.color}`}>
-                                        {refundPolicy.message}
-                                      </div>
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <div className="py-4">
-                                    <label className="text-sm font-medium text-gray-700">
-                                      Reason for cancellation (optional):
-                                    </label>
-                                    <Textarea
-                                      value={cancellationReason}
-                                      onChange={(e) => setCancellationReason(e.target.value)}
-                                      placeholder="Please let the learner know why you're cancelling..."
-                                      className="mt-2"
-                                    />
-                                  </div>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>Keep Session</AlertDialogCancel>
-                                    <AlertDialogAction
-                                      onClick={() => handleCancelSession(session.id)}
-                                      disabled={cancellingSessionId === session.id}
-                                      className="bg-red-600 hover:bg-red-700"
-                                    >
-                                      {cancellingSessionId === session.id ? (
-                                        <>
-                                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                          Cancelling...
-                                        </>
-                                      ) : (
-                                        "Cancel Session"
-                                      )}
-                                    </AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
-                            )}
-                            
-                            <Button size="sm" variant="outline" className="flex-1">
-                              View Details
-                            </Button>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    )
-                  })}
-                </div>
-              </>
-            )}
-          </>
+              )
+            })}
+          </div>
         )}
       </main>
       <Footer />

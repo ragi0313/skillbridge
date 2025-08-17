@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react"
 import { usePathname, useRouter } from "next/navigation"
-import LearnerHeader from "@/components/learner/Header"
+import { LearnerHeader } from "./learner/Header"
 import MentorHeader from "@/components/mentor/Header"
-import Header from "@/components/landing/Header"
+import { Header } from "./landing/Header"
 
 type SessionUser = {
   id: number

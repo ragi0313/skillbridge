@@ -39,7 +39,6 @@ import {
   Search,
   Layers,
   BarChart3,
-  TrendingUp,
   AlertCircle,
   Tags,
   List,
@@ -407,9 +406,6 @@ export default function SkillCategoriesManagementPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
-            <div className="p-2 bg-purple-100 rounded-xl">
-              <Layers className="h-8 w-8 text-purple-600" />
-            </div>
             Skill Categories
           </h1>
           <p className="text-gray-600 mt-2">Manage and organize mentor skills into multiple categories</p>
@@ -463,7 +459,6 @@ export default function SkillCategoriesManagementPage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Categories</CardTitle>
-              <Layers className="h-4 w-4 text-purple-600" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{stats.totalCategories}</div>
@@ -472,7 +467,6 @@ export default function SkillCategoriesManagementPage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Assigned Skills</CardTitle>
-              <Award className="h-4 w-4 text-blue-600" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{stats.totalAssignments}</div>
@@ -481,7 +475,6 @@ export default function SkillCategoriesManagementPage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Unassigned Skills</CardTitle>
-              <AlertCircle className="h-4 w-4 text-orange-600" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{stats.unassignedSkills}</div>
@@ -489,8 +482,7 @@ export default function SkillCategoriesManagementPage() {
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Avg Mentors/Category</CardTitle>
-              <Users className="h-4 w-4 text-green-600" />
+              <CardTitle className="text-sm font-medium">Avg Mentors/ {" "}Category</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{stats.averageMentorsPerCategory}</div>
@@ -499,7 +491,6 @@ export default function SkillCategoriesManagementPage() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Most Popular</CardTitle>
-              <TrendingUp className="h-4 w-4 text-orange-600" />
             </CardHeader>
             <CardContent>
               <div className="text-sm font-bold truncate">{stats.mostPopularCategory}</div>
@@ -838,8 +829,7 @@ export default function SkillCategoriesManagementPage() {
                         />
                       </TableHead>
                       <TableHead>Skill Name</TableHead>
-                      <TableHead>Mentors</TableHead>
-                      <TableHead>Mentor Names</TableHead>
+                      <TableHead>Mentor Count</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -864,20 +854,6 @@ export default function SkillCategoriesManagementPage() {
                           <div className="flex items-center gap-1">
                             <Users className="h-4 w-4 text-gray-400" />
                             <span className="font-medium">{skill.mentorCount}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap gap-1">
-                            {skill.mentorNames.slice(0, 3).map((name, index) => (
-                              <Badge key={index} variant="outline" className="text-xs">
-                                {name}
-                              </Badge>
-                            ))}
-                            {skill.mentorNames.length > 3 && (
-                              <Badge variant="outline" className="text-xs">
-                                +{skill.mentorNames.length - 3} more
-                              </Badge>
-                            )}
                           </div>
                         </TableCell>
                       </TableRow>

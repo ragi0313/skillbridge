@@ -17,7 +17,7 @@ type Props = {
 
 const menuItems = [
   { id: "pending-mentors", label: "Pending Approvals", icon: Clock, badge: "12" },
-  { id: "users", label: "Users Management", icon: Users },
+  { id: "user-management", label: "Users Management", icon: Users },
   { id: "skill-categories", label: "Skill Categories", icon: Layers },
   { id: "learner-insights", label: "Learner Insights", icon: TrendingUp },
   { id: "mentor-directory", label: "Mentor Directory", icon: UserCheck },
@@ -48,20 +48,20 @@ export default function AdminSidebar({ activeSection, setActiveSection, isOpen, 
         } lg:translate-x-0`}
       >
         {/* Close button for mobile */}
-        <div className="lg:hidden flex justify-end p-4">
-          <Button variant="ghost" size="sm" onClick={() => setIsOpen(false)} className="text-white hover:bg-slate-800">
-            <X className="w-5 h-5" />
-          </Button>
-        </div>
 
         {/* Header */}
-        <div className="p-6 border-b border-slate-700">
+        <div className="pl-10 flex justify-center gap-1 items-center p-6 border-b border-slate-700">
           <div className="flex flex-col space-x-3 pl-4">
               <Logo textColor="text-white"/>
                <p className="text-xs text-slate-400 pl-10">Admin Dashboard</p>
             <div>
             </div>
           </div>
+        <div className="lg:hidden p-4">
+          <Button variant="ghost" size="sm" onClick={() => setIsOpen(false)} className="text-white hover:bg-slate-800">
+            <X className="w-5 h-5" />
+          </Button>
+        </div>
         </div>
 
         {/* Navigation */}

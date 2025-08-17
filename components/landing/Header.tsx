@@ -19,14 +19,12 @@ export function Header() {
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
           <div className="flex-shrink-0">
-            <Link href="/" className="flex items-center">
               <Logo />
-            </Link>
           </div>
 
           {/* Desktop Navigation */}
           <nav className="hidden md:flex items-center space-x-8">
-            <Link href="/mentors" className="text-gray-600 hover:text-gray-900 font-medium">
+            <Link href="/find-mentors" className="text-gray-600 hover:text-gray-900 font-medium">
               Find Mentors
             </Link>
             <Link href="/how-it-works" className="text-gray-600 hover:text-gray-900 font-medium">
@@ -44,13 +42,11 @@ export function Header() {
           <div className="hidden md:flex items-center space-x-4">
             <Link href="/login">
               <Button variant="ghost" className="text-gray-600 hover:text-gray-900">
-                <User className="h-4 w-4 mr-2" />
                 Sign In
               </Button>
             </Link>
             <Link href="/register">
               <Button className="gradient-bg text-white">
-                <BookOpen className="h-4 w-4 mr-2" />
                 Get Started
               </Button>
             </Link>

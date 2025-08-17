@@ -13,7 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { CreditCard, User, Settings, LogOut, Bell, Menu, X } from "lucide-react"
+import { CreditCard, User, Settings, LogOut, Bell, Menu, X, MoreVertical, Check, Trash2 } from "lucide-react"
 import Logo from "../ui/logo"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { toast } from "sonner"
@@ -44,67 +44,177 @@ export function LearnerHeader() {
   const [loading, setLoading] = useState(true)
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [isMenuOpen, setIsMenuOpen] = useState(false)
+  const [loadingNotifications, setLoadingNotifications] = useState<{ [key: string]: boolean }>({})
   const unreadNotificationsCount = notifications.filter((n) => !n.isRead).length
 
-  useEffect(() => {
-    async function fetchData() {
-      try {
-        setLoading(true)
-        const [learnerRes, notificationsRes] = await Promise.all([
-          fetch("/api/learner/me"),
-          fetch("/api/notifications"),
-        ])
-
-        if (!learnerRes.ok) throw new Error("Unauthorized to fetch learner profile")
-        const learnerData = await learnerRes.json()
-        setLearner(learnerData.learner)
-
-        if (!notificationsRes.ok) throw new Error("Failed to fetch notifications")
-        const notificationsData = await notificationsRes.json()
-        setNotifications(notificationsData.notifications)
-      } catch (err: any) {
-        console.error("Failed to fetch data", err)
-        toast.error("Error loading data", { description: err.message })
-        router.push("/login")
-      } finally {
-        setLoading(false)
-      }
+  async function safeJsonParse(response: Response) {
+    const text = await response.text()
+    if (!text.trim()) {
+      throw new Error('Empty response received')
     }
-    fetchData()
-  }, [router])
-
-  const handleLogout = async () => {
-    await fetch("/api/auth/logout", { method: "POST" })
-    router.push("/login")
-    router.refresh()
+    
+    try {
+      return JSON.parse(text)
+    } catch (error) {
+      console.error('Failed to parse JSON:', text)
+      throw new Error(`Invalid JSON response: ${text.substring(0, 100)}...`)
+    }
   }
 
+  useEffect(() => {
+      async function fetchData() {
+        try {
+          setLoading(true)
+          
+          const [learnerRes, notificationsRes] = await Promise.all([
+            fetch("/api/learner/me"),
+            fetch("/api/notifications")
+          ])
+  
+          if (!learnerRes.ok) {
+            throw new Error(`Failed to fetch learner profile: ${learnerRes.status}`)
+          }
+          
+          const learnerData = await safeJsonParse(learnerRes)
+          setLearner(learnerData.learner)
+  
+          if (!notificationsRes.ok) {
+            throw new Error(`Failed to fetch notifications: ${notificationsRes.status}`)
+          }
+          
+          const notificationsData = await safeJsonParse(notificationsRes)
+          setNotifications(notificationsData.notifications || [])
+          
+        } catch (err: any) {
+          console.error("Failed to fetch data", err)
+          toast.error("Error loading data", { 
+            description: err.message || "Unknown error occurred" 
+          })
+          
+          if (err.message?.includes('401') || err.message?.includes('Unauthorized')) {
+            router.push("/login")
+          }
+        } finally {
+          setLoading(false)
+        }
+      }
+  
+      fetchData()
+  }, [router])
+  
+  const handleLogout = async () => {
+      await fetch("/api/auth/logout", { method: "POST" })
+      router.push("/login")
+      router.refresh()
+  }
+  
   const handleNotificationClick = async (
-    notificationId: string,
-    relatedEntityType?: string | null,
-    relatedEntityId?: string | null,
-  ) => {
-    try {
-      const res = await fetch("/api/notifications", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ notificationId }),
-      })
-
-      if (!res.ok) {
-        const errorData = await res.json()
-        throw new Error(errorData.error || "Failed to mark notification as read")
+      notificationId: string,
+      relatedEntityType?: string | null,
+      relatedEntityId?: string | null,
+    ) => {
+      // Don't navigate if the notification is already read
+      if (notifications.find(n => n.id === notificationId)?.isRead) {
+        if (relatedEntityType === "session" && relatedEntityId) {
+          router.push(`/learner/sessions?sessionId=${relatedEntityId}`)
+        }
+        return
       }
-
-      setNotifications((prev) => prev.map((n) => (n.id === notificationId ? { ...n, isRead: true } : n)))
-
-      // Optional: Navigate to related entity
-      if (relatedEntityType === "session" && relatedEntityId) {
-        router.push(`/learner/sessions?sessionId=${relatedEntityId}`)
+  
+      try {
+        const res = await fetch("/api/notifications", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ notificationId, action: "markRead" }),
+        })
+  
+        if (!res.ok) {
+          const errorText = await res.text()
+          let errorMessage = "Failed to mark notification as read"
+          
+          try {
+            const errorData = JSON.parse(errorText)
+            errorMessage = errorData.error || errorMessage
+          } catch {
+            errorMessage = errorText || errorMessage
+          }
+          
+          throw new Error(errorMessage)
+        }
+  
+        // Update local state
+        setNotifications((prev) =>
+          prev.map((n) => (n.id === notificationId ? { ...n, isRead: true } : n))
+        )
+  
+        // Navigate to related entity
+        if (relatedEntityType === "session" && relatedEntityId) {
+          router.push(`/learner/sessions?sessionId=${relatedEntityId}`)
+        }
+      } catch (err: any) {
+        toast.error("Error marking notification as read", {
+          description: err.message,
+        })
       }
-    } catch (err: any) {
-      toast.error("Error marking notification as read", { description: err.message })
-    }
+  }
+  
+  const handleMarkAsRead = async (notificationId: string, event: React.MouseEvent) => {
+      event.stopPropagation() // Prevent triggering the main notification click
+      
+      setLoadingNotifications(prev => ({ ...prev, [notificationId]: true }))
+      
+      try {
+        const res = await fetch("/api/notifications", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ notificationId, action: "markRead" }),
+        })
+  
+        if (!res.ok) {
+          const errorData = await safeJsonParse(res)
+          throw new Error(errorData.error || "Failed to mark notification as read")
+        }
+  
+        setNotifications((prev) =>
+          prev.map((n) => (n.id === notificationId ? { ...n, isRead: true } : n))
+        )
+  
+        toast.success("Notification marked as read")
+      } catch (err: any) {
+        toast.error("Error marking notification as read", {
+          description: err.message,
+        })
+      } finally {
+        setLoadingNotifications(prev => ({ ...prev, [notificationId]: false }))
+      }
+  }
+  
+  const handleDeleteNotification = async (notificationId: string, event: React.MouseEvent) => {
+      event.stopPropagation() // Prevent triggering the main notification click
+      
+      setLoadingNotifications(prev => ({ ...prev, [notificationId]: true }))
+      
+      try {
+        const res = await fetch("/api/notifications", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ notificationId }),
+        })
+  
+        if (!res.ok) {
+          const errorData = await safeJsonParse(res)
+          throw new Error(errorData.error || "Failed to delete notification")
+        }
+  
+        setNotifications((prev) => prev.filter((n) => n.id !== notificationId))
+        toast.success("Notification deleted")
+      } catch (err: any) {
+        toast.error("Error deleting notification", {
+          description: err.message,
+        })
+      } finally {
+        setLoadingNotifications(prev => ({ ...prev, [notificationId]: false }))
+      }
   }
 
   const toggleMenu = () => {
@@ -180,7 +290,11 @@ export function LearnerHeader() {
                   )}
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-80 bg-gray-800 border-gray-700" align="end" forceMount>
+              <DropdownMenuContent 
+                className="w-96 bg-gray-800 border-gray-700" 
+                align="end" 
+                forceMount
+              >
                 <div className="flex flex-col space-y-1 p-2">
                   <p className="text-sm font-medium leading-none text-white">Notifications</p>
                   <p className="text-xs leading-none text-gray-400">
@@ -193,25 +307,72 @@ export function LearnerHeader() {
                     <p className="p-4 text-center text-gray-400 text-sm">No notifications yet.</p>
                   ) : (
                     notifications.map((notification) => (
-                      <DropdownMenuItem
-                        key={notification.id}
-                        className={`flex flex-col items-start p-2 cursor-pointer ${
-                          notification.isRead ? "text-gray-400" : "text-white font-medium"
-                        } hover:bg-gray-700`}
-                        onClick={() =>
-                          handleNotificationClick(
-                            notification.id,
-                            notification.relatedEntityType,
-                            notification.relatedEntityId,
-                          )
-                        }
-                      >
-                        <span className="text-sm">{notification.title}</span>
-                        <span className="text-xs text-gray-300">{notification.message}</span>
-                        <span className="text-xs text-gray-500 mt-1">
-                          {formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true })}
-                        </span>
-                      </DropdownMenuItem>
+                      <div key={notification.id} className="relative group">
+                        <DropdownMenuItem
+                          className={`flex flex-col items-start p-3 pr-10 cursor-pointer border-b border-gray-700 last:border-b-0 ${
+                            notification.isRead
+                              ? "text-gray-400"
+                              : "text-white font-medium bg-gray-750"
+                          } hover:bg-gray-700`}
+                          onClick={() =>
+                            handleNotificationClick(
+                              notification.id,
+                              notification.relatedEntityType,
+                              notification.relatedEntityId
+                            )
+                          }
+                        >
+                          <span className="text-sm font-medium">{notification.title}</span>
+                          <span className="text-xs text-gray-300 mt-1 line-clamp-2">
+                            {notification.message}
+                          </span>
+                          <span className="text-xs text-gray-500 mt-2">
+                            {formatDistanceToNow(new Date(notification.createdAt), {
+                              addSuffix: true,
+                            })}
+                          </span>
+                        </DropdownMenuItem>
+                        
+                        {/* Actions Dropdown */}
+                        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0 hover:bg-gray-600"
+                                onClick={(e) => e.stopPropagation()}
+                                disabled={loadingNotifications[notification.id]}
+                              >
+                                <MoreVertical className="h-3 w-3 text-gray-400" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent
+                              className="w-40 bg-gray-800 border-gray-700"
+                              align="end"
+                            >
+                              {!notification.isRead && (
+                                <DropdownMenuItem
+                                  className="text-gray-300 hover:bg-gray-700 hover:text-white cursor-pointer text-xs"
+                                  onClick={(e) => handleMarkAsRead(notification.id, e)}
+                                  disabled={loadingNotifications[notification.id]}
+                                >
+                                  <Check className="mr-2 h-3 w-3" />
+                                  Mark as read
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuItem
+                                className="text-red-400 hover:bg-red-900 hover:text-red-300 cursor-pointer text-xs"
+                                onClick={(e) => handleDeleteNotification(notification.id, e)}
+                                disabled={loadingNotifications[notification.id]}
+                              >
+                                <Trash2 className="mr-2 h-3 w-3" />
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </div>
                     ))
                   )}
                 </ScrollArea>

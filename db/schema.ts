@@ -13,6 +13,13 @@ export const users = pgTable("users", {
   email: varchar("email", { length: 255 }).notNull().unique(),
   hashedPassword: varchar("hashed_password", { length: 255 }).notNull(),
   role: varchar("role", { length: 20 }).notNull(), // 'learner' | 'mentor' | 'admin'
+  status: varchar("status", { length: 20 }).default("offline").notNull(),
+  suspendedAt: timestamp("suspended_at", { withTimezone: true }),
+  suspensionEndsAt: timestamp("suspension_ends_at", { withTimezone: true }),
+  suspensionReason: text("suspension_reason"),
+  blacklistedAt: timestamp("blacklisted_at", { withTimezone: true }),
+  blacklistReason: text("blacklist_reason"),
+  lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
   ...timestamps,
 })
 
@@ -123,22 +130,24 @@ export const bookingSessions = pgTable("booking_sessions", {
   totalCostCredits: integer("total_cost_credits").notNull(),
   escrowCredits: integer("escrow_credits").notNull(),
   sessionNotes: text("session_notes").notNull(),
-  status: varchar("status", { length: 20 }).default("pending"), 
-  videoRoomUrl: varchar("video_room_url", { length: 512 }),
-  videoRoomExternalId: varchar("video_room_external_id", { length: 255 }), 
-  videoRoomCreatedAt: timestamp("video_room_created_at", { withTimezone: true }),
-  videoStartedAt: timestamp("video_started_at", { withTimezone: true }),
-  videoEndedAt: timestamp("video_ended_at", { withTimezone: true }),
-  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(), 
-  mentorResponseAt: timestamp("mentor_response_at", { withTimezone: true }), // When mentor responded
-  mentorResponseMessage: text("mentor_response_message"), // Acceptance/rejection message
-  rejectionReason: text("rejection_reason"), // Specific rejection reason
+  status: varchar("status", { length: 20 }).default("pending"),
+  archived: boolean("archived").default(false),
+  agoraChannelName: varchar("agora_channel_name", { length: 255 }),
+  agoraChannelCreatedAt: timestamp("agora_channel_created_at", { withTimezone: true }),
+  agoraCallStartedAt: timestamp("agora_call_started_at", { withTimezone: true }),
+  agoraCallEndedAt: timestamp("agora_call_ended_at", { withTimezone: true }),
+  agoraRecordingId: varchar("agora_recording_id", { length: 255 }), // For cloud recording
+  agoraRecordingUrl: varchar("agora_recording_url", { length: 512 }), // Recording playback URL
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  mentorResponseAt: timestamp("mentor_response_at", { withTimezone: true }), 
+  mentorResponseMessage: text("mentor_response_message"), 
+  rejectionReason: text("rejection_reason"), 
   cancelledBy: varchar("cancelled_by", { length: 20 }), // learner, mentor, system, admin
   cancellationReason: text("cancellation_reason"),
   cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
-  refundAmount: integer("refund_amount").default(0), // Amount refunded to learner
+  refundAmount: integer("refund_amount").default(0),
   learnerRequestCount: integer("learner_request_count").default(1), // Track spam requests
-  ...timestamps
+  ...timestamps,
 })
 
 

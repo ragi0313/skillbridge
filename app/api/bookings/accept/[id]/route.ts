@@ -1,13 +1,13 @@
-import { NextRequest, NextResponse } from "next/server"
+import { type NextRequest, NextResponse } from "next/server"
 import { db } from "@/db"
-import { bookingSessions, mentors, learners, users, notifications, creditTransactions } from "@/db/schema"
-import { eq, and } from "drizzle-orm"
+import { bookingSessions, mentors, learners, users, notifications } from "@/db/schema"
+import { eq } from "drizzle-orm"
 import { getSession } from "@/lib/auth/getSession"
-import { VideoRoomService } from "@/lib/sessions/video-room"
+import { agoraService } from "@/lib/agora/AgoraService"
 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const sessionId = parseInt(params.id)
+    const sessionId = Number.parseInt(params.id)
     if (!sessionId || isNaN(sessionId)) {
       return NextResponse.json({ error: "Invalid session ID" }, { status: 400 })
     }
@@ -18,10 +18,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     }
 
     // Get mentor ID from user ID
-    const [mentor] = await db
-      .select({ id: mentors.id })
-      .from(mentors)
-      .where(eq(mentors.userId, session.id))
+    const [mentor] = await db.select({ id: mentors.id }).from(mentors).where(eq(mentors.userId, session.id))
 
     if (!mentor) {
       return NextResponse.json({ error: "Mentor profile not found" }, { status: 404 })
@@ -63,27 +60,21 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         throw new Error("This booking request has expired")
       }
 
-      // Create video room for the session
-      // const videoRoomService = VideoRoomService.getInstance()
-      // const videoRoom = await videoRoomService.createRoom(
-      //   sessionId.toString(),
-      //   booking.scheduledDate,
-      //   booking.durationMinutes
-      // )
+      // Create Agora room (channel)
+      const agoraRoom = await agoraService.createRoom(sessionId.toString())
 
-      // // Update booking status to confirmed
-      // await tx
-      //   .update(bookingSessions)
-      //   .set({
-      //     status: "confirmed",
-      //     mentorResponseAt: now,
-      //     mentorResponseMessage: "Session accepted by mentor",
-      //     videoRoomUrl: videoRoom.roomUrl,
-      //     videoRoomExternalId: videoRoom.externalRoomId,
-      //     videoRoomCreatedAt: now,
-      //     updatedAt: now,
-      //   })
-      //   .where(eq(bookingSessions.id, sessionId))
+      // Update booking status to confirmed
+      await tx
+        .update(bookingSessions)
+        .set({
+          status: "confirmed",
+          mentorResponseAt: now,
+          mentorResponseMessage: "Session accepted by mentor",
+          agoraChannelName: agoraRoom.channel,
+          agoraChannelCreatedAt: now,
+          updatedAt: now,
+        })
+        .where(eq(bookingSessions.id, sessionId))
 
       // Get learner details for notification
       const [learnerData] = await tx
@@ -112,17 +103,19 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       return {
         success: true,
         message: "Session accepted successfully",
-        // videoRoomUrl: videoRoom.roomUrl,
+        channelName: agoraRoom.channel,
+        appId: agoraRoom.appId,
+        sessionDetails: {
+          id: booking.id,
+          scheduledDate: booking.scheduledDate,
+          durationMinutes: booking.durationMinutes,
+        },
       }
     })
 
     return NextResponse.json(result)
-
   } catch (error: any) {
     console.error("Error accepting booking:", error)
-    return NextResponse.json(
-      { error: error.message || "Failed to accept booking" },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: error.message || "Failed to accept booking" }, { status: 500 })
   }
 }

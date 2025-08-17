@@ -1,12 +1,12 @@
-import { NextRequest, NextResponse } from "next/server"
+import { type NextRequest, NextResponse } from "next/server"
 import { db } from "@/db"
-import { bookingSessions, mentors, learners, users, notifications, creditTransactions } from "@/db/schema"
+import { bookingSessions, mentors, learners, notifications, creditTransactions } from "@/db/schema"
 import { eq } from "drizzle-orm"
 import { getSession } from "@/lib/auth/getSession"
 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const sessionId = parseInt(params.id)
+    const sessionId = Number.parseInt(params.id)
     if (!sessionId || isNaN(sessionId)) {
       return NextResponse.json({ error: "Invalid session ID" }, { status: 400 })
     }
@@ -17,20 +17,21 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     }
 
     const body = await request.json().catch(() => ({}))
-    const rejectionReason = body.reason || "Mentor declined the session"
+    const rejectionReason = body.reason || body.rejectionReason
+
+    if (!rejectionReason || rejectionReason.trim().length === 0) {
+      return NextResponse.json({ error: "Rejection reason is required" }, { status: 400 })
+    }
 
     // Get mentor ID from user ID
-    const [mentor] = await db
-      .select({ id: mentors.id })
-      .from(mentors)
-      .where(eq(mentors.userId, session.id))
+    const [mentor] = await db.select({ id: mentors.id }).from(mentors).where(eq(mentors.userId, session.id))
 
     if (!mentor) {
       return NextResponse.json({ error: "Mentor profile not found" }, { status: 404 })
     }
 
     const result = await db.transaction(async (tx) => {
-      // Get booking session details
+      // Get booking session details with learner info
       const [booking] = await tx
         .select({
           id: bookingSessions.id,
@@ -39,8 +40,11 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           status: bookingSessions.status,
           totalCostCredits: bookingSessions.totalCostCredits,
           escrowCredits: bookingSessions.escrowCredits,
+          learnerUserId: learners.userId,
+          learnerCreditsBalance: learners.creditsBalance,
         })
         .from(bookingSessions)
+        .innerJoin(learners, eq(bookingSessions.learnerId, learners.id))
         .where(eq(bookingSessions.id, sessionId))
 
       if (!booking) {
@@ -65,61 +69,49 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         .set({
           status: "rejected",
           mentorResponseAt: now,
-          mentorResponseMessage: rejectionReason,
+          mentorResponseMessage: `Session rejected: ${rejectionReason.trim()}`,
+          rejectionReason: rejectionReason.trim(),
           cancelledAt: now,
           cancelledBy: "mentor",
-          cancellationReason: rejectionReason,
+          cancellationReason: rejectionReason.trim(),
           refundAmount: booking.escrowCredits,
           updatedAt: now,
         })
         .where(eq(bookingSessions.id, sessionId))
 
-      // Refund credits to learner
-      const [learnerData] = await tx
-        .select({
-          userId: learners.userId,
-          creditsBalance: learners.creditsBalance,
-          firstName: users.firstName,
-          lastName: users.lastName,
+      // Refund credits to learner (full refund for rejection)
+      const newBalance = booking.learnerCreditsBalance + booking.escrowCredits
+      await tx
+        .update(learners)
+        .set({
+          creditsBalance: newBalance,
+          updatedAt: now,
         })
-        .from(learners)
-        .innerJoin(users, eq(learners.userId, users.id))
         .where(eq(learners.id, booking.learnerId))
 
-      if (learnerData) {
-        const newBalance = learnerData.creditsBalance + booking.escrowCredits
-        await tx
-          .update(learners)
-          .set({ 
-            creditsBalance: newBalance,
-            updatedAt: now 
-          })
-          .where(eq(learners.id, booking.learnerId))
+      // Record refund transaction
+      await tx.insert(creditTransactions).values({
+        userId: booking.learnerUserId,
+        type: "session_refund",
+        direction: "credit",
+        amount: booking.escrowCredits,
+        balanceBefore: booking.learnerCreditsBalance,
+        balanceAfter: newBalance,
+        relatedSessionId: sessionId,
+        description: `Full refund for rejected session: ${rejectionReason.trim()}`,
+        createdAt: now,
+      })
 
-        // Record refund transaction
-        await tx.insert(creditTransactions).values({
-          userId: learnerData.userId,
-          type: "session_refund",
-          direction: "credit",
-          amount: booking.escrowCredits,
-          balanceBefore: learnerData.creditsBalance,
-          balanceAfter: newBalance,
-          relatedSessionId: sessionId,
-          description: `Refund for rejected session: ${rejectionReason}`,
-          createdAt: now,
-        })
-
-        // Notify learner about rejection
-        await tx.insert(notifications).values({
-          userId: learnerData.userId,
-          type: "booking_rejected",
-          title: "Session Request Declined",
-          message: `Your session request was declined by the mentor. ${booking.escrowCredits} credits have been refunded to your account. Reason: ${rejectionReason}`,
-          relatedEntityType: "session",
-          relatedEntityId: sessionId,
-          createdAt: now,
-        })
-      }
+      // Notify learner about rejection
+      await tx.insert(notifications).values({
+        userId: booking.learnerUserId,
+        type: "booking_rejected",
+        title: "Session Request Declined",
+        message: `Your session request was declined by the mentor. ${booking.escrowCredits} credits have been refunded to your account. Reason: ${rejectionReason.trim()}`,
+        relatedEntityType: "session",
+        relatedEntityId: sessionId,
+        createdAt: now,
+      })
 
       return {
         success: true,
@@ -129,12 +121,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     })
 
     return NextResponse.json(result)
-
   } catch (error: any) {
     console.error("Error rejecting booking:", error)
-    return NextResponse.json(
-      { error: error.message || "Failed to reject booking" },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: error.message || "Failed to reject booking" }, { status: 500 })
   }
 }

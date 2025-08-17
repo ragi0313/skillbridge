@@ -66,6 +66,69 @@ export async function POST(req: Request) {
     }
 
     
+    if (user.status === "blacklisted") {
+      return NextResponse.json(
+        {
+          error: "Your account has been permanently restricted. Please contact support for more information.",
+          status: "blacklisted",
+        },
+        { status: 403 },
+      )
+    }
+
+    if (user.status === "suspended") {
+      const now = new Date()
+      const suspensionEnd = user.suspensionEndsAt
+
+      if (suspensionEnd && now < suspensionEnd) {
+        const endDate = suspensionEnd.toLocaleDateString("en-US", {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        })
+        return NextResponse.json(
+          {
+            error: `Your account is suspended until ${endDate}. Reason: ${user.suspensionReason || "Policy violation"}`,
+            status: "suspended",
+            suspensionEndsAt: suspensionEnd,
+          },
+          { status: 403 },
+        )
+      } else if (suspensionEnd && now >= suspensionEnd) {
+        await db
+          .update(users)
+          .set({
+            status: "online",
+            suspendedAt: null,
+            suspensionEndsAt: null,
+            suspensionReason: null,
+            lastLoginAt: now,
+            updatedAt: now,
+          })
+          .where(eq(users.id, user.id))
+      }
+    }
+
+    if (user.status !== "online") {
+      await db
+        .update(users)
+        .set({
+          status: "online",
+          lastLoginAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, user.id))
+    } else {
+      await db
+        .update(users)
+        .set({
+          lastLoginAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, user.id))
+    }
+
+    
     // Get profile picture URL based on user role
     let profilePictureUrl = null
     

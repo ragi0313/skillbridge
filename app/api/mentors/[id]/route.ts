@@ -18,7 +18,25 @@ export async function GET(
   }
 
   const mentorRow = await db
-    .select()
+    .select({
+      mentors: {
+        id: mentors.id,
+        userId: mentors.userId,
+        profilePictureUrl: mentors.profilePictureUrl,
+        country: mentors.country,
+        languagesSpoken: mentors.languagesSpoken,
+        professionalTitle: mentors.professionalTitle,
+        bio: mentors.bio,
+        yearsOfExperience: mentors.yearsOfExperience,
+        linkedInUrl: mentors.linkedInUrl,
+        socialLinks: mentors.socialLinks,
+      },
+      users: {
+        id: users.id,
+        firstName: users.firstName,
+        lastName: users.lastName,
+      }
+    })
     .from(mentors)
     .where(eq(mentors.id, mentorId))
     .innerJoin(users, eq(mentors.userId, users.id))
@@ -29,7 +47,10 @@ export async function GET(
   }
 
   const skills = await db
-    .select()
+    .select({
+      skillName: mentorSkills.skillName,
+      ratePerHour: mentorSkills.ratePerHour,
+    })
     .from(mentorSkills)
     .where(eq(mentorSkills.mentorId, mentorId))
 

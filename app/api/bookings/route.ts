@@ -3,6 +3,7 @@ import { bookingSessions, mentorAvailability, mentors, learners, mentorSkills, m
 import { and, eq, or } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { toZonedTime } from "date-fns-tz";
+import { withRateLimit } from "@/lib/middleware/rate-limit";
 
 const timeToMinutes = (timeStr: string): number => {
   if (!timeStr || typeof timeStr !== "string") return 0;
@@ -28,7 +29,7 @@ const timeRangesOverlap = (
   return start1 < end2 && start2 < end1;
 };
 
-export async function POST(req: NextRequest) {
+async function handleBooking(req: NextRequest) {
   try {
     const body = await req.json();
     console.log("Booking request body:", body);
@@ -95,8 +96,10 @@ export async function POST(req: NextRequest) {
         throw new Error("Cannot book sessions in the past.");
       }
 
-      // Check blocked dates (your existing logic)
-      const scheduledDateOnly = new Date(scheduledStart.toISOString().split('T')[0] + 'T00:00:00.000Z');
+      // Check blocked dates - use mentor's timezone for date comparison
+      const scheduledDateInMentorTz = toZonedTime(scheduledStart, mentorTimezone);
+      const scheduledDateOnly = new Date(scheduledDateInMentorTz.getFullYear(), scheduledDateInMentorTz.getMonth(), scheduledDateInMentorTz.getDate());
+      
       const blockedDate = await tx.query.mentorBlockedDates.findFirst({
         where: and(
           eq(mentorBlockedDates.mentorId, mentor.id),
@@ -238,3 +241,6 @@ export async function POST(req: NextRequest) {
     }, { status: 500 });
   }
 }
+
+// Apply booking rate limiting
+export const POST = withRateLimit('booking', handleBooking)

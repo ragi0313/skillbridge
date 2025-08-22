@@ -128,29 +128,29 @@
 
   .rdp-custom {
     --rdp-cell-size: 32px;
-    --rdp-accent-color: rgb(20 184 166);
-    --rdp-background-color: rgb(20 184 166);
-    --rdp-accent-color-dark: rgb(15 118 110);
-    --rdp-background-color-dark: rgb(15 118 110);
+    --rdp-accent-color: rgb(147 51 234);
+    --rdp-background-color: rgb(147 51 234);
+    --rdp-accent-color-dark: rgb(126 34 206);
+    --rdp-background-color-dark: rgb(126 34 206);
   }
 
   .rdp-custom .rdp-day_selected {
-    background-color: rgb(20 184 166);
+    background-color: rgb(147 51 234);
     color: white;
   }
 
   .rdp-custom .rdp-day_selected:hover {
-    background-color: rgb(15 118 110);
+    background-color: rgb(126 34 206);
   }
 
   .rdp-custom .rdp-day:hover {
-    background-color: rgb(240 253 250);
-    color: rgb(20 184 166);
+    background-color: rgb(250 245 255);
+    color: rgb(147 51 234);
   }
 
   .rdp-custom .rdp-day_today {
     font-weight: bold;
-    color: rgb(20 184 166);
+    color: rgb(147 51 234);
   }
 
   .rdp-custom .rdp-months {
@@ -162,4 +162,5 @@
     margin: 0;
   }
 }
+
 

@@ -1,0 +1,38 @@
+name: No-Show Check
+
+on:
+  schedule:
+    # Run every 15 minutes
+    - cron: '*/15 * * * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  check-no-shows:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Run no-show check
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        # Add other environment variables as needed
+      run: node -e "
+        import('./lib/sessions/session-management.js').then(async (module) => {
+          const result = await module.runNoShowCheck();
+          console.log('No-show check result:', result);
+          process.exit(0);
+        }).catch(err => {
+          console.error('Error:', err);
+          process.exit(1);
+        });
+      "

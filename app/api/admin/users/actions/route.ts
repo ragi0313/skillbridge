@@ -1,11 +1,12 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
+import { withRateLimit } from "@/lib/middleware/rate-limit"
 import { db } from "@/db"
 import { users } from "@/db/schema"
 import { eq } from "drizzle-orm"
 import { getSession } from "@/lib/auth/getSession"
 import { sendSuspensionEmail, sendBlacklistEmail } from "@/lib/email/userActionsMail"
 
-export async function POST(request: Request) {
+async function handleUserAction(request: NextRequest) {
   try {
     const session = await getSession()
 
@@ -123,3 +124,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
+
+// Apply admin rate limiting
+export const POST = withRateLimit('admin', handleUserAction)

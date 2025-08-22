@@ -3,10 +3,12 @@ import { db } from "@/db"
 import { bookingSessions, mentors, learners, notifications, creditTransactions } from "@/db/schema"
 import { eq } from "drizzle-orm"
 import { getSession } from "@/lib/auth/getSession"
+import { broadcastSessionUpdate } from "@/app/api/sse/session-updates/route"
 
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const sessionId = Number.parseInt(params.id)
+    const { id } = await params
+    const sessionId = Number.parseInt(id)
     if (!sessionId || isNaN(sessionId)) {
       return NextResponse.json({ error: "Invalid session ID" }, { status: 400 })
     }
@@ -118,6 +120,15 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         message: "Session rejected and credits refunded",
         refundAmount: booking.escrowCredits,
       }
+    })
+
+    // Broadcast real-time update to connected clients
+    await broadcastSessionUpdate(sessionId, 'status_change', {
+      previousStatus: 'pending',
+      newStatus: 'rejected',
+      mentorResponse: true,
+      rejectionReason: rejectionReason.trim(),
+      refundAmount: result.refundAmount
     })
 
     return NextResponse.json(result)

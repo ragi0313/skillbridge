@@ -1,7 +1,8 @@
 // app/api/login/route.ts
 
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { cookies } from "next/headers"
+import { withRateLimit } from "@/lib/middleware/rate-limit"
 import { eq } from "drizzle-orm"
 import { db } from "@/db"
 import { users, learners, mentors, admins } from "@/db/schema"
@@ -18,7 +19,7 @@ const withTimeout = <T>(promise: Promise<T>, ms: number): Promise<T> => {
   ])
 }
 
-export async function POST(req: Request) {
+async function handleLogin(req: NextRequest) {
   try {
     console.log('Login API: Request received')
     
@@ -227,3 +228,6 @@ export async function POST(req: Request) {
     )
   }
 }
+
+// Apply rate limiting to login endpoint
+export const POST = withRateLimit('auth', handleLogin)

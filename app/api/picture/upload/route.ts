@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { v2 as cloudinary } from "cloudinary"
+import { withRateLimit } from "@/lib/middleware/rate-limit"
 import fs from "fs"
 import path from "path"
 
@@ -30,7 +31,7 @@ async function streamToBuffer(readableStream: ReadableStream<Uint8Array>): Promi
   return Buffer.concat(chunks)
 }
 
-export async function POST(req: NextRequest) {
+async function handleUpload(req: NextRequest) {
   try {
     const formData = await req.formData()
     const file = formData.get("file") as File
@@ -62,3 +63,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Cloudinary upload failed" }, { status: 500 })
   }
 }
+
+// Apply upload rate limiting
+export const POST = withRateLimit('upload', handleUpload)

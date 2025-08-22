@@ -4,9 +4,10 @@ import { db } from "@/db"
 import { bookingSessions, mentors, learners, notifications, creditTransactions } from "@/db/schema"
 import { eq } from "drizzle-orm"
 
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const sessionId = Number.parseInt(params.id)
+    const { id } = await params
+    const sessionId = Number.parseInt(id)
     if (!sessionId || isNaN(sessionId)) {
       return NextResponse.json({ error: "Invalid session ID" }, { status: 400 })
     }

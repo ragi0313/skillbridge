@@ -1,10 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { withRateLimit } from "@/lib/middleware/rate-limit"
 import { db } from "@/db"
 import { users, passwordResetTokens } from "@/db/schema"
 import { eq, and, gt } from "drizzle-orm"
 import { sendPasswordResetEmail } from "@/lib/email/passwordResetMail"
 
-export async function POST(request: NextRequest) {
+async function handleForgotPassword(request: NextRequest) {
   try {
     const { email } = await request.json()
 
@@ -73,3 +74,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
+
+// Apply strict rate limiting to password reset
+export const POST = withRateLimit('passwordReset', handleForgotPassword)

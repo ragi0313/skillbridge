@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm"
 import { alias } from "drizzle-orm/pg-core"
 import { getSession } from "@/lib/auth/getSession"
 import VideoCall from "@/components/video/VideoCall"
+import WaitingRoom from "@/components/session/WaitingRoom"
 
 interface VideoSessionPageProps {
   params: {
@@ -13,7 +14,8 @@ interface VideoSessionPageProps {
 }
 
 export default async function VideoSessionPage({ params }: VideoSessionPageProps) {
-  const sessionId = Number.parseInt(params.id)
+  const { id } = await params
+  const sessionId = Number.parseInt(id)
 
   if (!sessionId || isNaN(sessionId)) {
     notFound()
@@ -38,6 +40,10 @@ export default async function VideoSessionPage({ params }: VideoSessionPageProps
       agoraChannelName: bookingSessions.agoraChannelName,
       mentorId: bookingSessions.mentorId,
       learnerId: bookingSessions.learnerId,
+      learnerJoinedAt: bookingSessions.learnerJoinedAt,
+      mentorJoinedAt: bookingSessions.mentorJoinedAt,
+      learnerLeftAt: bookingSessions.learnerLeftAt,
+      mentorLeftAt: bookingSessions.mentorLeftAt,
       learnerUser: {
         id: learnerUsers.id,
         firstName: learnerUsers.firstName,
@@ -68,8 +74,8 @@ export default async function VideoSessionPage({ params }: VideoSessionPageProps
     redirect("/dashboard")
   }
 
-  // Check if session is confirmed
-  if (bookingSession.status !== "confirmed") {
+  // Check if session is in a joinable state
+  if (!["confirmed", "ongoing"].includes(bookingSession.status)) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-6 text-center">
@@ -84,9 +90,19 @@ export default async function VideoSessionPage({ params }: VideoSessionPageProps
             </svg>
           </div>
           <h1 className="text-xl font-semibold text-gray-900 mb-2">Session Not Available</h1>
-          <p className="text-gray-600 mb-4">This session is not confirmed yet or has been cancelled.</p>
+          <p className="text-gray-600 mb-4">
+            {bookingSession.status === "rejected" && "This session was declined by the mentor."}
+            {bookingSession.status === "cancelled" && "This session has been cancelled."}
+            {bookingSession.status === "both_no_show" && "Neither participant attended this session."}
+            {bookingSession.status === "learner_no_show" && "This session was marked as no-show - learner didn't attend."}
+            {bookingSession.status === "mentor_no_show" && "This session was marked as no-show - mentor didn't attend."}
+            {bookingSession.status === "completed" && "This session has already been completed."}
+            {bookingSession.status === "pending" && "This session is still pending mentor approval."}
+            {!["rejected", "cancelled", "both_no_show", "learner_no_show", "mentor_no_show", "completed", "pending"].includes(bookingSession.status) && 
+             "This session is not available for joining."}
+          </p>
           <p className="text-sm text-gray-500">
-            Status: <span className="font-medium capitalize">{bookingSession.status}</span>
+            Status: <span className="font-medium capitalize">{bookingSession.status.replace('_', ' ')}</span>
           </p>
         </div>
       </div>
@@ -115,48 +131,52 @@ export default async function VideoSessionPage({ params }: VideoSessionPageProps
     )
   }
 
-  // Check if it's time to join (10 minutes before to 10 minutes after session end)
+  // Determine other participant early for use in waiting room
+  const otherParticipant = isLearner ? bookingSession.mentorUser : bookingSession.learnerUser
+
+  // Check if it's time to join (30 minutes before to 10 minutes after session end)
   const now = new Date()
   const sessionStart = new Date(bookingSession.scheduledDate)
   const sessionEnd = new Date(sessionStart.getTime() + bookingSession.durationMinutes * 60 * 1000)
-  const joinStart = new Date(sessionStart.getTime() - 10 * 60 * 1000) // 10 minutes before
+  const waitingRoomStart = new Date(sessionStart.getTime() - 30 * 60 * 1000) // 30 minutes before
   const joinEnd = new Date(sessionEnd.getTime() + 10 * 60 * 1000) // 10 minutes after
 
-  if (now < joinStart) {
-    const minutesUntil = Math.ceil((joinStart.getTime() - now.getTime()) / (1000 * 60))
+  // Determine current user's join/leave status for reconnection logic
+  const currentUserJoined = isLearner ? bookingSession.learnerJoinedAt : bookingSession.mentorJoinedAt
+  const currentUserLeft = isLearner ? bookingSession.learnerLeftAt : bookingSession.mentorLeftAt
+  
+  // User needs reconnection if they joined before but left (and session is still active)
+  const needsReconnection = currentUserJoined && currentUserLeft && bookingSession.status === "ongoing"
+  
+  // Show waiting room from 30 minutes before until 10 minutes after session end
+  // Show if: not yet joined, or needs reconnection
+  const showWaitingRoom = now >= waitingRoomStart && now <= joinEnd && 
+    bookingSession.status !== "ongoing" && 
+    (!currentUserJoined || needsReconnection)
+  
+  if (showWaitingRoom) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-6 text-center">
-          <div className="text-blue-500 mb-4">
-            <svg className="h-12 w-12 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
-          </div>
-          <h1 className="text-xl font-semibold text-gray-900 mb-2">Session Preparation Time</h1>
-          <p className="text-gray-600 mb-4">
-            You can join the call in <strong>{minutesUntil} minutes</strong>
-          </p>
-          <p className="text-sm text-gray-500 mb-4">
-            Session starts: {sessionStart.toLocaleDateString()} at {sessionStart.toLocaleTimeString()}
-          </p>
-          <div className="bg-blue-50 p-3 rounded-lg text-sm text-blue-700">
-            <p className="font-medium">Preparation Tips:</p>
-            <ul className="mt-2 space-y-1 text-left">
-              <li>• Test your camera and microphone</li>
-              <li>• Ensure stable internet connection</li>
-              <li>• Prepare any materials or questions</li>
-              <li>• Find a quiet, well-lit space</li>
-            </ul>
-          </div>
-        </div>
-      </div>
+      <WaitingRoom
+        sessionId={sessionId.toString()}
+        userRole={isLearner ? "learner" : "mentor"}
+        sessionData={{
+          scheduledDate: bookingSession.scheduledDate,
+          durationMinutes: bookingSession.durationMinutes,
+          status: bookingSession.status || "confirmed",
+          otherParticipant: {
+            firstName: otherParticipant?.firstName || "",
+            lastName: otherParticipant?.lastName || "",
+            profilePictureUrl: undefined, // Add this to the query if available
+            title: isLearner ? "Your Mentor" : "Your Learner"
+          },
+          isReconnection: needsReconnection,
+          previouslyJoinedAt: currentUserJoined,
+          previouslyLeftAt: currentUserLeft
+        }}
+      />
     )
   }
+
 
   if (now > joinEnd) {
     return (
@@ -182,28 +202,34 @@ export default async function VideoSessionPage({ params }: VideoSessionPageProps
     )
   }
 
-  const otherParticipant = isLearner ? bookingSession.mentorUser : bookingSession.learnerUser
-
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white border-b px-4 py-3">
+    <div className="min-h-screen bg-gray-900 text-white">
+      {/* Header with SkillBridge logo */}
+      <div className="bg-gray-800 border-b border-gray-700 px-6 py-4">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-semibold text-gray-900">
-              Video Session with {otherParticipant?.firstName} {otherParticipant?.lastName}
-            </h1>
-            <p className="text-sm text-gray-600">
-              {sessionStart.toLocaleDateString()} • {sessionStart.toLocaleTimeString()} -{" "}
-              {sessionEnd.toLocaleTimeString()}
-            </p>
+          <div className="flex items-center space-x-6">
+            <div className="flex items-center space-x-2">
+              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
+                <span className="text-white font-bold text-lg">S</span>
+              </div>
+              <span className="text-xl font-bold">SkillBridge</span>
+            </div>
+            <div className="hidden md:block">
+              <h1 className="text-lg font-semibold text-white">
+                Session with {otherParticipant?.firstName} {otherParticipant?.lastName}
+              </h1>
+              <p className="text-sm text-gray-300">
+                {sessionStart.toLocaleDateString()} • {sessionStart.toLocaleTimeString()} -{" "}
+                {sessionEnd.toLocaleTimeString()}
+              </p>
+            </div>
           </div>
-          <div className="text-sm text-gray-500">Session ID: {sessionId}</div>
+          <div className="text-sm text-gray-400">Session ID: {sessionId}</div>
         </div>
       </div>
 
-      {/* Video Call */}
-      <div className="p-4">
+      {/* Video Call - Full Screen */}
+      <div className="h-[calc(100vh-80px)]">
         <VideoCall
           sessionId={sessionId.toString()}
           userRole={isLearner ? "learner" : "mentor"}

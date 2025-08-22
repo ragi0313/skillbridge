@@ -2,13 +2,14 @@
 
 import Stripe from "stripe"
 import { NextRequest } from "next/server"
+import { withRateLimit } from "@/lib/middleware/rate-limit"
 import { creditPackages } from "@/lib/payments/creditPackages"
 import { cookies } from "next/headers"
 import { verify } from "jsonwebtoken"
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
 
-export async function POST(req: NextRequest) {
+async function handleCheckout(req: NextRequest) {
   const cookieStore = await cookies()
   const token = cookieStore.get("session_token")?.value
 
@@ -58,3 +59,6 @@ export async function POST(req: NextRequest) {
 
   return new Response(JSON.stringify({ url: session.url }), { status: 200 })
 }
+
+// Apply booking rate limiting to checkout
+export const POST = withRateLimit('booking', handleCheckout)

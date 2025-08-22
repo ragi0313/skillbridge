@@ -9,7 +9,11 @@
     "lint": "next lint",
     "db:push": "drizzle-kit push",
     "db:generate": "drizzle-kit generate",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "session:monitor": "node scripts/run-session-monitor.js",
+    "session:monitor:continuous": "node scripts/run-session-monitor.js --continuous",
+    "session:health": "node scripts/run-session-monitor.js && echo 'Health check completed'",
+    "session:check-no-shows": "node scripts/check-no-shows.js"
   },
   "dependencies": {
     "@calcom/embed-react": "^1.5.3",

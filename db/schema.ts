@@ -14,6 +14,7 @@ export const users = pgTable("users", {
   hashedPassword: varchar("hashed_password", { length: 255 }).notNull(),
   role: varchar("role", { length: 20 }).notNull(), // 'learner' | 'mentor' | 'admin'
   status: varchar("status", { length: 20 }).default("offline").notNull(),
+  stripeCustomerId: varchar("stripe_customer_id", { length: 255 }), // For handling refunds and payments
   suspendedAt: timestamp("suspended_at", { withTimezone: true }),
   suspensionEndsAt: timestamp("suspension_ends_at", { withTimezone: true }),
   suspensionReason: text("suspension_reason"),
@@ -130,12 +131,22 @@ export const bookingSessions = pgTable("booking_sessions", {
   totalCostCredits: integer("total_cost_credits").notNull(),
   escrowCredits: integer("escrow_credits").notNull(),
   sessionNotes: text("session_notes").notNull(),
-  status: varchar("status", { length: 20 }).default("pending"),
+  status: varchar("status", { length: 20 }).default("pending"), // pending, confirmed, ongoing, completed, cancelled, both_no_show, learner_no_show, mentor_no_show, rejected
   archived: boolean("archived").default(false),
   agoraChannelName: varchar("agora_channel_name", { length: 255 }),
   agoraChannelCreatedAt: timestamp("agora_channel_created_at", { withTimezone: true }),
   agoraCallStartedAt: timestamp("agora_call_started_at", { withTimezone: true }),
   agoraCallEndedAt: timestamp("agora_call_ended_at", { withTimezone: true }),
+  learnerJoinedAt: timestamp("learner_joined_at", { withTimezone: true }),
+  mentorJoinedAt: timestamp("mentor_joined_at", { withTimezone: true }),
+  learnerLeftAt: timestamp("learner_left_at", { withTimezone: true }),
+  mentorLeftAt: timestamp("mentor_left_at", { withTimezone: true }),
+  learnerConnectionDurationMs: integer("learner_connection_duration_ms").default(0),
+  mentorConnectionDurationMs: integer("mentor_connection_duration_ms").default(0),
+  noShowCheckedAt: timestamp("no_show_checked_at", { withTimezone: true }),
+  refundProcessedAt: timestamp("refund_processed_at", { withTimezone: true }),
+  refundAmount: integer("refund_amount").default(0),
+  penaltyAmount: integer("penalty_amount"),
   agoraRecordingId: varchar("agora_recording_id", { length: 255 }), // For cloud recording
   agoraRecordingUrl: varchar("agora_recording_url", { length: 512 }), // Recording playback URL
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
@@ -145,7 +156,6 @@ export const bookingSessions = pgTable("booking_sessions", {
   cancelledBy: varchar("cancelled_by", { length: 20 }), // learner, mentor, system, admin
   cancellationReason: text("cancellation_reason"),
   cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
-  refundAmount: integer("refund_amount").default(0),
   learnerRequestCount: integer("learner_request_count").default(1), // Track spam requests
   ...timestamps,
 })
@@ -293,3 +303,33 @@ export const passwordResetTokens = pgTable("password_reset_tokens", {
   isUsed: boolean("is_used").default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 })
+
+export const sessionReports = pgTable("session_reports", {
+  id: serial("id").primaryKey(),
+  sessionId: integer("session_id").notNull().references(() => bookingSessions.id, { onDelete: "cascade" }),
+  reportedBy: integer("reported_by").notNull().references(() => users.id),
+  reportedUser: integer("reported_user").notNull().references(() => users.id),
+  reportType: varchar("report_type", { length: 50 }).notNull(), // 'abuse', 'harassment', 'technical_misconduct', 'other'
+  reason: text("reason").notNull(),
+  description: text("description"),
+  evidenceUrl: varchar("evidence_url", { length: 512 }), // Screenshot/file evidence
+  status: varchar("status", { length: 20 }).default("pending"), // 'pending', 'investigating', 'resolved', 'dismissed'
+  adminNotes: text("admin_notes"),
+  reviewedBy: integer("reviewed_by").references(() => users.id),
+  reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  ...timestamps,
+})
+
+export const agoraTokens = pgTable("agora_tokens", {
+  id: serial("id").primaryKey(),
+  sessionId: integer("session_id").notNull().references(() => bookingSessions.id, { onDelete: "cascade" }),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  channelName: varchar("channel_name", { length: 255 }).notNull(),
+  token: text("token").notNull(),
+  role: varchar("role", { length: 20 }).notNull(), // 'host', 'participant'
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  isUsed: boolean("is_used").default(false),
+  usedAt: timestamp("used_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+})
+

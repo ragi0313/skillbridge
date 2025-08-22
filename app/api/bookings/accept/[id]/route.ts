@@ -4,10 +4,12 @@ import { bookingSessions, mentors, learners, users, notifications } from "@/db/s
 import { eq } from "drizzle-orm"
 import { getSession } from "@/lib/auth/getSession"
 import { agoraService } from "@/lib/agora/AgoraService"
+import { broadcastSessionUpdate } from "@/app/api/sse/session-updates/route"
 
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const sessionId = Number.parseInt(params.id)
+    const { id } = await params
+    const sessionId = Number.parseInt(id)
     if (!sessionId || isNaN(sessionId)) {
       return NextResponse.json({ error: "Invalid session ID" }, { status: 400 })
     }
@@ -111,6 +113,13 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
           durationMinutes: booking.durationMinutes,
         },
       }
+    })
+
+    // Broadcast real-time update to connected clients
+    await broadcastSessionUpdate(sessionId, 'status_change', {
+      previousStatus: 'pending',
+      newStatus: 'confirmed',
+      mentorResponse: true
     })
 
     return NextResponse.json(result)

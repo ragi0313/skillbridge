@@ -299,7 +299,25 @@ export class BookingLifecycleService {
   }
 
   /**
-   * Cancel a booking with comprehensive refund policy
+   * Check if a session can be cancelled based on 24-hour rule
+   */
+  private canCancelSession(scheduledDate: Date, userRole: 'learner' | 'mentor'): { canCancel: boolean; reason?: string } {
+    const now = new Date()
+    const hoursUntilSession = (scheduledDate.getTime() - now.getTime()) / (1000 * 60 * 60)
+    
+    // 24-hour restriction applies to both learners and mentors
+    if (hoursUntilSession < 24) {
+      return {
+        canCancel: false,
+        reason: `Cannot cancel sessions within 24 hours of start time. Session is scheduled for ${scheduledDate.toLocaleString()}.`
+      }
+    }
+    
+    return { canCancel: true }
+  }
+
+  /**
+   * Cancel a booking with comprehensive refund policy and 24-hour restriction
    */
   async cancelBooking(
     bookingId: number,
@@ -353,6 +371,12 @@ export class BookingLifecycleService {
 
         const now = new Date()
         const scheduledDateTime = booking.scheduledDate
+
+        // Check 24-hour cancellation restriction
+        const cancellationCheck = this.canCancelSession(scheduledDateTime, userRole)
+        if (!cancellationCheck.canCancel) {
+          throw new Error(cancellationCheck.reason)
+        }
 
         // Calculate refund policy
         const refundPolicy = this.calculateRefundPolicy(
@@ -660,6 +684,254 @@ export class BookingLifecycleService {
     } catch (error) {
       console.error("Error handling no-show:", error)
       return { success: false, error: error instanceof Error ? error.message : "Failed to process no-show" }
+    }
+  }
+
+  /**
+   * Update session status to 'upcoming' when it's within join window (30 minutes before)
+   */
+  async updateToUpcoming(sessionId: number): Promise<{ success: boolean; error?: string }> {
+    try {
+      const now = new Date()
+      const result = await db.transaction(async (tx) => {
+        const [session] = await tx
+          .select({
+            id: bookingSessions.id,
+            status: bookingSessions.status,
+            scheduledDate: bookingSessions.scheduledDate,
+          })
+          .from(bookingSessions)
+          .where(eq(bookingSessions.id, sessionId))
+
+        if (!session || session.status !== 'confirmed') {
+          throw new Error("Session not found or not in confirmed status")
+        }
+
+        const joinWindowStart = new Date(session.scheduledDate.getTime() - 30 * 60 * 1000) // 30 minutes before
+
+        if (now >= joinWindowStart) {
+          await tx
+            .update(bookingSessions)
+            .set({
+              status: "upcoming",
+              updatedAt: now,
+            })
+            .where(eq(bookingSessions.id, sessionId))
+        }
+
+        return { success: true }
+      })
+
+      return result
+    } catch (error) {
+      console.error("Error updating session to upcoming:", error)
+      return { success: false, error: error instanceof Error ? error.message : "Failed to update session status" }
+    }
+  }
+
+  /**
+   * Start a video session and update status to 'in_progress'
+   */
+  async startVideoSession(sessionId: number, channelName: string): Promise<{ success: boolean; error?: string }> {
+    try {
+      const now = new Date()
+      const result = await db.transaction(async (tx) => {
+        const [session] = await tx
+          .select({
+            id: bookingSessions.id,
+            status: bookingSessions.status,
+            scheduledDate: bookingSessions.scheduledDate,
+          })
+          .from(bookingSessions)
+          .where(eq(bookingSessions.id, sessionId))
+
+        if (!session) {
+          throw new Error("Session not found")
+        }
+
+        if (!['confirmed', 'upcoming'].includes(session.status || '')) {
+          throw new Error(`Cannot start session with status: ${session.status}`)
+        }
+
+        await tx
+          .update(bookingSessions)
+          .set({
+            status: "ongoing",
+            agoraChannelName: channelName,
+            agoraCallStartedAt: now,
+            updatedAt: now,
+          })
+          .where(eq(bookingSessions.id, sessionId))
+
+        return { success: true }
+      })
+
+      return result
+    } catch (error) {
+      console.error("Error starting video session:", error)
+      return { success: false, error: error instanceof Error ? error.message : "Failed to start video session" }
+    }
+  }
+
+  /**
+   * End a video session and complete it
+   */
+  async endVideoSession(
+    sessionId: number,
+    endType: 'completed' | 'technical_issues' | 'no_show_learner' | 'no_show_mentor'
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      const now = new Date()
+      const result = await db.transaction(async (tx) => {
+        const [session] = await tx
+          .select({
+            id: bookingSessions.id,
+            status: bookingSessions.status,
+            learnerId: bookingSessions.learnerId,
+            mentorId: bookingSessions.mentorId,
+            totalCostCredits: bookingSessions.totalCostCredits,
+            learnerJoinedAt: bookingSessions.learnerJoinedAt,
+            mentorJoinedAt: bookingSessions.mentorJoinedAt,
+            learnerLeftAt: bookingSessions.learnerLeftAt,
+            mentorLeftAt: bookingSessions.mentorLeftAt,
+            scheduledDate: bookingSessions.scheduledDate,
+            durationMinutes: bookingSessions.durationMinutes,
+          })
+          .from(bookingSessions)
+          .where(eq(bookingSessions.id, sessionId))
+
+        if (!session || !['ongoing', 'confirmed'].includes(session.status || '')) {
+          throw new Error("Session not found or not in valid state for completion")
+        }
+
+        // For normal completion, both participants must have joined
+        if (endType === 'completed' && (!session.learnerJoinedAt || !session.mentorJoinedAt)) {
+          throw new Error("Cannot complete session - both participants must have joined the video call")
+        }
+
+        // For normal completion, check if participants stayed for most of the session
+        if (endType === 'completed') {
+          const sessionEndTime = new Date(session.scheduledDate.getTime() + session.durationMinutes * 60 * 1000)
+          const fiveMinutesBeforeEnd = new Date(sessionEndTime.getTime() - 5 * 60 * 1000)
+          
+          const learnerLeftEarly = session.learnerLeftAt && session.learnerLeftAt < fiveMinutesBeforeEnd
+          const mentorLeftEarly = session.mentorLeftAt && session.mentorLeftAt < fiveMinutesBeforeEnd
+          
+          if (learnerLeftEarly || mentorLeftEarly) {
+            const earlyLeavers = []
+            if (learnerLeftEarly) earlyLeavers.push('learner')
+            if (mentorLeftEarly) earlyLeavers.push('mentor')
+            
+            throw new Error(`Cannot complete session - ${earlyLeavers.join(' and ')} left more than 5 minutes before scheduled end time`)
+          }
+        }
+
+        const mentorEarnings = Math.floor(session.totalCostCredits * (100 - BookingLifecycleService.PLATFORM_FEE_PERCENTAGE) / 100)
+
+        if (endType === 'completed') {
+          // Normal completion - mentor gets paid
+          await tx
+            .update(bookingSessions)
+            .set({
+              status: "completed",
+              agoraCallEndedAt: now,
+              updatedAt: now,
+            })
+            .where(eq(bookingSessions.id, sessionId))
+
+          // Pay mentor
+          const [mentorData] = await tx
+            .select({ creditsBalance: mentors.creditsBalance, userId: mentors.userId })
+            .from(mentors)
+            .where(eq(mentors.id, session.mentorId))
+
+          if (mentorData) {
+            await tx
+              .update(mentors)
+              .set({ 
+                creditsBalance: mentorData.creditsBalance + mentorEarnings,
+                updatedAt: now 
+              })
+              .where(eq(mentors.id, session.mentorId))
+
+            await tx.insert(mentorPayouts).values({
+              mentorId: session.mentorId,
+              sessionId: sessionId,
+              earnedCredits: mentorEarnings,
+              platformFeeCredits: session.totalCostCredits - mentorEarnings,
+              feePercentage: BookingLifecycleService.PLATFORM_FEE_PERCENTAGE,
+              status: "released",
+              releasedAt: now,
+              createdAt: now,
+            })
+
+            await tx.insert(creditTransactions).values({
+              userId: mentorData.userId,
+              type: "mentor_payout",
+              direction: "credit",
+              amount: mentorEarnings,
+              balanceBefore: mentorData.creditsBalance,
+              balanceAfter: mentorData.creditsBalance + mentorEarnings,
+              relatedSessionId: sessionId,
+              description: "Session completion payout",
+              createdAt: now,
+            })
+          }
+
+        } else if (endType === 'technical_issues') {
+          // Technical issues - full refund to learner
+          await tx
+            .update(bookingSessions)
+            .set({
+              status: "technical_issues",
+              agoraCallEndedAt: now,
+              cancellationReason: "Session ended due to technical issues",
+              refundAmount: session.totalCostCredits,
+              updatedAt: now,
+            })
+            .where(eq(bookingSessions.id, sessionId))
+
+          // Refund learner
+          const [learnerData] = await tx
+            .select({ creditsBalance: learners.creditsBalance, userId: learners.userId })
+            .from(learners)
+            .where(eq(learners.id, session.learnerId))
+
+          if (learnerData) {
+            await tx
+              .update(learners)
+              .set({ 
+                creditsBalance: learnerData.creditsBalance + session.totalCostCredits,
+                updatedAt: now 
+              })
+              .where(eq(learners.id, session.learnerId))
+
+            await tx.insert(creditTransactions).values({
+              userId: learnerData.userId,
+              type: "session_refund",
+              direction: "credit",
+              amount: session.totalCostCredits,
+              balanceBefore: learnerData.creditsBalance,
+              balanceAfter: learnerData.creditsBalance + session.totalCostCredits,
+              relatedSessionId: sessionId,
+              description: "Refund for technical issues",
+              createdAt: now,
+            })
+          }
+
+        } else if (endType === 'no_show_learner') {
+          return await this.handleNoShow(sessionId, 'learner', session.mentorId)
+        } else if (endType === 'no_show_mentor') {
+          return await this.handleNoShow(sessionId, 'mentor', session.learnerId)
+        }
+
+        return { success: true }
+      })
+
+      return result
+    } catch (error) {
+      console.error("Error ending video session:", error)
+      return { success: false, error: error instanceof Error ? error.message : "Failed to end video session" }
     }
   }
 }

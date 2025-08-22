@@ -55,6 +55,12 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(url)
   }
 
+  // Prevent mentors from accessing find-mentors page
+  if (pathname === "/find-mentors" && role === "mentor") {
+    url.pathname = "/mentor/dashboard"
+    return NextResponse.redirect(url)
+  }
+
   if (
     (pathname.startsWith("/learner") && role !== "learner") ||
     (pathname.startsWith("/mentor") && role !== "mentor") ||
@@ -76,5 +82,6 @@ export const config = {
     "/learner/:path*",
     "/mentor/:path*",
     "/admin/:path*",
+    "/find-mentors",
   ],
 }

@@ -1,5 +1,6 @@
 // app/api/register/route.ts
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
+import { withRateLimit } from "@/lib/middleware/rate-limit"
 import { db } from "@/db"
 import { pendingLearners } from "@/db/schema"
 import { hash } from "bcryptjs"
@@ -7,7 +8,7 @@ import { nanoid } from "nanoid"
 import { sendVerificationEmail } from "@/lib/email/activationMail"
 
 
-export async function POST(req: Request) {
+async function handleRegisterLearner(req: NextRequest) {
   const body = await req.json()
 
   const {
@@ -73,3 +74,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Registration failed" }, { status: 500 })
   }
 }
+
+// Apply rate limiting to learner registration
+export const POST = withRateLimit('auth', handleRegisterLearner)

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { Toaster } from "sonner"
+import { Toaster } from "@/components/ui/toaster"
 import "./globals.css";
 
 const geistSans = Geist({
@@ -29,7 +29,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-gradient-to-br from-blue-100 via-white to-purple-100`}
       >
         {children}
-        <Toaster position="top-center" />
+        {/* <Toaster /> Temporarily disabled due to React child error */}
       </body>
     </html>
   );

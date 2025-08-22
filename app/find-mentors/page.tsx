@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useSearchParams } from "next/navigation"
+import { useSearchParams, useRouter } from "next/navigation"
 import { HeroSection } from "@/components/find-mentors/HeroSection"
 import { FilterBar } from "@/components/find-mentors/FilterBar"
 import { MentorList } from "@/components/find-mentors/MentorList"
@@ -18,11 +18,13 @@ interface CategoryWithCount {
 
 export default function FindMentorsPage() {
   const searchParams = useSearchParams()
+  const router = useRouter()
   const initialSearchQuery = searchParams.get("search") || ""
   const [mentors, setMentors] = useState<Mentor[]>([])
   const [filteredMentors, setFilteredMentors] = useState<Mentor[]>([])
   const [categories, setCategories] = useState<CategoryWithCount[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true)
   const [searchQuery, setSearchQuery] = useState(initialSearchQuery)
   const [selectedSkills, setSelectedSkills] = useState<string[]>([])
   const [selectedLanguages, setSelectedLanguages] = useState<string[]>([])
@@ -36,9 +38,35 @@ export default function FindMentorsPage() {
 
   const MENTORS_PER_PAGE = 8
 
+  // Check authentication and redirect mentors to their dashboard
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const response = await fetch('/api/auth/session')
+        if (response.ok) {
+          const sessionData = await response.json()
+          if (sessionData?.user?.role === 'mentor') {
+            // Redirect mentors to their dashboard
+            router.replace('/mentor/dashboard')
+            return
+          }
+        }
+      } catch (error) {
+        console.error('Error checking authentication:', error)
+      } finally {
+        setIsCheckingAuth(false)
+      }
+    }
+    
+    checkAuth()
+  }, [router])
+
   // Fetch mentors from API with enhanced search and category support
   useEffect(() => {
     const fetchMentors = async () => {
+      // Don't fetch mentors while checking auth
+      if (isCheckingAuth) return
+      
       setIsLoading(true)
       try {
         const params = new URLSearchParams()
@@ -78,11 +106,14 @@ export default function FindMentorsPage() {
       }
     }
     fetchMentors()
-  }, [searchQuery, selectedCategories]) // Re-fetch when search or categories change
+  }, [searchQuery, selectedCategories, isCheckingAuth]) // Re-fetch when search or categories change
 
   // Fetch categories from API
   useEffect(() => {
     const fetchCategories = async () => {
+      // Don't fetch categories while checking auth
+      if (isCheckingAuth) return
+      
       try {
         const response = await fetch("/api/find-mentor/categories")
         if (response.ok) {
@@ -97,7 +128,7 @@ export default function FindMentorsPage() {
       }
     }
     fetchCategories()
-  }, [])
+  }, [isCheckingAuth])
 
   // Client-side filtering for remaining filters (skills, languages, countries, etc.)
   useEffect(() => {
@@ -220,6 +251,18 @@ export default function FindMentorsPage() {
       selectedCategories.includes(categoryId)
         ? selectedCategories.filter((id) => id !== categoryId)
         : [...selectedCategories, categoryId],
+    )
+  }
+
+  // Show loading state while checking authentication
+  if (isCheckingAuth) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-purple-50">
+        <UnifiedHeader />
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <div className="animate-pulse text-lg text-gray-600">Loading...</div>
+        </div>
+      </div>
     )
   }
 

@@ -13,7 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { CreditCard, User, Settings, LogOut, Bell, Menu, X, MoreVertical, Check, Trash2 } from "lucide-react"
+import { CreditCard, User, Settings, LogOut, Bell, Menu, X, MoreVertical, Check, Trash2, CheckCheck, Trash } from "lucide-react"
 import Logo from "../ui/logo"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { toast } from "sonner"
@@ -217,6 +217,50 @@ export function LearnerHeader() {
       }
   }
 
+  const handleMarkAllAsRead = async () => {
+    try {
+      const res = await fetch("/api/notifications/bulk", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "markAllAsRead" }),
+      })
+
+      if (!res.ok) {
+        const errorData = await safeJsonParse(res)
+        throw new Error(errorData.error || "Failed to mark all notifications as read")
+      }
+
+      setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })))
+      toast.success("All notifications marked as read")
+    } catch (err: any) {
+      toast.error("Error marking all notifications as read", {
+        description: err.message,
+      })
+    }
+  }
+
+  const handleDeleteAllNotifications = async () => {
+    try {
+      const res = await fetch("/api/notifications/bulk", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "deleteAll" }),
+      })
+
+      if (!res.ok) {
+        const errorData = await safeJsonParse(res)
+        throw new Error(errorData.error || "Failed to delete all notifications")
+      }
+
+      setNotifications([])
+      toast.success("All notifications deleted")
+    } catch (err: any) {
+      toast.error("Error deleting all notifications", {
+        description: err.message,
+      })
+    }
+  }
+
   const toggleMenu = () => {
     setIsMenuOpen(!isMenuOpen)
   }
@@ -302,6 +346,35 @@ export function LearnerHeader() {
                   </p>
                 </div>
                 <DropdownMenuSeparator className="bg-gray-700" />
+                
+                {/* Bulk Actions */}
+                {notifications.length > 0 && (
+                  <>
+                    <div className="flex gap-1 p-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleMarkAllAsRead}
+                        className="flex-1 h-8 text-xs text-gray-300 hover:bg-gray-700 hover:text-white"
+                        disabled={unreadNotificationsCount === 0}
+                      >
+                        <CheckCheck className="h-3 w-3 mr-1" />
+                        Mark All Read
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleDeleteAllNotifications}
+                        className="flex-1 h-8 text-xs text-red-400 hover:bg-red-900 hover:text-red-300"
+                      >
+                        <Trash className="h-3 w-3 mr-1" />
+                        Delete All
+                      </Button>
+                    </div>
+                    <DropdownMenuSeparator className="bg-gray-700" />
+                  </>
+                )}
+                
                 <ScrollArea className="h-60">
                   {notifications.length === 0 ? (
                     <p className="p-4 text-center text-gray-400 text-sm">No notifications yet.</p>

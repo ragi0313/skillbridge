@@ -305,14 +305,15 @@ export class AutoSessionMonitor {
           scheduledDate: bookingSessions.scheduledDate,
           learnerJoinedAt: bookingSessions.learnerJoinedAt,
           mentorJoinedAt: bookingSessions.mentorJoinedAt,
+          noShowCheckedAt: bookingSessions.noShowCheckedAt,
         })
         .from(bookingSessions)
         .where(
           and(
             eq(bookingSessions.status, "upcoming"),
-            // Past scheduled time + 20 minute grace period
+            // Past scheduled time + 15 minute grace period (consistent with no-show detection)
             lt(
-              sql`${bookingSessions.scheduledDate} + INTERVAL '20 minutes'`,
+              sql`${bookingSessions.scheduledDate} + INTERVAL '15 minutes'`,
               now
             )
           )
@@ -321,7 +322,6 @@ export class AutoSessionMonitor {
       for (const session of stuckSessions) {
         try {
           // If either party joined, the session should have been marked as ongoing
-          // If neither joined, it should be processed as a no-show
           if (session.learnerJoinedAt || session.mentorJoinedAt) {
             // Someone joined but status wasn't updated - mark as ongoing
             await db
@@ -333,19 +333,20 @@ export class AutoSessionMonitor {
               })
               .where(eq(bookingSessions.id, session.id))
 
-            console.log(`   🚀 Updated stuck session ${session.id} to 'ongoing'`)
+            console.log(`   🚀 Updated stuck session ${session.id} to 'ongoing' (someone joined)`)
           } else {
-            // Neither joined - reset to confirmed for proper no-show detection
-            // But mark it so it doesn't get stuck in upcoming again
-            await db
+            // Neither joined - this is a no-show case that needs immediate processing
+            // Mark as confirmed temporarily so no-show detection can process it
+            // This ensures sessions stuck in upcoming get processed as no-shows
+            await tx
               .update(bookingSessions)
               .set({
-                status: "confirmed",
+                status: "confirmed", // Reset to confirmed so no-show detection picks it up
                 updatedAt: now,
               })
               .where(eq(bookingSessions.id, session.id))
-
-            console.log(`   🔄 Reset stuck session ${session.id} to 'confirmed' for no-show processing`)
+            
+            console.log(`   🔄 Reset stuck session ${session.id} from upcoming to confirmed for no-show detection`)
           }
 
           updated++

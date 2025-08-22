@@ -53,7 +53,7 @@ export function SessionsClient({ sessions }: SessionsClientProps) {
   const completedSessions = sessions.filter(s => s.status === "completed")
   const cancelledSessions = sessions.filter(s => ["cancelled"].includes(s.status || ""))
   const rejectedSessions = sessions.filter(s => s.status === "rejected")
-  const noShowSessions = sessions.filter(s => ["no_show"].includes(s.status || ""))
+  const noShowSessions = sessions.filter(s => ["both_no_show", "learner_no_show", "mentor_no_show"].includes(s.status || ""))
   const technicalIssuesSessions = sessions.filter(s => s.status === "technical_issues")
 
   // Filter and search logic
@@ -134,7 +134,9 @@ export function SessionsClient({ sessions }: SessionsClientProps) {
         return "bg-gray-100 text-gray-800"
       case "rejected":
         return "bg-red-100 text-red-800"
-      case "no_show":
+      case "both_no_show":
+      case "learner_no_show":
+      case "mentor_no_show":
         return "bg-orange-100 text-orange-800"
       case "technical_issues":
         return "bg-purple-100 text-purple-800"
@@ -157,8 +159,12 @@ export function SessionsClient({ sessions }: SessionsClientProps) {
         return "Cancelled"
       case "rejected":
         return "Declined"
-      case "no_show":
-        return "No Show"
+      case "both_no_show":
+        return "Both No Show"
+      case "learner_no_show":
+        return "Learner No Show"
+      case "mentor_no_show":
+        return "Mentor No Show"
       case "technical_issues":
         return "Technical Issues"
       default:

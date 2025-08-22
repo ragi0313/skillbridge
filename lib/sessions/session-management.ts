@@ -39,10 +39,49 @@ export class SessionManagementService {
       const joinField = userRole === 'learner' ? 'learnerJoinedAt' : 'mentorJoinedAt'
       
       await db.transaction(async (tx) => {
+        // First, update the join timestamp
         await tx
           .update(bookingSessions)
           .set({ [joinField]: now, updatedAt: now })
           .where(eq(bookingSessions.id, sessionId))
+
+        // Then check if both users have now joined and transition to ongoing if needed
+        const [session] = await tx
+          .select({
+            id: bookingSessions.id,
+            status: bookingSessions.status,
+            learnerJoinedAt: bookingSessions.learnerJoinedAt,
+            mentorJoinedAt: bookingSessions.mentorJoinedAt,
+            scheduledDate: bookingSessions.scheduledDate,
+          })
+          .from(bookingSessions)
+          .where(eq(bookingSessions.id, sessionId))
+
+        if (session) {
+          // Check if both users have joined and session should be ongoing
+          const learnerJoined = userRole === 'learner' ? true : !!session.learnerJoinedAt
+          const mentorJoined = userRole === 'mentor' ? true : !!session.mentorJoinedAt
+          
+          if (learnerJoined && mentorJoined && 
+              (session.status === 'confirmed' || session.status === 'upcoming') &&
+              session.scheduledDate <= now) {
+            
+            const agoraCallStartedAt = userRole === 'learner' ? now : 
+                                     userRole === 'mentor' ? now :
+                                     new Date(Math.max(session.learnerJoinedAt?.getTime() || 0, session.mentorJoinedAt?.getTime() || 0))
+
+            await tx
+              .update(bookingSessions)
+              .set({
+                status: "ongoing",
+                agoraCallStartedAt,
+                updatedAt: now,
+              })
+              .where(eq(bookingSessions.id, sessionId))
+
+            console.log(`Auto-transitioned session ${sessionId} to ongoing status (both users joined)`)
+          }
+        }
       })
 
       return { success: true }
@@ -106,7 +145,7 @@ export class SessionManagementService {
   }
 
   /**
-   * Transition confirmed sessions to ongoing when scheduled time arrives
+   * Transition sessions to ongoing when both users have joined
    */
   async transitionScheduledSessions(): Promise<{ processed: number; errors: string[] }> {
     const now = new Date()
@@ -114,43 +153,49 @@ export class SessionManagementService {
     let processed = 0
 
     try {
-      // Find sessions that should transition to ongoing (scheduled time has arrived)
+      // Find sessions where both users have joined but status hasn't been updated to ongoing
       const sessionsToTransition = await db
         .select({
           id: bookingSessions.id,
           status: bookingSessions.status,
           scheduledDate: bookingSessions.scheduledDate,
+          learnerJoinedAt: bookingSessions.learnerJoinedAt,
+          mentorJoinedAt: bookingSessions.mentorJoinedAt,
         })
         .from(bookingSessions)
         .where(
           and(
-            eq(bookingSessions.status, "confirmed"),
-            // Scheduled time has arrived (allow 1 minute buffer for system delays)
-            lt(
-              sql`${bookingSessions.scheduledDate} - INTERVAL '1 minute'`,
-              now
+            // Sessions that are confirmed or upcoming
+            or(
+              eq(bookingSessions.status, "confirmed"),
+              eq(bookingSessions.status, "upcoming")
             ),
-            // But not more than the grace period has passed
-            gte(
-              sql`${bookingSessions.scheduledDate} + INTERVAL '15 minutes'`,
-              now
-            )
+            // Both users have joined
+            sql`${bookingSessions.learnerJoinedAt} IS NOT NULL`,
+            sql`${bookingSessions.mentorJoinedAt} IS NOT NULL`,
+            // Session time has arrived (not future sessions)
+            lt(bookingSessions.scheduledDate, now)
           )
         )
 
-      console.log(`Found ${sessionsToTransition.length} sessions to transition to ongoing`)
+      console.log(`Found ${sessionsToTransition.length} sessions to transition to ongoing (both users joined)`)
 
       for (const session of sessionsToTransition) {
         try {
+          const agoraCallStartedAt = session.learnerJoinedAt && session.mentorJoinedAt 
+            ? new Date(Math.max(session.learnerJoinedAt.getTime(), session.mentorJoinedAt.getTime()))
+            : now
+
           await db
             .update(bookingSessions)
             .set({
               status: "ongoing",
+              agoraCallStartedAt,
               updatedAt: now,
             })
             .where(eq(bookingSessions.id, session.id))
 
-          console.log(`Transitioned session ${session.id} to ongoing status`)
+          console.log(`Transitioned session ${session.id} to ongoing status (both users joined)`)
           processed++
         } catch (error) {
           console.error(`Error transitioning session ${session.id}:`, error)
@@ -176,7 +221,8 @@ export class SessionManagementService {
 
     try {
       // Find sessions where scheduled time has passed by at least 15 minutes grace period and no-show hasn't been checked
-      // Sessions should be in 'confirmed' status and past their scheduled time + 15 minute grace period
+      // Check BOTH confirmed and upcoming sessions to catch all cases
+      // Also include sessions that might be stuck in other statuses but need no-show detection
       
       const sessionsToCheck = await db
         .select({
@@ -196,31 +242,19 @@ export class SessionManagementService {
         .from(bookingSessions)
         .where(
           and(
-            // Only check confirmed sessions that haven't transitioned to ongoing
-            eq(bookingSessions.status, "confirmed"),
+            // Check confirmed, upcoming sessions that haven't transitioned to ongoing
+            // These are sessions that should have started but neither/one party joined
+            or(
+              eq(bookingSessions.status, "confirmed"),
+              eq(bookingSessions.status, "upcoming")
+            ),
             // Session scheduled time + 15 minutes grace period has passed
             lt(
               sql`${bookingSessions.scheduledDate} + INTERVAL '15 minutes'`,
               now
             ),
-            // Haven't checked for no-show yet
-            sql`${bookingSessions.noShowCheckedAt} IS NULL`,
-            // Additional safety: only process if session hasn't been joined recently
-            // This prevents race conditions with users joining right as no-show check runs
-            or(
-              sql`${bookingSessions.learnerJoinedAt} IS NULL`,
-              sql`${bookingSessions.mentorJoinedAt} IS NULL`,
-              // If both joined, ensure it's been at least 5 minutes since last join
-              // to allow for session transition to 'ongoing'
-              and(
-                sql`${bookingSessions.learnerJoinedAt} IS NOT NULL`,
-                sql`${bookingSessions.mentorJoinedAt} IS NOT NULL`,
-                lt(
-                  sql`GREATEST(${bookingSessions.learnerJoinedAt}, ${bookingSessions.mentorJoinedAt}) + INTERVAL '5 minutes'`,
-                  now
-                )
-              )
-            )
+            // Haven't checked for no-show yet (prevent double processing)
+            sql`${bookingSessions.noShowCheckedAt} IS NULL`
           )
         )
 
@@ -268,29 +302,40 @@ export class SessionManagementService {
     let mentorPayout = 0
     const platformFeePercentage = 20
 
-    console.log(`Processing no-show for session ${session.id}: learnerJoined=${learnerJoined}, mentorJoined=${mentorJoined}`)
+    console.log(`Processing no-show for session ${session.id}: learnerJoined=${learnerJoined}, mentorJoined=${mentorJoined}, status=${session.status}`)
 
     if (!learnerJoined && !mentorJoined) {
       // Both no-show - full refund to learner
       newStatus = "both_no_show"
       refundAmount = session.totalCostCredits
-      console.log(`Both parties no-show for session ${session.id}`)
-    } else if (!learnerJoined) {
+      console.log(`🚫 Both parties no-show for session ${session.id} - refunding ${refundAmount} credits to learner`)
+    } else if (!learnerJoined && mentorJoined) {
       // Learner no-show - mentor gets paid
       newStatus = "learner_no_show"
       mentorPayout = Math.floor(session.totalCostCredits * (100 - platformFeePercentage) / 100)
-      console.log(`Learner no-show for session ${session.id}, mentor gets ${mentorPayout} credits`)
-    } else if (!mentorJoined) {
+      console.log(`👨‍🎓 Learner no-show for session ${session.id} - mentor gets ${mentorPayout} credits`)
+    } else if (learnerJoined && !mentorJoined) {
       // Mentor no-show - learner gets refund + bonus
       newStatus = "mentor_no_show"
       const bonusCredits = Math.floor(session.totalCostCredits * SessionManagementService.BONUS_PERCENTAGE / 100)
       refundAmount = session.totalCostCredits + bonusCredits
-      console.log(`Mentor no-show for session ${session.id}, learner gets ${refundAmount} credits (including ${bonusCredits} bonus)`)
-    } else {
-      // Both joined - this is wrong! Don't auto-complete sessions that both parties joined!
-      // The session should have transitioned to 'ongoing' and will be handled by the auto-completion logic later
-      // Skip this session - it shouldn't be processed as a no-show
-      console.log(`Session ${session.id} has both parties joined - skipping no-show processing (should be 'ongoing')`)
+      console.log(`👨‍🏫 Mentor no-show for session ${session.id} - learner gets ${refundAmount} credits (including ${bonusCredits} bonus)`)
+    } else if (learnerJoined && mentorJoined) {
+      // Both joined - this session should have transitioned to 'ongoing' already
+      // This indicates a race condition or system issue - transition it now
+      console.log(`🚀 Session ${session.id} has both parties joined but wasn't marked ongoing - transitioning now`)
+      const agoraCallStartedAt = new Date(Math.max(session.learnerJoinedAt!.getTime(), session.mentorJoinedAt!.getTime()))
+      
+      await db
+        .update(bookingSessions)
+        .set({
+          status: "ongoing",
+          agoraCallStartedAt,
+          noShowCheckedAt: now,
+          updatedAt: now,
+        })
+        .where(eq(bookingSessions.id, session.id))
+
       return {
         learnerNoShow: false,
         mentorNoShow: false,
@@ -298,6 +343,10 @@ export class SessionManagementService {
         refundAmount: 0,
         mentorPayout: 0
       }
+    } else {
+      // This should never happen, but handle gracefully
+      console.error(`⚠️ Unexpected state for session ${session.id}: learnerJoined=${learnerJoined}, mentorJoined=${mentorJoined}`)
+      throw new Error(`Unexpected session state for session ${session.id}`)
     }
 
     await db.transaction(async (tx) => {
@@ -323,6 +372,8 @@ export class SessionManagementService {
 
       // Send notifications
       await this.sendNoShowNotifications(tx, session, newStatus, refundAmount, mentorPayout, learnerJoined, mentorJoined)
+      
+      console.log(`✅ Successfully processed no-show for session ${session.id}: status=${newStatus}, refund=${refundAmount}, payout=${mentorPayout}`)
     })
 
     return {

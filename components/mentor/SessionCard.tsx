@@ -411,7 +411,8 @@ export function SessionCard({ session, getStatusColor, formatStatus, userType }:
             )}
             
             {(session.status === "completed" || session.status === "cancelled" || 
-              session.status === "no_show" || session.status === "technical_issues") && (
+              session.status === "both_no_show" || session.status === "learner_no_show" || 
+              session.status === "mentor_no_show" || session.status === "technical_issues") && (
               <ReportDialog 
                 session={session}
                 onSubmit={handleReport}

@@ -349,34 +349,6 @@ export default function MentorHeader() {
                 </div>
                 <DropdownMenuSeparator className="bg-gray-700" />
                 
-                {/* Bulk Actions */}
-                {notifications.length > 0 && (
-                  <>
-                    <div className="flex gap-1 p-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={handleMarkAllAsRead}
-                        className="flex-1 h-8 text-xs text-gray-300 hover:bg-gray-700 hover:text-white"
-                        disabled={unreadNotificationsCount === 0}
-                      >
-                        <CheckCheck className="h-3 w-3 mr-1" />
-                        Mark All Read
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={handleDeleteAllNotifications}
-                        className="flex-1 h-8 text-xs text-red-400 hover:bg-red-900 hover:text-red-300"
-                      >
-                        <Trash className="h-3 w-3 mr-1" />
-                        Delete All
-                      </Button>
-                    </div>
-                    <DropdownMenuSeparator className="bg-gray-700" />
-                  </>
-                )}
-                
                 <ScrollArea className="h-60">
                   {notifications.length === 0 ? (
                     <p className="p-4 text-center text-gray-400 text-sm">No notifications yet.</p>
@@ -451,6 +423,34 @@ export default function MentorHeader() {
                     ))
                   )}
                 </ScrollArea>
+                
+                {/* Bulk Actions */}
+                {notifications.length > 0 && (
+                  <>
+                    <DropdownMenuSeparator className="bg-gray-700" />
+                    <div className="flex gap-1 p-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleMarkAllAsRead}
+                        className="flex-1 h-8 text-xs text-gray-300 hover:bg-gray-700 hover:text-white"
+                        disabled={unreadNotificationsCount === 0}
+                      >
+                        <CheckCheck className="h-3 w-3 mr-1" />
+                        Mark All Read
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleDeleteAllNotifications}
+                        className="flex-1 h-8 text-xs text-red-400 hover:bg-red-900 hover:text-red-300"
+                      >
+                        <Trash className="h-3 w-3 mr-1" />
+                        Delete All
+                      </Button>
+                    </div>
+                  </>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
 

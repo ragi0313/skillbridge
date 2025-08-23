@@ -110,8 +110,8 @@ export default function MentorSettingsPage() {
             })
             return acc
           }, {}),
-          // Map blockedDates to Date objects
-          blockedDates: blockedDates.map((bd: any) => new Date(bd.blockedDate)),
+          // Map blockedDates to Date objects (preserve local date)
+          blockedDates: blockedDates.map((bd: any) => new Date(bd.blockedDate + 'T00:00:00')),
         })
       } catch (err) {
         console.error("Failed to fetch mentor data", err)
@@ -160,8 +160,13 @@ export default function MentorSettingsPage() {
             endTime: slot.end,
           })),
         ),
-        // Map blockedDates (Date objects) to YYYY-MM-DD strings
-        blockedDates: formData.blockedDates.map((date) => date.toISOString().split("T")[0]),
+        // Map blockedDates (Date objects) to YYYY-MM-DD strings (preserve local date)
+        blockedDates: formData.blockedDates.map((date) => {
+          const year = date.getFullYear()
+          const month = String(date.getMonth() + 1).padStart(2, '0')
+          const day = String(date.getDate()).padStart(2, '0')
+          return `${year}-${month}-${day}`
+        }),
       }
 
       const res = await fetch("/api/mentor/me", {

@@ -155,6 +155,22 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         })
       }
 
+      // Broadcast the cancellation update to connected clients
+      try {
+        const { broadcastSessionUpdate } = await import("@/app/api/sse/session-updates/route")
+        await broadcastSessionUpdate(sessionId, "cancellation", {
+          sessionId,
+          status: "cancelled",
+          cancelledBy,
+          refundAmount,
+          refundType,
+          reason: reason.trim()
+        })
+      } catch (broadcastError) {
+        console.error("Failed to broadcast cancellation update:", broadcastError)
+        // Don't throw - broadcasting failure shouldn't fail the cancellation
+      }
+
       return {
         success: true,
         message: "Booking cancelled successfully",

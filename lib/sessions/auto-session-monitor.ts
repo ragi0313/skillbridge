@@ -2,16 +2,19 @@
 // This service runs independently of user interactions to ensure session statuses are always accurate
 
 import { db } from "@/db"
-import { bookingSessions, learners, mentors, creditTransactions, notifications, mentorPayouts } from "@/db/schema"
+import { bookingSessions, learners, mentors, creditTransactions, notifications, mentorPayouts, users } from "@/db/schema"
 import { eq, and, or, lt, gte, count, sql, inArray } from "drizzle-orm"
+import { alias } from "drizzle-orm/pg-core"
 import { SessionManagementService } from "./session-management"
 import { BookingLifecycleService } from "./booking-lifecycle"
+import { notificationService } from "@/lib/notifications/notification-service"
 
 export interface SessionMonitorResult {
   sessionsChecked: number
   noShowsProcessed: number
   expiredBookingsProcessed: number
   statusUpdates: number
+  remindersSent: number
   errors: string[]
   timestamp: Date
 }
@@ -33,10 +36,12 @@ export class AutoSessionMonitor {
   private sessionService: SessionManagementService
   private bookingService: BookingLifecycleService
 
-  // Configuration
-  private static readonly CHECK_INTERVAL_MINUTES = 5
+  // Configuration - Enhanced for continuous monitoring
+  private static readonly CHECK_INTERVAL_MINUTES = 2 // More frequent checks
   private static readonly MAX_RETRY_ATTEMPTS = 3
   private static readonly BATCH_SIZE = 50
+  private static readonly GRACE_PERIOD_MINUTES = 15 // Grace period for no-shows
+  private static readonly MAX_SESSION_DURATION_HOURS = 4 // Max session duration for auto-complete
 
   static getInstance(): AutoSessionMonitor {
     if (!AutoSessionMonitor.instance) {
@@ -61,6 +66,7 @@ export class AutoSessionMonitor {
     let noShowsProcessed = 0
     let expiredBookingsProcessed = 0
     let statusUpdates = 0
+    let remindersSent = 0
     const errors: string[] = []
 
     try {
@@ -71,14 +77,21 @@ export class AutoSessionMonitor {
       errors.push(...expiredResult.errors)
       console.log(`✅ Processed ${expiredBookingsProcessed} expired bookings`)
 
-      // 2. Update sessions to 'upcoming' status when join window opens (30 minutes before)
+      // 2. Send reminders for sessions starting within 1 hour
+      console.log("🔔 Sending session reminders...")
+      const reminderResult = await this.sendSessionReminders()
+      remindersSent = reminderResult.sent
+      errors.push(...reminderResult.errors)
+      console.log(`✅ Sent ${remindersSent} session reminders`)
+
+      // 3. Update sessions to 'upcoming' status when join window opens (30 minutes before)
       console.log("⏰ Updating sessions to 'upcoming' status...")
       const upcomingResult = await this.updateToUpcomingStatus()
       statusUpdates += upcomingResult.updated
       errors.push(...upcomingResult.errors)
       console.log(`✅ Updated ${upcomingResult.updated} sessions to 'upcoming'`)
 
-      // 3. Detect and process no-shows (confirmed sessions past grace period)
+      // 4. Detect and process no-shows (confirmed sessions past grace period)
       console.log("🚫 Detecting no-shows...")
       const noShowResult = await this.sessionService.detectNoShows()
       noShowsProcessed = noShowResult.processed
@@ -86,7 +99,7 @@ export class AutoSessionMonitor {
       errors.push(...noShowResult.errors)
       console.log(`✅ Processed ${noShowsProcessed} no-show sessions`)
 
-      // 4. Auto-complete sessions that are still 'ongoing' but should be finished
+      // 5. Auto-complete sessions that are still 'ongoing' but should be finished
       console.log("🏁 Auto-completing overdue ongoing sessions...")
       const autoCompleteResult = await this.autoCompleteOverdueSessions()
       statusUpdates += autoCompleteResult.updated
@@ -104,7 +117,7 @@ export class AutoSessionMonitor {
       const duration = (endTime.getTime() - startTime.getTime()) / 1000
 
       console.log(`🎉 Session monitor completed in ${duration}s`)
-      console.log(`📊 Summary: ${sessionsChecked} checked, ${noShowsProcessed} no-shows, ${expiredBookingsProcessed} expired, ${statusUpdates} status updates`)
+      console.log(`📊 Summary: ${sessionsChecked} checked, ${noShowsProcessed} no-shows, ${expiredBookingsProcessed} expired, ${statusUpdates} status updates, ${remindersSent} reminders sent`)
 
       if (errors.length > 0) {
         console.log(`⚠️ ${errors.length} errors encountered:`)
@@ -116,6 +129,7 @@ export class AutoSessionMonitor {
         noShowsProcessed,
         expiredBookingsProcessed,
         statusUpdates,
+        remindersSent,
         errors,
         timestamp: startTime
       }
@@ -129,6 +143,7 @@ export class AutoSessionMonitor {
         noShowsProcessed,
         expiredBookingsProcessed,
         statusUpdates,
+        remindersSent,
         errors,
         timestamp: startTime
       }
@@ -338,7 +353,7 @@ export class AutoSessionMonitor {
             // Neither joined - this is a no-show case that needs immediate processing
             // Mark as confirmed temporarily so no-show detection can process it
             // This ensures sessions stuck in upcoming get processed as no-shows
-            await tx
+            await db
               .update(bookingSessions)
               .set({
                 status: "confirmed", // Reset to confirmed so no-show detection picks it up
@@ -448,6 +463,101 @@ export class AutoSessionMonitor {
   }
 
   /**
+   * Send reminder notifications for sessions starting within 1 hour
+   */
+  private async sendSessionReminders(): Promise<{ sent: number; errors: string[] }> {
+    const now = new Date()
+    const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000)
+    const errors: string[] = []
+    let sent = 0
+
+    try {
+      // Create aliases for the users table since we need to join it twice
+      const learnerUsers = alias(users, "learner_users")
+      const mentorUsers = alias(users, "mentor_users")
+
+      // Find sessions starting within the next hour that haven't been reminded yet
+      const upcomingSessions = await db
+        .select({
+          id: bookingSessions.id,
+          scheduledDate: bookingSessions.scheduledDate,
+          learnerId: bookingSessions.learnerId,
+          mentorId: bookingSessions.mentorId,
+          skillName: bookingSessions.skillName,
+          learnerUser: {
+            id: learnerUsers.id,
+            firstName: learnerUsers.firstName,
+            lastName: learnerUsers.lastName,
+          },
+          mentorUser: {
+            id: mentorUsers.id,
+            firstName: mentorUsers.firstName,
+            lastName: mentorUsers.lastName,
+          },
+        })
+        .from(bookingSessions)
+        .innerJoin(learners, eq(bookingSessions.learnerId, learners.id))
+        .innerJoin(mentors, eq(bookingSessions.mentorId, mentors.id))
+        .innerJoin(learnerUsers, eq(learners.userId, learnerUsers.id))
+        .innerJoin(mentorUsers, eq(mentors.userId, mentorUsers.id))
+        .where(
+          and(
+            eq(bookingSessions.status, "confirmed"),
+            gte(bookingSessions.scheduledDate, now),
+            lt(bookingSessions.scheduledDate, oneHourFromNow)
+          )
+        )
+
+      for (const session of upcomingSessions) {
+        try {
+          const mentorName = `${session.mentorUser.firstName} ${session.mentorUser.lastName}`
+          
+          // Send reminder to learner
+          const learnerResult = await notificationService.createSessionReminder(
+            session.learnerUser.id,
+            session.id,
+            session.scheduledDate,
+            true, // isLearner
+            mentorName,
+            session.skillName || undefined
+          )
+
+          if (learnerResult.success && !learnerResult.isDuplicate) {
+            sent++
+          }
+
+          // Send reminder to mentor
+          const mentorResult = await notificationService.createSessionReminder(
+            session.mentorUser.id,
+            session.id,
+            session.scheduledDate,
+            false, // isLearner = false (mentor)
+            undefined,
+            session.skillName || undefined
+          )
+
+          if (mentorResult.success && !mentorResult.isDuplicate) {
+            sent++
+          }
+
+          console.log(`   🔔 Sent reminders for session ${session.id} (scheduled: ${session.scheduledDate.toISOString()})`)
+        } catch (error) {
+          const errorMsg = `Failed to send reminders for session ${session.id}: ${error instanceof Error ? error.message : 'Unknown error'}`
+          errors.push(errorMsg)
+          console.error(`   ❌ ${errorMsg}`)
+        }
+      }
+
+    } catch (error) {
+      const errorMsg = `Error in sendSessionReminders: ${error instanceof Error ? error.message : 'Unknown error'}`
+      errors.push(errorMsg)
+      console.error(`❌ ${errorMsg}`)
+    }
+
+    return { sent, errors }
+  }
+
+  /**
    * Get system health status
    */
   async getSystemHealth(): Promise<{
@@ -515,4 +625,132 @@ export async function runAutoSessionMonitor(): Promise<SessionMonitorResult> {
 export async function getSessionSystemHealth() {
   const monitor = AutoSessionMonitor.getInstance()
   return await monitor.getSystemHealth()
+}
+
+// Continuous background monitoring service
+export class ContinuousSessionMonitor {
+  private static instance: ContinuousSessionMonitor
+  private monitor: AutoSessionMonitor
+  private intervalId: NodeJS.Timeout | null = null
+  private isRunning = false
+  private lastRunTime: Date | null = null
+
+  static getInstance(): ContinuousSessionMonitor {
+    if (!ContinuousSessionMonitor.instance) {
+      ContinuousSessionMonitor.instance = new ContinuousSessionMonitor()
+    }
+    return ContinuousSessionMonitor.instance
+  }
+
+  constructor() {
+    this.monitor = AutoSessionMonitor.getInstance()
+  }
+
+  /**
+   * Start continuous monitoring in the background
+   */
+  startContinuousMonitoring(intervalMinutes: number = 2): void {
+    if (this.isRunning) {
+      console.log("🤖 Continuous monitoring is already running")
+      return
+    }
+
+    console.log(`🚀 Starting continuous session monitoring (every ${intervalMinutes} minutes)`)
+    this.isRunning = true
+    
+    // Run immediately first
+    this.runMonitoringCycle()
+
+    // Then schedule regular runs
+    const intervalMs = intervalMinutes * 60 * 1000
+    this.intervalId = setInterval(() => {
+      this.runMonitoringCycle()
+    }, intervalMs)
+
+    // Handle process termination gracefully
+    process.on('SIGTERM', () => this.stop())
+    process.on('SIGINT', () => this.stop())
+  }
+
+  /**
+   * Stop continuous monitoring
+   */
+  stop(): void {
+    if (!this.isRunning) {
+      console.log("🤖 Continuous monitoring is not running")
+      return
+    }
+
+    console.log("🛑 Stopping continuous session monitoring...")
+    this.isRunning = false
+
+    if (this.intervalId) {
+      clearInterval(this.intervalId)
+      this.intervalId = null
+    }
+
+    console.log("✅ Continuous session monitoring stopped")
+  }
+
+  /**
+   * Check if monitoring is currently running
+   */
+  isMonitoringActive(): boolean {
+    return this.isRunning
+  }
+
+  /**
+   * Get last run information
+   */
+  getLastRunInfo(): { lastRun: Date | null; isRunning: boolean } {
+    return {
+      lastRun: this.lastRunTime,
+      isRunning: this.isRunning
+    }
+  }
+
+  /**
+   * Run a single monitoring cycle
+   */
+  private async runMonitoringCycle(): Promise<void> {
+    if (!this.isRunning) {
+      return
+    }
+
+    try {
+      console.log(`[${new Date().toISOString()}] 🔍 Running background monitoring cycle...`)
+      this.lastRunTime = new Date()
+      
+      const result = await this.monitor.runCompleteSessionMonitor()
+      
+      // Only log if there's significant activity
+      if (result.noShowsProcessed > 0 || result.expiredBookingsProcessed > 0 || result.statusUpdates > 0) {
+        console.log(`[${new Date().toISOString()}] 📊 Monitoring cycle completed:`, {
+          noShows: result.noShowsProcessed,
+          expired: result.expiredBookingsProcessed,
+          updates: result.statusUpdates,
+          errors: result.errors.length
+        })
+      }
+
+      if (result.errors.length > 0) {
+        console.error(`[${new Date().toISOString()}] ⚠️ Monitoring cycle had ${result.errors.length} errors:`, result.errors)
+      }
+    } catch (error) {
+      console.error(`[${new Date().toISOString()}] ❌ Background monitoring cycle failed:`, error instanceof Error ? error.message : 'Unknown error')
+    }
+  }
+}
+
+// Export function to start continuous monitoring
+export function startContinuousSessionMonitoring(intervalMinutes: number = 2): ContinuousSessionMonitor {
+  const continuousMonitor = ContinuousSessionMonitor.getInstance()
+  continuousMonitor.startContinuousMonitoring(intervalMinutes)
+  return continuousMonitor
+}
+
+// Export function to stop continuous monitoring
+export function stopContinuousSessionMonitoring(): void {
+  const continuousMonitor = ContinuousSessionMonitor.getInstance()
+  continuousMonitor.stop()
 }

@@ -15,7 +15,6 @@ interface SessionData {
   durationMinutes: number
   totalCostCredits: number
   sessionNotes: string
-  archived: boolean | null
   refundAmount?: number | null
   cancelledBy?: string | null
   cancellationReason?: string | null

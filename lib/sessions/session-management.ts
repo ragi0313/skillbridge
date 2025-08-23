@@ -3,6 +3,7 @@
 import { db } from "@/db"
 import { bookingSessions, learners, mentors, creditTransactions, notifications, mentorPayouts } from "@/db/schema"
 import { eq, and, or, lt, gte, count, sql } from "drizzle-orm"
+import { notificationService } from "@/lib/notifications/notification-service"
 
 export interface AttendanceData {
   learnerJoined: boolean
@@ -16,12 +17,14 @@ export interface AttendanceData {
 export class SessionManagementService {
   private static instance: SessionManagementService
   
-  // Configuration constants
-  private static readonly NO_SHOW_GRACE_MINUTES = 15 // Changed from 20 to 15 minutes
-  private static readonly MIN_CONNECTION_TIME_MS = 5 * 60 * 1000 // 5 minutes
+  // Configuration constants - Enhanced for smoother transitions
+  private static readonly NO_SHOW_GRACE_MINUTES = 15 // Grace period for no-shows
+  private static readonly MIN_CONNECTION_TIME_MS = 5 * 60 * 1000 // 5 minutes minimum
   private static readonly NO_SHOW_PATTERN_THRESHOLD = 25 // 25%
   private static readonly ESCROW_HOLD_HOURS = 48
   private static readonly BONUS_PERCENTAGE = 10 // 10% bonus for mentor no-show
+  private static readonly UPCOMING_WINDOW_MINUTES = 30 // Minutes before session to mark as upcoming
+  private static readonly AUTO_COMPLETE_BUFFER_MINUTES = 30 // Buffer time after scheduled end
 
   static getInstance(): SessionManagementService {
     if (!SessionManagementService.instance) {
@@ -242,8 +245,7 @@ export class SessionManagementService {
         .from(bookingSessions)
         .where(
           and(
-            // Check confirmed, upcoming sessions that haven't transitioned to ongoing
-            // These are sessions that should have started but neither/one party joined
+            // Check confirmed, upcoming sessions that should be processed
             or(
               eq(bookingSessions.status, "confirmed"),
               eq(bookingSessions.status, "upcoming")
@@ -252,9 +254,9 @@ export class SessionManagementService {
             lt(
               sql`${bookingSessions.scheduledDate} + INTERVAL '15 minutes'`,
               now
-            ),
-            // Haven't checked for no-show yet (prevent double processing)
-            sql`${bookingSessions.noShowCheckedAt} IS NULL`
+            )
+            // REMOVED: Don't skip sessions that have been checked - this was the bug!
+            // This allows re-checking sessions and catching new bookings
           )
         )
 
@@ -262,6 +264,13 @@ export class SessionManagementService {
 
       for (const session of sessionsToCheck) {
         try {
+          // Skip sessions that have already been fully processed (to avoid double processing)
+          if (session.noShowCheckedAt && 
+              ['both_no_show', 'learner_no_show', 'mentor_no_show', 'completed'].includes(session.status)) {
+            console.log(`⏭️  Skipping already processed session ${session.id} (status: ${session.status})`)
+            continue
+          }
+
           const result = await this.processNoShowDetection(session)
           results.push({
             sessionId: session.id,
@@ -349,7 +358,7 @@ export class SessionManagementService {
       throw new Error(`Unexpected session state for session ${session.id}`)
     }
 
-    await db.transaction(async (tx) => {
+    const notificationResult = await db.transaction(async (tx) => {
       // Update session status
       await tx
         .update(bookingSessions)
@@ -370,10 +379,29 @@ export class SessionManagementService {
         await this.processMentorPayout(tx, session.mentorId, mentorPayout, session.id, session.totalCostCredits)
       }
 
-      // Send notifications
-      await this.sendNoShowNotifications(tx, session, newStatus, refundAmount, mentorPayout, learnerJoined, mentorJoined)
+      // Prepare notifications (don't send inside transaction to avoid duplicates)
+      const notificationData = await this.sendNoShowNotifications(tx, session, newStatus, refundAmount, mentorPayout, learnerJoined, mentorJoined)
       
       console.log(`✅ Successfully processed no-show for session ${session.id}: status=${newStatus}, refund=${refundAmount}, payout=${mentorPayout}`)
+      
+      // Return notifications to send after transaction
+      return notificationData
+    })
+
+    // Send notifications after transaction with deduplication
+    if (notificationResult.notificationsToSend.length > 0) {
+      const result = await notificationService.createNotifications(notificationResult.notificationsToSend)
+      console.log(`📧 Sent ${result.created} notifications, ${result.duplicates} duplicates prevented for session ${session.id}`)
+    }
+      
+    // Broadcast the status update
+    await this.safeBroadcastUpdate(session.id, 'status_change', {
+      previousStatus: session.status,
+      newStatus,
+      systemUpdate: true,
+      noShowDetected: true,
+      learnerNoShow: !learnerJoined,
+      mentorNoShow: !mentorJoined
     })
 
     return {
@@ -460,69 +488,165 @@ export class SessionManagementService {
 
 
   /**
-   * Send notifications for no-show outcomes
+   * Send notifications for no-show outcomes (with deduplication)
    */
-  private async sendNoShowNotifications(tx: any, session: any, status: string, refundAmount: number, mentorPayout: number, learnerJoined: boolean, mentorJoined: boolean): Promise<void> {
-    const now = new Date()
-
+  private async sendNoShowNotifications(tx: any, session: any, status: string, refundAmount: number, mentorPayout: number, learnerJoined: boolean, mentorJoined: boolean): Promise<{ learnerUserId?: number; mentorUserId?: number; notificationsToSend: any[] }> {
     // Get user IDs
     const [learner] = await tx.select({ userId: learners.userId }).from(learners).where(eq(learners.id, session.learnerId))
     const [mentor] = await tx.select({ userId: mentors.userId }).from(mentors).where(eq(mentors.id, session.mentorId))
 
+    const notificationsToSend: any[] = []
+
     if (!learnerJoined && mentorJoined && learner && mentor) {
       // Learner no-show
-      await tx.insert(notifications).values({
+      notificationsToSend.push({
         userId: learner.userId,
         type: "no_show_penalty",
         title: "Session No-Show Detected",
         message: `You did not attend your scheduled session. No refund will be issued as per our no-show policy.`,
         relatedEntityType: "session",
         relatedEntityId: session.id,
-        createdAt: now,
       })
 
-      await tx.insert(notifications).values({
+      notificationsToSend.push({
         userId: mentor.userId,
         type: "no_show_payout",
         title: "No-Show Compensation",
         message: `The learner did not attend the session. You have received ${mentorPayout} credits as compensation.`,
         relatedEntityType: "session",
         relatedEntityId: session.id,
-        createdAt: now,
       })
     } else if (learnerJoined && !mentorJoined && learner && mentor) {
       // Mentor no-show
-      await tx.insert(notifications).values({
+      notificationsToSend.push({
         userId: learner.userId,
         type: "no_show_refund",
         title: "Mentor No-Show Compensation",
         message: `The mentor did not attend your session. You have received a refund of ${refundAmount} credits.`,
         relatedEntityType: "session",
         relatedEntityId: session.id,
-        createdAt: now,
       })
 
-      await tx.insert(notifications).values({
+      notificationsToSend.push({
         userId: mentor.userId,
         type: "no_show_penalty",
         title: "Session No-Show Penalty",
         message: `You missed your scheduled session. This has been recorded and may affect your account standing.`,
         relatedEntityType: "session",
         relatedEntityId: session.id,
-        createdAt: now,
       })
     } else if (!learnerJoined && !mentorJoined && learner) {
       // Both no-show
-      await tx.insert(notifications).values({
+      notificationsToSend.push({
         userId: learner.userId,
         type: "session_refund",
         title: "Session Cancelled - Both Parties Absent",
         message: `Neither party attended the session. You have received a full refund of ${refundAmount} credits.`,
         relatedEntityType: "session",
         relatedEntityId: session.id,
-        createdAt: now,
       })
     }
+
+    return {
+      learnerUserId: learner?.userId,
+      mentorUserId: mentor?.userId,
+      notificationsToSend
+    }
+  }
+
+  /**
+   * Helper function to safely broadcast updates
+   */
+  private async safeBroadcastUpdate(sessionId: number, updateType: string, data?: any): Promise<void> {
+    try {
+      // Dynamic import to avoid circular dependencies and SSR issues
+      const { broadcastSessionUpdate } = await import("@/app/api/sse/session-updates/route")
+      await broadcastSessionUpdate(sessionId, updateType, data)
+    } catch (error) {
+      console.error(`Failed to broadcast update for session ${sessionId}:`, error)
+      // Don't throw - broadcasting is not critical for functionality
+    }
+  }
+
+  /**
+   * Enhanced status transition logic with automatic progression
+   */
+  async processStatusTransitions(): Promise<{ processed: number; errors: string[] }> {
+    const now = new Date()
+    const errors: string[] = []
+    let processed = 0
+
+    try {
+      // 1. Update confirmed sessions to 'upcoming' when within 30 minutes
+      const upcomingWindowMinutes = SessionManagementService.UPCOMING_WINDOW_MINUTES || 30
+      const upcomingWindow = new Date(now.getTime() + upcomingWindowMinutes * 60 * 1000)
+      
+      const sessionsToMarkUpcoming = await db
+        .select({
+          id: bookingSessions.id,
+          scheduledDate: bookingSessions.scheduledDate,
+        })
+        .from(bookingSessions)
+        .where(
+          and(
+            eq(bookingSessions.status, "confirmed"),
+            sql`${bookingSessions.scheduledDate} IS NOT NULL`, // Ensure date is not null
+            gte(bookingSessions.scheduledDate, now), // Not in the past
+            lt(bookingSessions.scheduledDate, upcomingWindow) // Within 30 minutes
+          )
+        )
+      
+      console.log(`Found ${sessionsToMarkUpcoming.length} confirmed sessions to mark as upcoming`)
+
+      for (const session of sessionsToMarkUpcoming) {
+        try {
+          // Validate session data
+          if (!session.id || !session.scheduledDate) {
+            console.log(`   ⚠️ Skipping invalid session: ID=${session.id}, Date=${session.scheduledDate}`)
+            continue
+          }
+
+          // Validate the scheduled date
+          const scheduledDate = new Date(session.scheduledDate)
+          if (isNaN(scheduledDate.getTime())) {
+            console.log(`   ⚠️ Skipping session ${session.id} with invalid date: ${session.scheduledDate}`)
+            continue
+          }
+
+          await db
+            .update(bookingSessions)
+            .set({
+              status: "upcoming",
+              updatedAt: now,
+            })
+            .where(eq(bookingSessions.id, session.id))
+
+          await this.safeBroadcastUpdate(session.id, 'status_change', {
+            previousStatus: 'confirmed',
+            newStatus: 'upcoming',
+            systemUpdate: true,
+            autoTransitioned: true
+          })
+
+          processed++
+          console.log(`   📅 Session ${session.id} transitioned to 'upcoming'`)
+        } catch (error) {
+          const errorMsg = `Failed to transition session ${session.id} to upcoming: ${error instanceof Error ? error.message : 'Unknown error'}`
+          errors.push(errorMsg)
+          console.error(`   ❌ ${errorMsg}`)
+        }
+      }
+
+      // 2. Handle sessions that should transition from upcoming/confirmed to ongoing when users join
+      await this.transitionScheduledSessions()
+
+    } catch (error) {
+      const errorMsg = `Error in processStatusTransitions: ${error instanceof Error ? error.message : 'Unknown error'}`
+      errors.push(errorMsg)
+      console.error(`❌ ${errorMsg}`)
+    }
+
+    return { processed, errors }
   }
 
 }
@@ -543,11 +667,15 @@ export async function runNoShowCheck(): Promise<{
   console.log("Starting enhanced session management check...")
   const service = SessionManagementService.getInstance()
   
-  // First, transition any scheduled sessions to ongoing
+  // First, process any status transitions
+  const statusResults = await service.processStatusTransitions()
+  console.log(`Status transitions completed. Processed ${statusResults.processed} sessions.`)
+  
+  // Then, transition any scheduled sessions to ongoing
   const transitionResults = await service.transitionScheduledSessions()
   console.log(`Session transition completed. Processed ${transitionResults.processed} sessions.`)
   
-  // Then, detect no-shows for sessions past grace period
+  // Finally, detect no-shows for sessions past grace period
   const noShowResults = await service.detectNoShows()
   console.log(`No-show check completed. Processed ${noShowResults.processed} sessions.`)
   
@@ -556,8 +684,38 @@ export async function runNoShowCheck(): Promise<{
   }
   
   return {
-    processed: transitionResults.processed + noShowResults.processed,
-    errors: [...transitionResults.errors, ...noShowResults.errors],
+    processed: statusResults.processed + transitionResults.processed + noShowResults.processed,
+    errors: [...statusResults.errors, ...transitionResults.errors, ...noShowResults.errors],
     results: noShowResults.results
+  }
+}
+
+// Export enhanced session monitoring function
+export async function runEnhancedSessionMonitoring(): Promise<{
+  statusTransitions: { processed: number; errors: string[] };
+  sessionTransitions: { processed: number; errors: string[] };
+  noShowDetection: { processed: number; errors: string[]; results: any[] };
+  totalProcessed: number;
+  totalErrors: string[];
+}> {
+  console.log("🔍 Starting enhanced session monitoring...")
+  const service = SessionManagementService.getInstance()
+  
+  // Run all monitoring processes
+  const statusTransitions = await service.processStatusTransitions()
+  const sessionTransitions = await service.transitionScheduledSessions()
+  const noShowDetection = await service.detectNoShows()
+  
+  const totalProcessed = statusTransitions.processed + sessionTransitions.processed + noShowDetection.processed
+  const totalErrors = [...statusTransitions.errors, ...sessionTransitions.errors, ...noShowDetection.errors]
+  
+  console.log(`✅ Enhanced session monitoring completed: ${totalProcessed} sessions processed, ${totalErrors.length} errors`)
+  
+  return {
+    statusTransitions,
+    sessionTransitions,
+    noShowDetection,
+    totalProcessed,
+    totalErrors
   }
 }

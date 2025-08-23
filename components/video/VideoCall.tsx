@@ -5,13 +5,15 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Video, VideoOff, Mic, MicOff, Monitor, PhoneOff, Users, Wifi, WifiOff, CheckCircle, WrenchIcon, AlertTriangle, LogOut } from "lucide-react"
+import { Video, VideoOff, Mic, MicOff, Monitor, PhoneOff, Users, Wifi, WifiOff, AlertTriangle } from "lucide-react"
 import { toast } from "@/lib/toast"
-import WaitingRoom from "./WaitingRoom"
+import WaitingRoom from "@/components/session/WaitingRoom"
+import ChatPanel from "@/components/video/ChatPanel"
 
 interface VideoCallProps {
   sessionId: string
   userRole: "learner" | "mentor"
+  agoraChannel?: string | null
 }
 
 interface TokenResponse {
@@ -43,13 +45,14 @@ interface CallState {
   technicalIssuesDetected: boolean
 }
 
-export default function VideoCall({ sessionId, userRole }: VideoCallProps) {
+export default function VideoCall({ sessionId, userRole, agoraChannel }: VideoCallProps) {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [tokenData, setTokenData] = useState<TokenResponse | null>(null)
   const [sessionAccessData, setSessionAccessData] = useState<any>(null)
   const [showWaitingRoom, setShowWaitingRoom] = useState(false)
+  const [isChatMinimized, setIsChatMinimized] = useState(true)
   const [callState, setCallState] = useState<CallState>({
     isConnected: false,
     isVideoEnabled: true,
@@ -78,7 +81,6 @@ export default function VideoCall({ sessionId, userRole }: VideoCallProps) {
   const screenTrackRef = useRef<any>(null)
   const callStartTimeRef = useRef<Date | null>(null)
   const durationIntervalRef = useRef<NodeJS.Timeout | null>(null)
-  const poorQualityTimerRef = useRef<NodeJS.Timeout | null>(null)
 
   // Handle call end navigation
   const handleCallEnd = useCallback(() => {
@@ -250,6 +252,13 @@ export default function VideoCall({ sessionId, userRole }: VideoCallProps) {
         throw new Error(`Missing required Agora data: channel=${data.channel}, token=${!!data.token}, appId=${data.appId}`)
       }
       
+      // Update URL to include channel if not already present
+      if (agoraChannel && !window.location.search.includes('channel=')) {
+        const url = new URL(window.location.href)
+        url.searchParams.set('channel', agoraChannel)
+        window.history.replaceState({}, '', url.toString())
+      }
+      
       setTokenData(data)
 
       // Create Agora client
@@ -368,7 +377,7 @@ export default function VideoCall({ sessionId, userRole }: VideoCallProps) {
       })
 
       client.on("network-quality", (stats: any) => {
-        const quality = stats.uplinkNetworkQuality > 3 ? "poor" : stats.uplinkNetworkQuality > 1 ? "good" : "excellent"
+        const quality: "excellent" | "good" | "poor" = stats.uplinkNetworkQuality > 3 ? "poor" : stats.uplinkNetworkQuality > 1 ? "good" : "excellent"
         
         setCallState((prev) => {
           const now = new Date()
@@ -395,7 +404,7 @@ export default function VideoCall({ sessionId, userRole }: VideoCallProps) {
       await client.join(data.appId, data.channel, data.token, data.uid)
 
       // Track session join for no-show detection
-      const joinData = await trackSessionJoin()
+      await trackSessionJoin()
       
       // Create and publish local tracks with proper error handling
       try {
@@ -728,18 +737,24 @@ export default function VideoCall({ sessionId, userRole }: VideoCallProps) {
 
   // Show waiting room if user cannot join yet
   if (showWaitingRoom && sessionAccessData && sessionAccessData.sessionDetails) {
+    // Create session data structure for the session waiting room
+    const sessionData = {
+      scheduledDate: new Date(sessionAccessData.sessionDetails.scheduledDate),
+      durationMinutes: sessionAccessData.sessionDetails.durationMinutes,
+      status: sessionAccessData.sessionDetails.status,
+      otherParticipant: {
+        firstName: "Other",
+        lastName: "Participant",
+        profilePictureUrl: undefined,
+        title: userRole === "learner" ? "Mentor" : "Learner",
+      },
+    }
+
     return (
       <WaitingRoom
         sessionId={sessionId}
         userRole={userRole}
-        sessionDetails={sessionAccessData.sessionDetails}
-        userName={sessionAccessData.userName || "User"}
-        onJoinSession={() => {
-          setShowWaitingRoom(false)
-          initializeCall()
-        }}
-        canJoin={sessionAccessData.canJoin || false}
-        waitingMinutes={sessionAccessData.waitingMinutes}
+        sessionData={sessionData}
       />
     )
   }
@@ -771,11 +786,7 @@ export default function VideoCall({ sessionId, userRole }: VideoCallProps) {
             </>
           )}
         </div>
-        {tokenData && (
-          <div className="text-sm text-gray-400">
-            Channel: {tokenData.channel} • Role: {tokenData.role}
-          </div>
-        )}
+        {/* Removed unnecessary channel and role information */}
       </div>
 
       {/* Video Container - Full Height */}
@@ -884,48 +895,68 @@ export default function VideoCall({ sessionId, userRole }: VideoCallProps) {
       {callState.isConnected && (
         <div className="flex items-center justify-center space-x-4 p-6 bg-gray-800 border-t border-gray-700">
           <Button
-            variant={callState.isAudioEnabled ? "outline" : "destructive"}
+            variant="outline"
             size="lg"
             onClick={toggleAudio}
-            className="rounded-full w-14 h-14"
+            className={`rounded-full w-14 h-14 border-2 transition-colors ${
+              callState.isAudioEnabled 
+                ? "bg-green-600 border-green-600 text-white hover:bg-green-700" 
+                : "bg-red-600 border-red-600 text-white hover:bg-red-700"
+            }`}
           >
             {callState.isAudioEnabled ? <Mic className="h-6 w-6" /> : <MicOff className="h-6 w-6" />}
           </Button>
 
           <Button
-            variant={callState.isVideoEnabled ? "outline" : "destructive"}
+            variant="outline"
             size="lg"
             onClick={toggleVideo}
-            className="rounded-full w-14 h-14"
+            className={`rounded-full w-14 h-14 border-2 transition-colors ${
+              callState.isVideoEnabled 
+                ? "bg-green-600 border-green-600 text-white hover:bg-green-700" 
+                : "bg-red-600 border-red-600 text-white hover:bg-red-700"
+            }`}
           >
             {callState.isVideoEnabled ? <Video className="h-6 w-6" /> : <VideoOff className="h-6 w-6" />}
           </Button>
 
           <Button
-            variant={callState.isScreenSharing ? "default" : "outline"}
+            variant="outline"
             size="lg"
             onClick={toggleScreenShare}
-            className="rounded-full w-14 h-14"
+            className={`rounded-full w-14 h-14 border-2 transition-colors ${
+              callState.isScreenSharing 
+                ? "bg-blue-600 border-blue-600 text-white hover:bg-blue-700" 
+                : "bg-gray-600 border-gray-600 text-white hover:bg-gray-700"
+            }`}
           >
             <Monitor className="h-6 w-6" />
           </Button>
 
           <div className="flex-1" />
 
-
-
           {/* End Call */}
           <Button
             variant="destructive" 
             size="lg"
             onClick={() => leaveCall('completed')}
-            className="rounded-full w-14 h-14 bg-red-600 hover:bg-red-700"
+            className="rounded-full w-14 h-14 bg-red-600 hover:bg-red-700 border-2 border-red-600"
             title="End Call"
           >
             <PhoneOff className="h-6 w-6" />
           </Button>
         </div>
       )}
+
+      {/* Chat Panel */}
+      <div className="fixed bottom-4 right-4 z-50">
+        <ChatPanel
+          sessionId={sessionId}
+          userRole={userRole}
+          isMinimized={isChatMinimized}
+          onToggleMinimize={() => setIsChatMinimized(!isChatMinimized)}
+        />
+      </div>
     </div>
   )
 }

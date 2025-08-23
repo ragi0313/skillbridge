@@ -126,6 +126,15 @@
     @apply bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-700 hover:to-purple-700 cursor-pointer;
   }
 
+  /* Cursor pointer for all buttons */
+  button {
+    cursor: pointer;
+  }
+  
+  .btn {
+    cursor: pointer;
+  }
+
   .rdp-custom {
     --rdp-cell-size: 32px;
     --rdp-accent-color: rgb(147 51 234);

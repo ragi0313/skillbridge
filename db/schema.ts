@@ -1,4 +1,5 @@
 import { pgTable, serial, varchar, text, timestamp, integer, json, numeric, boolean, time, date } from "drizzle-orm/pg-core"
+import { relations } from "drizzle-orm"
 
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
@@ -132,7 +133,6 @@ export const bookingSessions = pgTable("booking_sessions", {
   escrowCredits: integer("escrow_credits").notNull(),
   sessionNotes: text("session_notes").notNull(),
   status: varchar("status", { length: 20 }).default("pending"), // pending, confirmed, ongoing, completed, cancelled, both_no_show, learner_no_show, mentor_no_show, rejected
-  archived: boolean("archived").default(false),
   agoraChannelName: varchar("agora_channel_name", { length: 255 }),
   agoraChannelCreatedAt: timestamp("agora_channel_created_at", { withTimezone: true }),
   agoraCallStartedAt: timestamp("agora_call_started_at", { withTimezone: true }),
@@ -332,4 +332,53 @@ export const agoraTokens = pgTable("agora_tokens", {
   usedAt: timestamp("used_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 })
+
+// CHAT MESSAGES - Real-time messaging within sessions
+export const chatMessages = pgTable("chat_messages", {
+  id: serial("id").primaryKey(),
+  sessionId: integer("session_id").notNull().references(() => bookingSessions.id, { onDelete: "cascade" }),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  message: text("message").notNull(),
+  messageType: varchar("message_type", { length: 20 }).default("text").notNull(), // 'text', 'file', 'emoji'
+  isEdited: boolean("is_edited").default(false),
+  editedAt: timestamp("edited_at", { withTimezone: true }),
+  replyToMessageId: integer("reply_to_message_id"), // Self-reference without explicit FK for now
+  isDeleted: boolean("is_deleted").default(false),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  ...timestamps,
+})
+
+// FILE ATTACHMENTS - Files shared in chat
+export const chatAttachments = pgTable("chat_attachments", {
+  id: serial("id").primaryKey(),
+  messageId: integer("message_id").notNull().references(() => chatMessages.id, { onDelete: "cascade" }),
+  fileName: varchar("file_name", { length: 255 }).notNull(),
+  fileSize: integer("file_size").notNull(), // in bytes
+  fileType: varchar("file_type", { length: 100 }).notNull(), // MIME type
+  fileUrl: varchar("file_url", { length: 512 }).notNull(), // Storage URL
+  thumbnailUrl: varchar("thumbnail_url", { length: 512 }), // For images/videos
+  uploadedBy: integer("uploaded_by").notNull().references(() => users.id),
+  ...timestamps,
+})
+
+// SESSION VISIBILITY - Hide/show sessions in management
+export const sessionVisibility = pgTable("session_visibility", {
+  id: serial("id").primaryKey(),
+  sessionId: integer("session_id").notNull().references(() => bookingSessions.id, { onDelete: "cascade" }),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  isHidden: boolean("is_hidden").default(false).notNull(),
+  hiddenAt: timestamp("hidden_at", { withTimezone: true }),
+  ...timestamps,
+})
+
+// Add relations for self-referencing foreign key
+export const chatMessageRelations = relations(chatMessages, ({ one, many }) => ({
+  replyToMessage: one(chatMessages, {
+    fields: [chatMessages.replyToMessageId],
+    references: [chatMessages.id],
+    relationName: "message_replies"
+  }),
+  replies: many(chatMessages, { relationName: "message_replies" }),
+  attachments: many(chatAttachments),
+}))
 

@@ -9,7 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
-import { Clock, Calendar, CreditCard, MessageCircle, Video, AlertTriangle, CheckCircle, XCircle, Flag, WrenchIcon, RefreshCw } from "lucide-react"
+import { Clock, Calendar, CreditCard, MessageCircle, Video, AlertTriangle, CheckCircle, XCircle, Flag, WrenchIcon, RefreshCw, EyeOff, Eye, FileText, Download } from "lucide-react"
 import { SessionCountdown } from "@/components/session/SessionCountdown"
 import { toast } from "sonner"
 
@@ -21,7 +21,6 @@ interface SessionProps {
     durationMinutes: number
     totalCostCredits: number
     sessionNotes: string
-    archived?: boolean | null
     refundAmount?: number | null
     cancelledBy?: string | null
     cancellationReason?: string | null
@@ -29,6 +28,10 @@ interface SessionProps {
     mentorResponseMessage?: string | null
     rejectionReason?: string | null
     createdAt: Date | null
+    mentorJoinedAt?: Date | null
+    mentorLeftAt?: Date | null
+    learnerJoinedAt?: Date | null
+    learnerLeftAt?: Date | null
     mentor: {
       id: number
       profilePictureUrl?: string | null
@@ -56,6 +59,11 @@ export function SessionCard({ session, getStatusColor, formatStatus, userType }:
   const [reporting, setReporting] = useState(false)
   const [submittingReview, setSubmittingReview] = useState(false)
   const [technicalIssuesDialogOpen, setTechnicalIssuesDialogOpen] = useState(false)
+  const [chatDialogOpen, setChatDialogOpen] = useState(false)
+  const [chatMessages, setChatMessages] = useState<any[]>([])
+  const [loadingChat, setLoadingChat] = useState(false)
+  const [isHidden, setIsHidden] = useState(false)
+  const [toggling, setToggling] = useState(false)
 
   const now = new Date()
   const sessionStart = new Date(session.scheduledDate)
@@ -64,7 +72,8 @@ export function SessionCard({ session, getStatusColor, formatStatus, userType }:
   const canJoin = ["confirmed", "upcoming", "ongoing"].includes(session.status || "")
   const canJoinNow = now >= joinWindowStart && now <= sessionEnd && canJoin
   const isOngoing = session.status === "ongoing"
-  const hasJoinedBefore = false // TODO: This should come from session data if available
+  const hasJoinedBefore = !!session.learnerJoinedAt
+  const needsReconnection = hasJoinedBefore && (isOngoing || session.status === "confirmed" || session.status === "upcoming")
   
   // 24-hour cancellation restriction
   const hoursUntilSession = (sessionStart.getTime() - now.getTime()) / (1000 * 60 * 60)
@@ -76,7 +85,8 @@ export function SessionCard({ session, getStatusColor, formatStatus, userType }:
     try {
       const response = await fetch(`/api/bookings/cancel/${session.id}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" }
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: "Cancelled by learner" })
       })
 
       if (!response.ok) {
@@ -176,6 +186,56 @@ export function SessionCard({ session, getStatusColor, formatStatus, userType }:
       setReporting(false)
       setTechnicalIssuesDialogOpen(false)
     }
+  }
+
+  const handleViewChatHistory = async () => {
+    if (chatMessages.length === 0) {
+      setLoadingChat(true)
+      try {
+        const response = await fetch(`/api/sessions/${session.id}/chat`)
+        if (response.ok) {
+          const data = await response.json()
+          setChatMessages(data.messages || [])
+        } else {
+          toast.error("Failed to load chat history")
+        }
+      } catch (error) {
+        toast.error("Failed to load chat history")
+      } finally {
+        setLoadingChat(false)
+      }
+    }
+    setChatDialogOpen(true)
+  }
+
+  const handleToggleVisibility = async () => {
+    setToggling(true)
+    try {
+      const response = await fetch(`/api/sessions/${session.id}/visibility`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isHidden: !isHidden })
+      })
+
+      if (response.ok) {
+        setIsHidden(!isHidden)
+        toast.success(isHidden ? "Session shown" : "Session hidden")
+      } else {
+        toast.error("Failed to update session visibility")
+      }
+    } catch (error) {
+      toast.error("Failed to update session visibility")
+    } finally {
+      setToggling(false)
+    }
+  }
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 B'
+    const k = 1024
+    const sizes = ['B', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
   }
 
   return (
@@ -291,7 +351,7 @@ export function SessionCard({ session, getStatusColor, formatStatus, userType }:
               <Button asChild size="sm">
                 <a href={`/sessions/${session.id}`}>
                   <Video className="h-4 w-4 mr-2" />
-                  {isOngoing ? "Reconnect" : "Join Session"}
+                  {needsReconnection ? "Reconnect" : "Join Session"}
                 </a>
               </Button>
             )}
@@ -385,6 +445,30 @@ export function SessionCard({ session, getStatusColor, formatStatus, userType }:
           </div>
 
           <div className="flex space-x-2">
+            {/* Chat History Button */}
+            {(session.status === "completed" || session.status === "ongoing" || 
+              session.status === "cancelled" || session.status === "technical_issues") && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleViewChatHistory}
+              >
+                <MessageCircle className="h-4 w-4 mr-2" />
+                Chat History
+              </Button>
+            )}
+
+            {/* Hide/Show Session Button */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleToggleVisibility}
+              disabled={toggling}
+            >
+              {isHidden ? <Eye className="h-4 w-4 mr-2" /> : <EyeOff className="h-4 w-4 mr-2" />}
+              {toggling ? "..." : (isHidden ? "Show" : "Hide")}
+            </Button>
+
             {(session.status === "completed" || session.status === "cancelled" || 
               session.status === "both_no_show" || session.status === "learner_no_show" || 
               session.status === "mentor_no_show" || session.status === "technical_issues") && (
@@ -399,6 +483,67 @@ export function SessionCard({ session, getStatusColor, formatStatus, userType }:
           </div>
         </div>
       </CardContent>
+
+      {/* Chat History Dialog */}
+      <Dialog open={chatDialogOpen} onOpenChange={setChatDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Session Chat History</DialogTitle>
+            <DialogDescription>
+              Messages and files shared during this session
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="flex-1 overflow-auto space-y-3 pr-2">
+            {loadingChat ? (
+              <div className="text-center py-4">Loading chat history...</div>
+            ) : chatMessages.length === 0 ? (
+              <div className="text-center py-4 text-gray-500">No messages in this session</div>
+            ) : (
+              chatMessages.slice().reverse().map((message) => (
+                <div key={message.id} className="border rounded-lg p-3">
+                  <div className="flex justify-between items-start mb-2">
+                    <div className="font-medium text-sm">
+                      {message.user?.firstName} {message.user?.lastName}
+                      <Badge variant="outline" className="ml-2 text-xs">
+                        {message.user?.role}
+                      </Badge>
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {format(new Date(message.createdAt), "MMM d, h:mm a")}
+                    </div>
+                  </div>
+                  
+                  {message.messageType === 'file' && message.attachments?.[0] ? (
+                    <div className="bg-gray-50 rounded p-2 space-y-2">
+                      <div className="flex items-center space-x-2">
+                        <FileText className="h-4 w-4 text-gray-600" />
+                        <span className="text-sm font-medium">{message.attachments[0].fileName}</span>
+                        <Badge variant="secondary" className="text-xs">
+                          {formatFileSize(message.attachments[0].fileSize)}
+                        </Badge>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs"
+                        onClick={() => window.open(message.attachments![0].fileUrl, '_blank')}
+                      >
+                        <Download className="h-3 w-3 mr-1" />
+                        Download
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="text-sm whitespace-pre-wrap break-words">
+                      {message.message}
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </Card>
   )
 }

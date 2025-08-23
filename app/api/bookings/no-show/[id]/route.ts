@@ -43,8 +43,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         throw new Error("Booking session not found")
       }
 
-      // Check if session is confirmed
-      if (booking.status !== "confirmed") {
+      // Check if session is in a state where no-show can be marked
+      if (!["confirmed", "upcoming"].includes(booking.status)) {
         throw new Error(`Cannot mark no-show for session with status: ${booking.status}`)
       }
 
@@ -130,7 +130,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           })
         }
       } else {
-        // Mentor no-show: full refund to learner
+        // Mentor no-show: refund only the original amount paid (no bonus credits)
         const [learnerData] = await tx
           .select({
             userId: learners.userId,
@@ -140,7 +140,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           .where(eq(learners.id, booking.learnerId))
 
         if (learnerData) {
-          const newLearnerBalance = learnerData.creditsBalance + booking.escrowCredits
+          // Refund only the original amount paid (totalCostCredits), not escrowCredits which may include bonuses
+          const refundAmount = booking.totalCostCredits
+          const newLearnerBalance = learnerData.creditsBalance + refundAmount
 
           await tx
             .update(learners)
@@ -153,7 +155,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           // Update refund amount in booking
           await tx
             .update(bookingSessions)
-            .set({ refundAmount: booking.escrowCredits })
+            .set({ refundAmount: refundAmount })
             .where(eq(bookingSessions.id, sessionId))
 
           // Record refund transaction
@@ -161,7 +163,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             userId: learnerData.userId,
             type: "session_refund",
             direction: "credit",
-            amount: booking.escrowCredits,
+            amount: refundAmount,
             balanceBefore: learnerData.creditsBalance,
             balanceAfter: newLearnerBalance,
             relatedSessionId: sessionId,
@@ -174,7 +176,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             userId: learnerData.userId,
             type: "session_no_show",
             title: "Mentor No-Show - Refund Issued",
-            message: `The mentor did not show up for your session. You have been refunded ${booking.escrowCredits} credits.`,
+            message: `The mentor did not show up for your session. You have been refunded ${refundAmount} credits.`,
             relatedEntityType: "session",
             relatedEntityId: sessionId,
             createdAt: now,
@@ -204,7 +206,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         success: true,
         message: "No-show processed successfully",
         noShowParty,
-        refundAmount: noShowParty === "mentor" ? booking.escrowCredits : 0,
+        refundAmount: noShowParty === "mentor" ? booking.totalCostCredits : 0,
       }
     })
 

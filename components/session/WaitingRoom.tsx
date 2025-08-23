@@ -39,11 +39,54 @@ export default function WaitingRoom({ sessionId, userRole, sessionData }: Waitin
   const streamRef = useRef<MediaStream | null>(null)
 
   const otherRole = userRole === "learner" ? "mentor" : "learner"
-  const canJoinNow = () => {
+  
+  // Check if user can join the waiting room (30 minutes before)
+  const canJoinWaitingRoom = () => {
     const now = new Date()
     const sessionStart = new Date(sessionData.scheduledDate)
     const joinWindowStart = new Date(sessionStart.getTime() - 30 * 60 * 1000)
     return now >= joinWindowStart && ["confirmed", "upcoming", "ongoing"].includes(sessionData.status)
+  }
+  
+  // Check if it's time to enter the actual video call (session start time)
+  const canEnterVideoCall = () => {
+    const now = new Date()
+    const sessionStart = new Date(sessionData.scheduledDate)
+    return now >= sessionStart && ["confirmed", "upcoming", "ongoing"].includes(sessionData.status)
+  }
+  
+  // Legacy function for backward compatibility
+  const canJoinNow = canJoinWaitingRoom
+
+  const getSessionStatusInfo = () => {
+    if (sessionData.status === "upcoming") {
+      return {
+        title: "Session Ready",
+        message: "Your session is ready to join. The mentor has confirmed your booking and you can enter the waiting room.",
+        color: "blue",
+        icon: "clock"
+      }
+    } else if (sessionData.status === "confirmed") {
+      return {
+        title: "Session Confirmed",
+        message: "Your session is confirmed and ready to join when the time comes.",
+        color: "green",
+        icon: "check"
+      }
+    } else if (sessionData.status === "ongoing") {
+      return {
+        title: "Session In Progress",
+        message: "The session is currently active. Join now to participate.",
+        color: "red",
+        icon: "live"
+      }
+    }
+    return {
+      title: "Session Ready",
+      message: "Preparing for your session...",
+      color: "gray",
+      icon: "clock"
+    }
   }
 
   // Initialize camera and microphone
@@ -102,16 +145,45 @@ export default function WaitingRoom({ sessionId, userRole, sessionData }: Waitin
     }
   }
 
+  // State to track if user has joined the session
+  const [hasJoinedSession, setHasJoinedSession] = useState(false)
+
   // Handle joining the session
   const handleJoinSession = async () => {
-    if (!canJoinNow()) {
+    if (!canJoinWaitingRoom()) {
       toast.error("Cannot join session yet. Please wait for the join window to open.")
       return
     }
 
+    // If it's time for the video call, transition directly
+    if (canEnterVideoCall()) {
+      setIsJoining(true)
+      try {
+        const response = await fetch(`/api/sessions/${sessionId}/join`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        })
+
+        if (response.ok) {
+          window.location.reload() // Transition to video call
+        } else {
+          const errorData = await response.json()
+          toast.error(errorData.error || "Failed to join session")
+          setIsJoining(false)
+        }
+      } catch (error) {
+        console.error("Error joining session:", error)
+        toast.error("Failed to join session. Please try again.")
+        setIsJoining(false)
+      }
+      return
+    }
+
+    // Otherwise, just mark as joined and stay in waiting room
     setIsJoining(true)
     try {
-      // Call the join session API to mark user as joined
       const response = await fetch(`/api/sessions/${sessionId}/join`, {
         method: 'POST',
         headers: {
@@ -120,8 +192,9 @@ export default function WaitingRoom({ sessionId, userRole, sessionData }: Waitin
       })
 
       if (response.ok) {
-        // Reload the page to transition to the video call
-        window.location.reload()
+        setHasJoinedSession(true)
+        setIsJoining(false)
+        toast.success("Joined waiting room! You'll automatically enter the call when the session starts.")
       } else {
         const errorData = await response.json()
         toast.error(errorData.error || "Failed to join session")
@@ -133,6 +206,23 @@ export default function WaitingRoom({ sessionId, userRole, sessionData }: Waitin
       setIsJoining(false)
     }
   }
+
+  // Auto-transition to video call when session time arrives (for users already in waiting room)
+  useEffect(() => {
+    if (hasJoinedSession) {
+      const checkSessionTime = () => {
+        if (canEnterVideoCall()) {
+          toast.success("🚀 Session is starting! Entering video call...")
+          setTimeout(() => {
+            window.location.reload()
+          }, 1500) // Give user 1.5 seconds to see the message
+        }
+      }
+
+      const interval = setInterval(checkSessionTime, 1000) // Check every second
+      return () => clearInterval(interval)
+    }
+  }, [hasJoinedSession, sessionData.scheduledDate])
 
   // Poll for other participant status (simplified - in real implementation, use websockets)
   useEffect(() => {
@@ -216,6 +306,39 @@ export default function WaitingRoom({ sessionId, userRole, sessionData }: Waitin
         {/* Session Info & Join Controls */}
         <div className="space-y-6">
           
+          {/* Session Status */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center space-x-2">
+                {(() => {
+                  const statusInfo = getSessionStatusInfo()
+                  return (
+                    <>
+                      {statusInfo.icon === "clock" && <Clock className="h-5 w-5 text-blue-500" />}
+                      {statusInfo.icon === "check" && <CheckCircle className="h-5 w-5 text-green-500" />}
+                      {statusInfo.icon === "live" && <div className="h-3 w-3 bg-red-500 rounded-full animate-pulse" />}
+                      <span>{statusInfo.title}</span>
+                      <Badge variant={statusInfo.color === "blue" ? "default" : statusInfo.color === "green" ? "outline" : "secondary"} className={
+                        statusInfo.color === "blue" ? "bg-blue-100 text-blue-700" :
+                        statusInfo.color === "green" ? "bg-green-100 text-green-700 border-green-200" :
+                        statusInfo.color === "red" ? "bg-red-100 text-red-700" : ""
+                      }>
+                        {sessionData.status === "upcoming" ? "Ready" : 
+                         sessionData.status === "confirmed" ? "Confirmed" :
+                         sessionData.status === "ongoing" ? "Live" : "Ready"}
+                      </Badge>
+                    </>
+                  )
+                })()} 
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-gray-600 mb-4">
+                {getSessionStatusInfo().message}
+              </p>
+            </CardContent>
+          </Card>
+
           {/* Session Details */}
           <Card>
             <CardHeader>
@@ -318,7 +441,7 @@ export default function WaitingRoom({ sessionId, userRole, sessionData }: Waitin
             <CardContent className="pt-6">
               <Button
                 onClick={handleJoinSession}
-                disabled={!canJoinNow() || connectionStatus !== "ready" || isJoining}
+                disabled={(!canJoinWaitingRoom() && !canEnterVideoCall()) || connectionStatus !== "ready" || isJoining || (hasJoinedSession && !canEnterVideoCall())}
                 className="w-full h-12 text-lg font-semibold"
                 size="lg"
               >
@@ -327,19 +450,52 @@ export default function WaitingRoom({ sessionId, userRole, sessionData }: Waitin
                     <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
                     Joining...
                   </>
+                ) : hasJoinedSession ? (
+                  <>
+                    <Video className="h-5 w-5 mr-2" />
+                    Enter Room
+                  </>
                 ) : (
                   <>
                     <Video className="h-5 w-5 mr-2" />
                     {sessionData.isReconnection ? "Reconnect to Session" : 
-                     sessionData.status === "ongoing" ? "Join Ongoing Session" : "Join Session"}
+                     canEnterVideoCall() ? "Join Video Call" :
+                     sessionData.status === "ongoing" ? "Join Ongoing Session" :
+                     sessionData.status === "upcoming" ? "Enter Waiting Room" : "Join Session"}
                   </>
                 )}
               </Button>
               
-              {!canJoinNow() && (
+              {!canJoinWaitingRoom() && !hasJoinedSession && (
                 <p className="text-sm text-gray-600 text-center mt-2">
-                  You can join 30 minutes before the scheduled time
+                  {sessionData.status === "upcoming" 
+                    ? "Join window opens 30 minutes before the scheduled time"
+                    : "You can join 30 minutes before the scheduled time"}
                 </p>
+              )}
+              
+              {hasJoinedSession && !canEnterVideoCall() && (
+                <p className="text-sm text-green-600 text-center mt-2">
+                  ✅ You're in the waiting room! The session will start automatically when the countdown reaches zero.
+                </p>
+              )}
+              
+              {hasJoinedSession && canEnterVideoCall() && (
+                <p className="text-sm text-blue-600 text-center mt-2">
+                  🚀 Session time has arrived! Click "Enter Room" to join the video call.
+                </p>
+              )}
+              
+              {sessionData.status === "upcoming" && canJoinNow() && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-2">
+                  <div className="flex items-center space-x-2 text-blue-700">
+                    <AlertCircle className="h-4 w-4" />
+                    <span className="text-sm font-medium">Session is ready!</span>
+                  </div>
+                  <p className="text-xs text-blue-600 mt-1">
+                    You can now join the session. The video call will start at the scheduled time.
+                  </p>
+                </div>
               )}
             </CardContent>
           </Card>

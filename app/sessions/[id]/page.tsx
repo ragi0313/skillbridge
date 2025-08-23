@@ -6,6 +6,7 @@ import { alias } from "drizzle-orm/pg-core"
 import { getSession } from "@/lib/auth/getSession"
 import VideoCall from "@/components/video/VideoCall"
 import WaitingRoom from "@/components/session/WaitingRoom"
+import Logo from "@/components/ui/logo"
 
 interface VideoSessionPageProps {
   params: {
@@ -75,7 +76,9 @@ export default async function VideoSessionPage({ params }: VideoSessionPageProps
   }
 
   // Check if session is in a joinable state
-  if (!["confirmed", "ongoing"].includes(bookingSession.status)) {
+  // Check if session is in an unavailable state (exclude 'upcoming' as it should show waiting room)
+  const unavailableStatuses = ['rejected', 'cancelled', 'both_no_show', 'learner_no_show', 'mentor_no_show', 'completed', 'pending']
+  if (unavailableStatuses.includes(bookingSession.status || "")) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-6 text-center">
@@ -98,11 +101,11 @@ export default async function VideoSessionPage({ params }: VideoSessionPageProps
             {bookingSession.status === "mentor_no_show" && "This session was marked as no-show - mentor didn't attend."}
             {bookingSession.status === "completed" && "This session has already been completed."}
             {bookingSession.status === "pending" && "This session is still pending mentor approval."}
-            {!["rejected", "cancelled", "both_no_show", "learner_no_show", "mentor_no_show", "completed", "pending"].includes(bookingSession.status) && 
+            {!unavailableStatuses.includes(bookingSession.status || "") && 
              "This session is not available for joining."}
           </p>
           <p className="text-sm text-gray-500">
-            Status: <span className="font-medium capitalize">{bookingSession.status.replace('_', ' ')}</span>
+            Status: <span className="font-medium capitalize">{(bookingSession.status || "").replace('_', ' ')}</span>
           </p>
         </div>
       </div>
@@ -148,11 +151,18 @@ export default async function VideoSessionPage({ params }: VideoSessionPageProps
   // User needs reconnection if they joined before but left (and session is still active)
   const needsReconnection = currentUserJoined && currentUserLeft && bookingSession.status === "ongoing"
   
-  // Show waiting room from 30 minutes before until 10 minutes after session end
-  // Show if: not yet joined, or needs reconnection
-  const showWaitingRoom = now >= waitingRoomStart && now <= joinEnd && 
-    bookingSession.status !== "ongoing" && 
-    (!currentUserJoined || needsReconnection)
+  // Show waiting room from 30 minutes before until session starts, OR during session if user needs reconnection
+  // Users should stay in waiting room until actual session time, even if they've joined the API
+  const sessionHasStarted = now >= sessionStart
+  const isInWaitingPeriod = now >= waitingRoomStart && now < sessionStart
+  const sessionIsActive = ['confirmed', 'upcoming', 'ongoing'].includes(bookingSession.status || "")
+  
+  const showWaitingRoom = sessionIsActive && now <= joinEnd && (
+    // Show waiting room if session hasn't started yet (regardless of join status)
+    isInWaitingPeriod ||
+    // Show waiting room if session has started but user needs reconnection
+    (sessionHasStarted && needsReconnection)
+  )
   
   if (showWaitingRoom) {
     return (
@@ -169,7 +179,7 @@ export default async function VideoSessionPage({ params }: VideoSessionPageProps
             profilePictureUrl: undefined, // Add this to the query if available
             title: isLearner ? "Your Mentor" : "Your Learner"
           },
-          isReconnection: needsReconnection,
+          isReconnection: needsReconnection || false,
           previouslyJoinedAt: currentUserJoined,
           previouslyLeftAt: currentUserLeft
         }}
@@ -208,12 +218,7 @@ export default async function VideoSessionPage({ params }: VideoSessionPageProps
       <div className="bg-gray-800 border-b border-gray-700 px-6 py-4">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <div className="flex items-center space-x-6">
-            <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-lg">S</span>
-              </div>
-              <span className="text-xl font-bold">SkillBridge</span>
-            </div>
+            <Logo textColor="text-white" />
             <div className="hidden md:block">
               <h1 className="text-lg font-semibold text-white">
                 Session with {otherParticipant?.firstName} {otherParticipant?.lastName}
@@ -224,7 +229,7 @@ export default async function VideoSessionPage({ params }: VideoSessionPageProps
               </p>
             </div>
           </div>
-          <div className="text-sm text-gray-400">Session ID: {sessionId}</div>
+          {/* Removed Session ID display - not necessary for users */}
         </div>
       </div>
 
@@ -233,6 +238,7 @@ export default async function VideoSessionPage({ params }: VideoSessionPageProps
         <VideoCall
           sessionId={sessionId.toString()}
           userRole={isLearner ? "learner" : "mentor"}
+          agoraChannel={bookingSession.agoraChannelName}
         />
       </div>
     </div>

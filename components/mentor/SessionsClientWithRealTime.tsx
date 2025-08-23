@@ -18,7 +18,6 @@ interface SessionData {
   durationMinutes: number
   totalCostCredits: number
   sessionNotes: string
-  archived: boolean | null
   refundAmount?: number | null
   cancelledBy?: string | null
   cancellationReason?: string | null
@@ -135,7 +134,7 @@ export function SessionsClientWithRealTime({ initialSessions }: SessionsClientPr
   const completedSessions = sessions.filter(s => s.status === "completed")
   const cancelledSessions = sessions.filter(s => ["cancelled"].includes(s.status || ""))
   const rejectedSessions = sessions.filter(s => s.status === "rejected")
-  const noShowSessions = sessions.filter(s => ["no_show"].includes(s.status || ""))
+  const noShowSessions = sessions.filter(s => ["no_show", "both_no_show", "learner_no_show", "mentor_no_show"].includes(s.status || ""))
   const technicalIssuesSessions = sessions.filter(s => s.status === "technical_issues")
 
   // Calculate totals for header

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Star, MapPin, Clock } from "lucide-react"
+import { Star, MapPin, Clock, ChevronLeft, ChevronRight, Settings } from "lucide-react"
 
 type Mentor = {
   mentorId: number
@@ -25,6 +25,7 @@ type Mentor = {
 export default function RecommendedMentors() {
   const [mentors, setMentors] = useState<Mentor[]>([])
   const [loading, setLoading] = useState(true)
+  const [currentMentorIndex, setCurrentMentorIndex] = useState(0)
 
   useEffect(() => {
     async function fetchMentors() {
@@ -42,24 +43,62 @@ export default function RecommendedMentors() {
     fetchMentors()
   }, [])
 
+  const nextMentor = () => {
+    setCurrentMentorIndex((prev) => (prev + 2 >= mentors.length ? 0 : prev + 2))
+  }
+
+  const prevMentor = () => {
+    setCurrentMentorIndex((prev) => (prev - 2 < 0 ? Math.max(0, mentors.length - 2) : prev - 2))
+  }
+
+  const visibleMentors = mentors.slice(currentMentorIndex, currentMentorIndex + 2)
+
   return (
     <section className="py-16 bg-white">
       <div className="container mx-auto px-4">
         <div className="max-w-6xl mx-auto">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold text-gray-900 mb-4">Recommended for you</h2>
-            <p className="text-gray-600 text-lg max-w-2xl mx-auto">
-              Based on your learning goals, here are mentors who can help you grow.
-            </p>
+          <div className="flex items-center justify-between mb-12">
+            <div className="text-center flex-1">
+              <h2 className="text-3xl font-bold text-gray-900 mb-4">Recommended for you</h2>
+              <p className="text-gray-600 text-lg max-w-2xl mx-auto">
+                Based on your learning goals, here are mentors who can help you grow.
+              </p>
+            </div>
+            {mentors.length > 2 && (
+              <div className="flex items-center space-x-2">
+                <button onClick={prevMentor} className="p-2 rounded-full border border-gray-300 hover:bg-gray-50">
+                  <ChevronLeft className="w-5 h-5 text-gray-600" />
+                </button>
+                <button onClick={nextMentor} className="p-2 rounded-full border border-gray-300 hover:bg-gray-50">
+                  <ChevronRight className="w-5 h-5 text-gray-600" />
+                </button>
+              </div>
+            )}
           </div>
 
           {loading ? (
-            <p className="text-center text-gray-500">Loading recommended mentors...</p>
+            <div className="text-center py-12">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto mb-4"></div>
+              <p className="text-gray-600">Finding matching mentors...</p>
+            </div>
           ) : mentors.length === 0 ? (
-            <p className="text-center text-gray-500">No mentors matched your learning goals yet. Check back soon!</p>
+            <div className="text-center py-12">
+              <Star className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">No matching mentors found</h3>
+              <p className="text-gray-600 mb-4">
+                Update your learning goals to find mentors who match your interests.
+              </p>
+              <Link href="/learner/settings">
+                <Button className="gradient-bg text-white">
+                  <Settings className="w-4 h-4 mr-2" />
+                  Update Learning Goals
+                </Button>
+              </Link>
+            </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
-              {mentors.map((mentor) => (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {visibleMentors.map((mentor) => (
                 <Card key={mentor.mentorId} className="hover:shadow-lg transition-all duration-300 border-0 shadow-md">
                   <CardContent className="p-6">
                     <div className="flex items-start space-x-4 mb-4">
@@ -120,17 +159,34 @@ export default function RecommendedMentors() {
                       </div>
                     </div>
 
-                    <Button asChild className="w-full bg-blue-600 hover:bg-blue-700 text-white">
-                      <Link href={`/mentor/${mentor.mentorId}`}>View Profile</Link>
+                    <Button asChild className="w-full gradient-bg text-white">
+                      <Link href={`/mentors/${mentor.mentorId}/${`${mentor.firstName}-${mentor.lastName}`.toLowerCase().replace(/\s+/g, "-")}`}>View Profile</Link>
                     </Button>
                   </CardContent>
                 </Card>
-              ))}
-            </div>
+                ))}
+              </div>
+
+              {mentors.length > 2 && (
+                <div className="flex justify-center mt-6">
+                  <div className="flex space-x-2">
+                    {Array.from({ length: Math.ceil(mentors.length / 2) }).map((_, index) => (
+                      <button
+                        key={index}
+                        onClick={() => setCurrentMentorIndex(index * 2)}
+                        className={`w-3 h-3 rounded-full ${
+                          Math.floor(currentMentorIndex / 2) === index ? "bg-purple-600" : "bg-gray-300"
+                        }`}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
           )}
 
           <div className="text-center mt-12">
-            <Button asChild variant="outline" size="lg" className="px-8 bg-transparent">
+            <Button asChild variant="outline" size="lg" className="px-8 gradient-bg text-white">
               <Link href="/find-mentors">View All Mentors</Link>
             </Button>
           </div>

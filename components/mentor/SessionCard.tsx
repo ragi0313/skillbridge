@@ -9,7 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
-import { Clock, Calendar, CreditCard, MessageCircle, Video, AlertTriangle, CheckCircle, XCircle, Flag, User, WrenchIcon, RefreshCw } from "lucide-react"
+import { Clock, Calendar, CreditCard, MessageCircle, Video, AlertTriangle, CheckCircle, XCircle, Flag, User, WrenchIcon, RefreshCw, Eye, EyeOff } from "lucide-react"
 import { SessionCountdown } from "@/components/session/SessionCountdown"
 import { toast } from "sonner"
 
@@ -21,7 +21,6 @@ interface SessionProps {
     durationMinutes: number
     totalCostCredits: number
     sessionNotes: string
-    archived?: boolean | null
     refundAmount?: number | null
     cancelledBy?: string | null
     cancellationReason?: string | null
@@ -30,6 +29,10 @@ interface SessionProps {
     rejectionReason?: string | null
     expiresAt: Date | null
     createdAt: Date | null
+    mentorJoinedAt?: Date | null
+    mentorLeftAt?: Date | null
+    learnerJoinedAt?: Date | null
+    learnerLeftAt?: Date | null
     learner: {
       id: number
       profilePictureUrl?: string | null
@@ -57,6 +60,8 @@ export function SessionCard({ session, getStatusColor, formatStatus, userType }:
   const [cancelling, setCancelling] = useState(false)
   const [reporting, setReporting] = useState(false)
   const [technicalIssuesDialogOpen, setTechnicalIssuesDialogOpen] = useState(false)
+  const [isHidden, setIsHidden] = useState(false)
+  const [toggling, setToggling] = useState(false)
 
   const now = new Date()
   const sessionStart = new Date(session.scheduledDate)
@@ -66,6 +71,8 @@ export function SessionCard({ session, getStatusColor, formatStatus, userType }:
   const canJoinNow = now >= joinWindowStart && now <= sessionEnd && canJoin
   const isOngoing = session.status === "ongoing"
   const isExpired = session.expiresAt ? new Date(session.expiresAt) < now : false
+  const hasJoinedBefore = !!session.mentorJoinedAt
+  const needsReconnection = hasJoinedBefore && (isOngoing || session.status === "confirmed" || session.status === "upcoming")
 
   const handleAccept = async (message?: string) => {
     setResponding(true)
@@ -120,7 +127,8 @@ export function SessionCard({ session, getStatusColor, formatStatus, userType }:
     try {
       const response = await fetch(`/api/bookings/cancel/${session.id}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" }
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: "Cancelled by mentor" })
       })
 
       if (!response.ok) {
@@ -191,6 +199,28 @@ export function SessionCard({ session, getStatusColor, formatStatus, userType }:
     } finally {
       setReporting(false)
       setTechnicalIssuesDialogOpen(false)
+    }
+  }
+
+  const handleToggleVisibility = async () => {
+    setToggling(true)
+    try {
+      const response = await fetch(`/api/sessions/${session.id}/visibility`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isHidden: !isHidden })
+      })
+
+      if (response.ok) {
+        setIsHidden(!isHidden)
+        toast.success(isHidden ? "Session shown" : "Session hidden")
+      } else {
+        toast.error("Failed to update session visibility")
+      }
+    } catch (error) {
+      toast.error("Failed to update session visibility")
+    } finally {
+      setToggling(false)
     }
   }
 
@@ -331,7 +361,7 @@ export function SessionCard({ session, getStatusColor, formatStatus, userType }:
               <Button asChild size="sm">
                 <a href={`/sessions/${session.id}`}>
                   <Video className="h-4 w-4 mr-2" />
-                  {isOngoing ? "Reconnect" : "Join Session"}
+                  {needsReconnection ? "Reconnect" : "Join Session"}
                 </a>
               </Button>
             )}
@@ -398,6 +428,17 @@ export function SessionCard({ session, getStatusColor, formatStatus, userType }:
           </div>
 
           <div className="flex space-x-2">
+            {/* Hide/Show Button */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleToggleVisibility}
+              disabled={toggling}
+            >
+              {isHidden ? <Eye className="h-4 w-4 mr-2" /> : <EyeOff className="h-4 w-4 mr-2" />}
+              {toggling ? "..." : (isHidden ? "Show" : "Hide")}
+            </Button>
+
             {/* Technical Issues Actions */}
             {session.status === "ongoing" && (
               <TechnicalIssuesDialog

@@ -12,6 +12,7 @@
     "db:studio": "drizzle-kit studio",
     "session:monitor": "node scripts/run-session-monitor.js",
     "session:monitor:continuous": "node scripts/run-session-monitor.js --continuous",
+    "session:background-monitor": "node scripts/background-session-monitor.js",
     "session:health": "node scripts/run-session-monitor.js && echo 'Health check completed'",
     "session:check-no-shows": "node scripts/check-no-shows.js"
   },

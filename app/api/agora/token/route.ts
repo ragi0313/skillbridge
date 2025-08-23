@@ -39,8 +39,9 @@ export async function POST(request: NextRequest) {
 
     const sessionData = booking[0]
 
-    if (sessionData.status !== "confirmed") {
-      return NextResponse.json({ error: "Session is not confirmed" }, { status: 400 })
+    // Allow both confirmed and upcoming sessions to generate tokens
+    if (!["confirmed", "upcoming"].includes(sessionData.status)) {
+      return NextResponse.json({ error: `Session status '${sessionData.status}' is not ready for video call` }, { status: 400 })
     }
 
     // Determine user role and verify access

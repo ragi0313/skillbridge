@@ -40,7 +40,6 @@ export default async function LearnerSessionsPage() {
       durationMinutes: bookingSessions.durationMinutes,
       totalCostCredits: bookingSessions.totalCostCredits,
       sessionNotes: bookingSessions.sessionNotes,
-      archived: bookingSessions.archived,
       refundAmount: bookingSessions.refundAmount,
       cancelledBy: bookingSessions.cancelledBy,
       cancellationReason: bookingSessions.cancellationReason,
@@ -48,6 +47,10 @@ export default async function LearnerSessionsPage() {
       mentorResponseMessage: bookingSessions.mentorResponseMessage,
       rejectionReason: bookingSessions.rejectionReason,
       createdAt: bookingSessions.createdAt,
+      mentorJoinedAt: bookingSessions.mentorJoinedAt,
+      mentorLeftAt: bookingSessions.mentorLeftAt,
+      learnerJoinedAt: bookingSessions.learnerJoinedAt,
+      learnerLeftAt: bookingSessions.learnerLeftAt,
       mentor: {
         id: mentors.id,
         profilePictureUrl: mentors.profilePictureUrl,

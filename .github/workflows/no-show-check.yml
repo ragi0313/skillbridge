@@ -1,13 +1,13 @@
-name: No-Show Check
+name: Enhanced Session Monitoring
 
 on:
   schedule:
-    # Run every 15 minutes
-    - cron: '*/15 * * * *'
+    # Run every 5 minutes for more responsive monitoring
+    - cron: '*/5 * * * *'
   workflow_dispatch: # Allow manual trigger
 
 jobs:
-  check-no-shows:
+  enhanced-session-monitoring:
     runs-on: ubuntu-latest
     
     steps:
@@ -22,17 +22,28 @@ jobs:
     - name: Install dependencies
       run: npm ci
     
-    - name: Run no-show check
+    - name: Run enhanced session monitoring
       env:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        NODE_ENV: production
         # Add other environment variables as needed
       run: node -e "
-        import('./lib/sessions/session-management.js').then(async (module) => {
-          const result = await module.runNoShowCheck();
-          console.log('No-show check result:', result);
+        import('./lib/sessions/auto-session-monitor.js').then(async (module) => {
+          const result = await module.runAutoSessionMonitor();
+          console.log('Enhanced session monitoring result:', {
+            timestamp: result.timestamp.toISOString(),
+            sessionsChecked: result.sessionsChecked,
+            noShowsProcessed: result.noShowsProcessed,
+            expiredBookingsProcessed: result.expiredBookingsProcessed,
+            statusUpdates: result.statusUpdates,
+            errors: result.errors.length
+          });
+          if (result.errors.length > 0) {
+            console.error('Errors encountered:', result.errors);
+          }
           process.exit(0);
         }).catch(err => {
-          console.error('Error:', err);
+          console.error('Enhanced monitoring failed:', err);
           process.exit(1);
         });
       "

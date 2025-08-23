@@ -66,7 +66,7 @@ export function MentorList({
               <Button
                 onClick={handleLoadMore}
                 size="lg"
-                className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-semibold px-12 py-4 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105"
+                className="gradient-bg text-white font-semibold px-12 py-4 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105"
               >
                 Load More Mentors
               </Button>

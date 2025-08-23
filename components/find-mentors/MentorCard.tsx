@@ -151,7 +151,7 @@ const formattedBio = mentor.bio
                  <Link href={`/mentors/${mentor.id}/${slug}`}>
                   <Button
                     size="lg"
-                    className="w-[80%] ml-6 gradient-bg hover:from-purple-700 hover:to-blue-700 text-white font-semibold py-4 rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105"
+                    className="w-[80%] ml-6 gradient-bg text-white font-semibold py-4 rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105"
                   >
                     View Profile
                   </Button>

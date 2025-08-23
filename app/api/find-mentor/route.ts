@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
       rating: sql<number>`COALESCE(AVG(${mentorReviews.rating}), 0)`.as("rating"),
       reviewCount: sql<number>`COUNT(${mentorReviews.id})`.as("reviewCount"),
       skills: sql<string[]>`ARRAY_AGG(DISTINCT ${mentorSkills.skillName})`.as("skills"),
-      hourlyRate: sql<number>`MIN(${mentorSkills.ratePerHour})`.as("hourlyRate"),
+      hourlyRate: sql<number>`ROUND(AVG(${mentorSkills.ratePerHour}))`.as("hourlyRate"),
       // Always include search score, but it will be 0 when no search
       searchScore: search ? sql<number>`
         CASE 

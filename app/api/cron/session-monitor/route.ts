@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { runAutoSessionMonitor, getSessionSystemHealth } from "@/lib/sessions/auto-session-monitor"
+import { runEnhancedSessionMonitoring } from "@/lib/sessions/session-management"
 
 export async function POST(request: NextRequest) {
   try {
@@ -22,23 +23,45 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    console.log("🤖 Session monitor triggered via API")
+    console.log("🤖 Enhanced session monitor triggered via API")
     
-    // Run the comprehensive session monitoring
+    // Run the comprehensive session monitoring with enhanced features
     const result = await runAutoSessionMonitor()
     
+    // Also run enhanced session monitoring for better status transitions
+    let enhancedResult = null;
+    try {
+      enhancedResult = await runEnhancedSessionMonitoring();
+    } catch (error) {
+      console.error('Enhanced monitoring failed:', error);
+      result.errors.push(`Enhanced monitoring error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+    
     // Log important results
-    if (result.noShowsProcessed > 0 || result.expiredBookingsProcessed > 0 || result.statusUpdates > 0) {
+    const hasActivity = result.noShowsProcessed > 0 || result.expiredBookingsProcessed > 0 || result.statusUpdates > 0
+    const hasEnhancedActivity = enhancedResult && enhancedResult.totalProcessed > 0
+    
+    if (hasActivity || hasEnhancedActivity) {
       console.log(`📊 Session Monitor Results:`)
       console.log(`   No-shows processed: ${result.noShowsProcessed}`)
       console.log(`   Expired bookings: ${result.expiredBookingsProcessed}`)
       console.log(`   Status updates: ${result.statusUpdates}`)
       console.log(`   Errors: ${result.errors.length}`)
+      
+      if (enhancedResult) {
+        console.log(`📈 Enhanced Monitor Results:`)
+        console.log(`   Status transitions: ${enhancedResult.statusTransitions.processed}`)
+        console.log(`   Session transitions: ${enhancedResult.sessionTransitions.processed}`)
+        console.log(`   No-show detections: ${enhancedResult.noShowDetection.processed}`)
+        console.log(`   Total enhanced processed: ${enhancedResult.totalProcessed}`)
+      }
+    } else {
+      console.log(`📊 Session monitor completed (no activity detected)`)
     }
     
     return NextResponse.json({
       success: true,
-      message: "Session monitoring completed",
+      message: "Enhanced session monitoring completed",
       results: {
         timestamp: result.timestamp.toISOString(),
         sessionsChecked: result.sessionsChecked,
@@ -46,7 +69,14 @@ export async function POST(request: NextRequest) {
         expiredBookingsProcessed: result.expiredBookingsProcessed,
         statusUpdates: result.statusUpdates,
         errors: result.errors,
-        summary: `Processed ${result.noShowsProcessed} no-shows, ${result.expiredBookingsProcessed} expired bookings, ${result.statusUpdates} status updates`
+        summary: `Processed ${result.noShowsProcessed} no-shows, ${result.expiredBookingsProcessed} expired bookings, ${result.statusUpdates} status updates`,
+        enhanced: enhancedResult ? {
+          statusTransitions: enhancedResult.statusTransitions.processed,
+          sessionTransitions: enhancedResult.sessionTransitions.processed,
+          noShowDetections: enhancedResult.noShowDetection.processed,
+          totalProcessed: enhancedResult.totalProcessed,
+          totalErrors: enhancedResult.totalErrors.length
+        } : null
       }
     })
 

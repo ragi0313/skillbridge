@@ -35,6 +35,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         scheduledDate: bookingSessions.scheduledDate,
         durationMinutes: bookingSessions.durationMinutes,
         agoraChannelName: bookingSessions.agoraChannelName,
+        agoraCallStartedAt: bookingSessions.agoraCallStartedAt,
         learnerUser: {
           id: learnerUsers.id,
           firstName: learnerUsers.firstName,
@@ -92,28 +93,39 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: "Access denied" }, { status: 403 })
     }
 
-    // Check if session is confirmed
-    if (booking.status !== "confirmed") {
+    // Debug logging for troubleshooting
+    console.log(`[DEBUG] Session ${sessionId} join attempt:`, {
+      sessionStatus: booking.status,
+      userRole,
+      userId: session.id,
+      scheduledDate: booking.scheduledDate,
+      currentTime: new Date().toISOString()
+    })
+
+    // Check if session is joinable (confirmed or upcoming)
+    if (!["confirmed", "upcoming"].includes(booking.status)) {
+      console.log(`[ERROR] Invalid session status: ${booking.status}`)
       return NextResponse.json(
         {
-          error: `Session is ${booking.status}. Only confirmed sessions can be joined.`,
+          error: `Session is ${booking.status}. Only confirmed or upcoming sessions can be joined.`,
         },
         { status: 400 },
       )
     }
 
-    // Check if it's time to join (allow joining 10 minutes before scheduled time)
+    // Check if it's time to join (allow joining 30 minutes before scheduled time to match waiting room logic)
     const scheduledDateTime = new Date(booking.scheduledDate)
     const now = new Date()
-    const joinStartTime = new Date(scheduledDateTime.getTime() - 10 * 60 * 1000) // 10 minutes before
+    const joinStartTime = new Date(scheduledDateTime.getTime() - 30 * 60 * 1000) // 30 minutes before
     const sessionEndTime = new Date(scheduledDateTime.getTime() + (booking.durationMinutes || 60) * 60 * 1000)
     const noShowGraceTime = new Date(sessionEndTime.getTime() + 5 * 60 * 1000) // 5 minutes after session ends for no-show detection
 
     if (now < joinStartTime) {
       const minutesUntilJoin = Math.ceil((joinStartTime.getTime() - now.getTime()) / (1000 * 60))
+      console.log(`[ERROR] Too early to join: ${minutesUntilJoin} minutes remaining`)
       return NextResponse.json(
         {
-          error: `Session join window opens 10 minutes before scheduled time. You can join in ${minutesUntilJoin} minutes.`,
+          error: `Session join window opens 30 minutes before scheduled time. You can join in ${minutesUntilJoin} minutes.`,
           canJoinAt: joinStartTime.toISOString(),
           waitingMinutes: minutesUntilJoin,
           sessionDetails: {
@@ -131,6 +143,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     if (now > noShowGraceTime) {
+      console.log(`[ERROR] Session has ended`)
       return NextResponse.json(
         {
           error: "Session has ended and is no longer available.",
@@ -232,8 +245,8 @@ async function handleSessionJoin(request: NextRequest, context?: { params: Promi
       return NextResponse.json({ error: "Access denied" }, { status: 403 })
     }
 
-    // Check session status
-    if (!["confirmed", "ongoing"].includes(bookingSession.status)) {
+    // Check session status - allow confirmed, upcoming, and ongoing
+    if (!["confirmed", "upcoming", "ongoing"].includes(bookingSession.status)) {
       return NextResponse.json({ 
         error: `Cannot join session with status: ${bookingSession.status}` 
       }, { status: 400 })
@@ -254,8 +267,8 @@ async function handleSessionJoin(request: NextRequest, context?: { params: Promi
       updateData.learnerLeftAt = null
       
       // If this is the first join and mentor already joined, or if we're reconnecting and mentor is still there
-      // Mark session as ongoing
-      if (bookingSession.status === "confirmed") {
+      // Mark session as ongoing (works for both confirmed and upcoming status)
+      if (["confirmed", "upcoming"].includes(bookingSession.status)) {
         if (bookingSession.mentorJoinedAt) {
           // Both parties are now in the session
           updateData.status = "ongoing"
@@ -284,8 +297,8 @@ async function handleSessionJoin(request: NextRequest, context?: { params: Promi
       updateData.mentorLeftAt = null
       
       // If this is the first join and learner already joined, or if we're reconnecting and learner is still there
-      // Mark session as ongoing
-      if (bookingSession.status === "confirmed") {
+      // Mark session as ongoing (works for both confirmed and upcoming status)
+      if (["confirmed", "upcoming"].includes(bookingSession.status)) {
         if (bookingSession.learnerJoinedAt) {
           // Both parties are now in the session
           updateData.status = "ongoing"

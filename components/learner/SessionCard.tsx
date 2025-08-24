@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { formatDistanceToNow, format, isBefore, isAfter } from "date-fns"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -64,6 +64,8 @@ export function SessionCard({ session, getStatusColor, formatStatus, userType }:
   const [loadingChat, setLoadingChat] = useState(false)
   const [isHidden, setIsHidden] = useState(false)
   const [toggling, setToggling] = useState(false)
+  const [hasReviewed, setHasReviewed] = useState(false)
+  const [checkingReviewStatus, setCheckingReviewStatus] = useState(false)
 
   const now = new Date()
   const sessionStart = new Date(session.scheduledDate)
@@ -79,6 +81,26 @@ export function SessionCard({ session, getStatusColor, formatStatus, userType }:
   const hoursUntilSession = (sessionStart.getTime() - now.getTime()) / (1000 * 60 * 60)
   const canCancelWithoutRestriction = hoursUntilSession >= 24
   const isWithin24Hours = hoursUntilSession < 24 && hoursUntilSession > 0
+
+  // Check if review already exists for completed sessions
+  useEffect(() => {
+    if (session.status === "completed" && !hasReviewed) {
+      setCheckingReviewStatus(true)
+      fetch(`/api/sessions/${session.id}/review-status`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.hasReviewed) {
+            setHasReviewed(true)
+          }
+        })
+        .catch(error => {
+          console.error("Error checking review status:", error)
+        })
+        .finally(() => {
+          setCheckingReviewStatus(false)
+        })
+    }
+  }, [session.id, session.status, hasReviewed])
 
   const handleCancel = async () => {
     setCancelling(true)
@@ -152,6 +174,7 @@ export function SessionCard({ session, getStatusColor, formatStatus, userType }:
       }
 
       toast.success("Review submitted successfully!")
+      setHasReviewed(true)
       setReviewDialogOpen(false)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to submit review")
@@ -345,6 +368,24 @@ export function SessionCard({ session, getStatusColor, formatStatus, userType }:
           </div>
         )}
 
+        {session.status === "mentor_no_response" && (
+          <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+            {session.cancellationReason && (
+              <p className="text-sm text-green-700">
+                <strong>Reason:</strong> {session.cancellationReason}
+              </p>
+            )}
+            {session.refundAmount && (
+              <p className="text-sm text-green-700 mt-1">
+                <strong>Refunded:</strong> {session.refundAmount} credits
+              </p>
+            )}
+            <p className="text-sm text-green-700 mt-1">
+              <strong>Good news:</strong> You received a full refund since the mentor didn't respond
+            </p>
+          </div>
+        )}
+
         <div className="flex items-center justify-between pt-4 border-t">
           <div className="flex space-x-2">
             {canJoinNow && (
@@ -433,7 +474,7 @@ export function SessionCard({ session, getStatusColor, formatStatus, userType }:
               />
             )}
 
-            {session.status === "completed" && (
+            {session.status === "completed" && !hasReviewed && !checkingReviewStatus && (
               <ReviewDialog 
                 session={session}
                 onSubmit={handleSubmitReview}
@@ -442,12 +483,27 @@ export function SessionCard({ session, getStatusColor, formatStatus, userType }:
                 onOpenChange={setReviewDialogOpen}
               />
             )}
+
+            {session.status === "completed" && hasReviewed && (
+              <div className="flex items-center gap-2">
+                <CheckCircle className="h-4 w-4 text-green-500" />
+                <span className="text-sm text-green-700">Review submitted</span>
+              </div>
+            )}
+
+            {session.status === "completed" && checkingReviewStatus && (
+              <div className="flex items-center gap-2">
+                <RefreshCw className="h-4 w-4 animate-spin text-gray-400" />
+                <span className="text-sm text-gray-500">Checking...</span>
+              </div>
+            )}
           </div>
 
           <div className="flex space-x-2">
             {/* Chat History Button */}
             {(session.status === "completed" || session.status === "ongoing" || 
-              session.status === "cancelled" || session.status === "technical_issues") && (
+              session.status === "cancelled" || session.status === "technical_issues" ||
+              session.status === "mentor_no_response") && (
               <Button
                 variant="outline"
                 size="sm"
@@ -471,7 +527,8 @@ export function SessionCard({ session, getStatusColor, formatStatus, userType }:
 
             {(session.status === "completed" || session.status === "cancelled" || 
               session.status === "both_no_show" || session.status === "learner_no_show" || 
-              session.status === "mentor_no_show" || session.status === "technical_issues") && (
+              session.status === "mentor_no_show" || session.status === "technical_issues" ||
+              session.status === "mentor_no_response") && (
               <ReportDialog 
                 session={session}
                 onSubmit={handleReport}
@@ -656,11 +713,7 @@ function ReviewDialog({ session, onSubmit, isSubmitting, open, onOpenChange }: R
   const [reviewText, setReviewText] = useState("")
 
   const handleSubmit = () => {
-    if (!reviewText.trim()) {
-      toast.error("Please write a review")
-      return
-    }
-    onSubmit({ rating, reviewText })
+    onSubmit({ rating, reviewText: reviewText.trim() })
   }
 
   return (
@@ -673,43 +726,58 @@ function ReviewDialog({ session, onSubmit, isSubmitting, open, onOpenChange }: R
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Rate Your Session</DialogTitle>
+          <DialogTitle>Rate Your Mentor</DialogTitle>
           <DialogDescription>
-            How was your session with {session.mentorUser?.firstName}?
+            How was your mentor {session.mentorUser?.firstName}? This helps other learners find great mentors.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-2">Rating</label>
+            <label className="block text-sm font-medium mb-2">Rating (Required) *</label>
             <div className="flex space-x-1">
               {[1, 2, 3, 4, 5].map((star) => (
                 <button
                   key={star}
                   onClick={() => setRating(star)}
-                  className={`text-2xl ${star <= rating ? "text-yellow-400" : "text-gray-300"} hover:text-yellow-400`}
+                  className={`text-2xl ${star <= rating ? "text-yellow-400" : "text-gray-300"} hover:text-yellow-400 transition-colors`}
+                  disabled={isSubmitting}
                 >
                   ★
                 </button>
               ))}
             </div>
+            <p className="text-xs text-gray-500 mt-1">
+              {rating === 1 && "Poor"}
+              {rating === 2 && "Fair"}
+              {rating === 3 && "Good"}
+              {rating === 4 && "Great"}
+              {rating === 5 && "Excellent"}
+            </p>
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-2">Review</label>
+            <label className="block text-sm font-medium mb-2">Comments (Optional)</label>
             <Textarea
               value={reviewText}
               onChange={(e) => setReviewText(e.target.value)}
-              placeholder="Share your experience with this mentor..."
+              placeholder="Share your experience with this mentor... (optional)"
               rows={4}
+              maxLength={1000}
+              disabled={isSubmitting}
             />
+            <p className="text-xs text-gray-500 mt-1">
+              {reviewText.length}/1000 characters
+            </p>
           </div>
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
+            Cancel
+          </Button>
           <Button onClick={handleSubmit} disabled={isSubmitting}>
-            {isSubmitting ? "Submitting..." : "Submit Review"}
+            {isSubmitting ? "Submitting..." : "Rate Mentor"}
           </Button>
         </DialogFooter>
       </DialogContent>

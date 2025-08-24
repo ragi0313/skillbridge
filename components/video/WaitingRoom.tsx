@@ -360,24 +360,24 @@ export default function WaitingRoom({
             </div>
           </div>
 
-          <Separator className="my-6" />
+          <Separator className="my-6 bg-gray-700" />
 
           {/* Device Testing */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {/* Video Preview */}
-            <div>
+            <div className="lg:col-span-2">
               <h3 className="text-lg font-semibold mb-4 flex items-center">
                 <Video className="h-5 w-5 mr-2" />
                 Camera Preview
               </h3>
               
-              <div className="relative bg-gray-900 rounded-lg overflow-hidden aspect-video mb-4">
+              <div className="relative bg-black rounded-xl overflow-hidden aspect-video mb-6 border-2 border-gray-600 shadow-2xl">
                 <video
                   ref={videoRef}
                   autoPlay
                   muted
                   playsInline
-                  className={`w-full h-full object-cover ${
+                  className={`w-full h-full object-cover transform scale-x-[-1] ${
                     !deviceState.camera.enabled ? 'hidden' : ''
                   }`}
                 />
@@ -402,31 +402,39 @@ export default function WaitingRoom({
                 )}
               </div>
 
-              <div className="flex justify-center space-x-4">
+              <div className="flex justify-center space-x-8">
                 <Button
                   variant={deviceState.camera.enabled ? "default" : "destructive"}
                   onClick={toggleCamera}
                   disabled={!deviceState.camera.available}
-                  className="rounded-full w-12 h-12"
+                  className="rounded-full w-16 h-16 text-white shadow-lg transition-all hover:scale-105"
                 >
-                  {deviceState.camera.enabled ? <Video className="h-5 w-5" /> : <VideoOff className="h-5 w-5" />}
+                  {deviceState.camera.enabled ? <Video className="h-7 w-7" /> : <VideoOff className="h-7 w-7" />}
                 </Button>
 
                 <Button
                   variant={deviceState.microphone.enabled ? "default" : "destructive"}
                   onClick={toggleMicrophone}
                   disabled={!deviceState.microphone.available}
-                  className="rounded-full w-12 h-12"
+                  className="rounded-full w-16 h-16 text-white shadow-lg transition-all hover:scale-105"
                 >
-                  {deviceState.microphone.enabled ? <Mic className="h-5 w-5" /> : <MicOff className="h-5 w-5" />}
+                  {deviceState.microphone.enabled ? <Mic className="h-7 w-7" /> : <MicOff className="h-7 w-7" />}
                 </Button>
+              </div>
+              
+              <div className="text-center mt-4">
+                <p className="text-sm text-gray-400">
+                  {deviceState.camera.available && deviceState.microphone.available 
+                    ? "✓ Ready for video call" 
+                    : "⚠ Device setup needed"}
+                </p>
               </div>
             </div>
 
             {/* Device Status */}
-            <div>
-              <h3 className="text-lg font-semibold mb-4 flex items-center">
-                <Settings className="h-5 w-5 mr-2" />
+            <div className="lg:col-span-1">
+              <h3 className="text-lg font-semibold mb-6 flex items-center text-gray-100">
+                <Settings className="h-5 w-5 mr-2 text-blue-400" />
                 Device Status
               </h3>
 
@@ -513,7 +521,7 @@ export default function WaitingRoom({
             </div>
           </div>
 
-          <Separator className="my-6" />
+          <Separator className="my-6 bg-gray-700" />
 
           {/* Join Session */}
           <div className="text-center">
@@ -533,7 +541,7 @@ export default function WaitingRoom({
             </Button>
             
             {canJoin && !readyToJoin && (
-              <p className="mt-2 text-sm text-red-600">
+              <p className="mt-2 text-sm text-red-400">
                 Please resolve camera and microphone issues before joining
               </p>
             )}

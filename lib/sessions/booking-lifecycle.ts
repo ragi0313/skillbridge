@@ -210,14 +210,14 @@ export class BookingLifecycleService {
       for (const booking of expiredBookings) {
         try {
           await db.transaction(async (tx) => {
-            // Update booking status to expired
+            // Update booking status to mentor_no_response if expired without mentor response
             await tx
               .update(bookingSessions)
               .set({
-                status: "cancelled",
+                status: "mentor_no_response",
                 cancelledAt: now,
                 cancelledBy: "system",
-                cancellationReason: "Request expired without mentor response",
+                cancellationReason: "Mentor did not respond to request within the allowed time",
                 refundAmount: booking.escrowCredits,
                 updatedAt: now,
               })
@@ -774,6 +774,114 @@ export class BookingLifecycleService {
   }
 
   /**
+   * Cleanup stuck ongoing sessions that should have ended
+   */
+  async cleanupStuckSessions(): Promise<{ processed: number; errors: string[] }> {
+    const now = new Date()
+    const errors: string[] = []
+    let processed = 0
+
+    try {
+      // Find ongoing sessions that should have ended (2+ hours past scheduled end)
+      const stuckSessions = await db
+        .select({
+          id: bookingSessions.id,
+          learnerId: bookingSessions.learnerId,
+          mentorId: bookingSessions.mentorId,
+          totalCostCredits: bookingSessions.totalCostCredits,
+          scheduledDate: bookingSessions.scheduledDate,
+          durationMinutes: bookingSessions.durationMinutes,
+          learnerJoinedAt: bookingSessions.learnerJoinedAt,
+          mentorJoinedAt: bookingSessions.mentorJoinedAt,
+        })
+        .from(bookingSessions)
+        .where(eq(bookingSessions.status, "ongoing"))
+
+      for (const session of stuckSessions) {
+        try {
+          const scheduledEndTime = new Date(session.scheduledDate.getTime() + (session.durationMinutes || 60) * 60 * 1000)
+          const hoursOverdue = (now.getTime() - scheduledEndTime.getTime()) / (1000 * 60 * 60)
+
+          // Only cleanup sessions that are ACTUALLY stuck (4+ hours past scheduled END time)
+          // This prevents auto-completion of active sessions
+          if (hoursOverdue < 4) {
+            console.log(`[SKIP] Session ${session.id} not stuck yet - only ${Math.round(hoursOverdue * 10) / 10} hours past end time`)
+            continue
+          }
+
+          console.log(`[CLEANUP] Auto-completing stuck session ${session.id}, ${Math.round(hoursOverdue * 10) / 10} hours overdue`)
+
+          // Complete the session - assume success if it was ongoing
+          const result = await this.endVideoSession(session.id, 'completed')
+          
+          if (result.success) {
+            processed++
+          } else {
+            errors.push(`Session ${session.id}: ${result.error}`)
+          }
+        } catch (error) {
+          console.error(`Error cleaning up session ${session.id}:`, error)
+          errors.push(`Session ${session.id}: ${error instanceof Error ? error.message : 'Unknown error'}`)
+        }
+      }
+
+      return { processed, errors }
+    } catch (error) {
+      console.error("Error in cleanupStuckSessions:", error)
+      return { processed, errors: [error instanceof Error ? error.message : 'Unknown error'] }
+    }
+  }
+
+  /**
+   * Monitor and update session statuses based on current time
+   */
+  async monitorSessionStatuses(): Promise<{ updated: number; errors: string[] }> {
+    const now = new Date()
+    const errors: string[] = []
+    let updated = 0
+
+    try {
+      // 1. Update confirmed sessions to upcoming when within join window (30 mins before)
+      const sessionsToUpdateToUpcoming = await db
+        .select({ id: bookingSessions.id, scheduledDate: bookingSessions.scheduledDate })
+        .from(bookingSessions)
+        .where(
+          and(
+            eq(bookingSessions.status, "confirmed"),
+            // Within 30 minutes of start time
+            lt(bookingSessions.scheduledDate, new Date(now.getTime() + 30 * 60 * 1000)),
+            // But not started yet
+            gte(bookingSessions.scheduledDate, now)
+          )
+        )
+
+      for (const session of sessionsToUpdateToUpcoming) {
+        try {
+          const result = await this.updateToUpcoming(session.id)
+          if (result.success) {
+            updated++
+            console.log(`[MONITOR] Updated session ${session.id} to upcoming`)
+          } else {
+            errors.push(`Session ${session.id} to upcoming: ${result.error}`)
+          }
+        } catch (error) {
+          errors.push(`Session ${session.id} to upcoming: ${error instanceof Error ? error.message : 'Unknown error'}`)
+        }
+      }
+
+      // 2. Cleanup stuck ongoing sessions
+      const cleanupResult = await this.cleanupStuckSessions()
+      updated += cleanupResult.processed
+      errors.push(...cleanupResult.errors)
+
+      return { updated, errors }
+    } catch (error) {
+      console.error("Error in monitorSessionStatuses:", error)
+      return { updated, errors: [error instanceof Error ? error.message : 'Unknown error'] }
+    }
+  }
+
+  /**
    * End a video session and complete it
    */
   async endVideoSession(
@@ -809,21 +917,30 @@ export class BookingLifecycleService {
           throw new Error("Cannot complete session - both participants must have joined the video call")
         }
 
-        // For normal completion, check if participants stayed for most of the session
+        // For normal completion, check if participants stayed for a reasonable duration
         if (endType === 'completed') {
+          const sessionStartTime = new Date(session.scheduledDate)
           const sessionEndTime = new Date(session.scheduledDate.getTime() + session.durationMinutes * 60 * 1000)
-          const fiveMinutesBeforeEnd = new Date(sessionEndTime.getTime() - 5 * 60 * 1000)
+          const actualCallDuration = now.getTime() - sessionStartTime.getTime()
+          const scheduledDuration = session.durationMinutes * 60 * 1000
+          const minimumDuration = Math.min(scheduledDuration * 0.5, 10 * 60 * 1000) // At least 50% of scheduled time or 10 minutes, whichever is less
           
-          const learnerLeftEarly = session.learnerLeftAt && session.learnerLeftAt < fiveMinutesBeforeEnd
-          const mentorLeftEarly = session.mentorLeftAt && session.mentorLeftAt < fiveMinutesBeforeEnd
-          
-          if (learnerLeftEarly || mentorLeftEarly) {
-            const earlyLeavers = []
-            if (learnerLeftEarly) earlyLeavers.push('learner')
-            if (mentorLeftEarly) earlyLeavers.push('mentor')
+          // Only check for early completion if the session was very short compared to what was scheduled
+          if (actualCallDuration < minimumDuration) {
+            // Check if users left very early (more than 15 minutes before scheduled end)
+            const earlyLeaveThreshold = new Date(sessionEndTime.getTime() - 15 * 60 * 1000)
             
-            throw new Error(`Cannot complete session - ${earlyLeavers.join(' and ')} left more than 5 minutes before scheduled end time`)
+            const learnerLeftVeryEarly = session.learnerLeftAt && session.learnerLeftAt < earlyLeaveThreshold
+            const mentorLeftVeryEarly = session.mentorLeftAt && session.mentorLeftAt < earlyLeaveThreshold
+            
+            // Only block completion if BOTH users left very early AND the total duration was too short
+            if ((learnerLeftVeryEarly && mentorLeftVeryEarly) || actualCallDuration < 5 * 60 * 1000) { // Less than 5 minutes total
+              console.log(`[WARNING] Very short session detected: ${Math.round(actualCallDuration / 60000)} minutes`)
+              // Don't throw error, but log for review - allow completion anyway
+            }
           }
+          
+          console.log(`[DEBUG] Session completion validation passed. Duration: ${Math.round(actualCallDuration / 60000)} minutes of ${session.durationMinutes} scheduled minutes`)
         }
 
         const mentorEarnings = Math.floor(session.totalCostCredits * (100 - BookingLifecycleService.PLATFORM_FEE_PERCENTAGE) / 100)

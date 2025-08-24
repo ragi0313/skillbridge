@@ -52,7 +52,7 @@ export function SessionsClient({ sessions }: SessionsClientProps) {
   const upcomingSessions = sessions.filter(s => ["confirmed"].includes(s.status || ""))
   const activeSessions = sessions.filter(s => s.status === "ongoing")
   const completedSessions = sessions.filter(s => s.status === "completed")
-  const cancelledSessions = sessions.filter(s => ["cancelled"].includes(s.status || ""))
+  const cancelledSessions = sessions.filter(s => ["cancelled", "mentor_no_response"].includes(s.status || ""))
   const rejectedSessions = sessions.filter(s => s.status === "rejected")
   const noShowSessions = sessions.filter(s => ["both_no_show", "learner_no_show", "mentor_no_show"].includes(s.status || ""))
   const technicalIssuesSessions = sessions.filter(s => s.status === "technical_issues")
@@ -133,6 +133,8 @@ export function SessionsClient({ sessions }: SessionsClientProps) {
         return "bg-green-100 text-green-800"
       case "cancelled":
         return "bg-gray-100 text-gray-800"
+      case "mentor_no_response":
+        return "bg-red-100 text-red-800"
       case "rejected":
         return "bg-red-100 text-red-800"
       case "both_no_show":
@@ -158,6 +160,8 @@ export function SessionsClient({ sessions }: SessionsClientProps) {
         return "Completed"
       case "cancelled":
         return "Cancelled"
+      case "mentor_no_response":
+        return "No Response"
       case "rejected":
         return "Declined"
       case "both_no_show":

@@ -110,8 +110,18 @@ export default function MentorSettingsPage() {
             })
             return acc
           }, {}),
-          // Map blockedDates to Date objects (preserve local date)
-          blockedDates: blockedDates.map((bd: any) => new Date(bd.blockedDate + 'T00:00:00')),
+          // Map blockedDates to Date objects (preserve local date) with validation
+          blockedDates: blockedDates
+            .filter((bd: any) => bd && bd.blockedDate) // Filter out invalid entries
+            .map((bd: any) => {
+              const dateStr = bd.blockedDate
+              // Handle both YYYY-MM-DD and full datetime formats
+              const dateOnly = dateStr.split('T')[0] // Get just the date part
+              const date = new Date(dateOnly + 'T00:00:00')
+              // Validate the date is valid
+              return isNaN(date.getTime()) ? null : date
+            })
+            .filter(Boolean), // Remove any invalid dates
         })
       } catch (err) {
         console.error("Failed to fetch mentor data", err)

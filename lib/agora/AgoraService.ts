@@ -64,14 +64,30 @@ class AgoraService {
   }
 
   private generateUID(userId: string): number {
-    // Convert string userId to a consistent number
+    // Generate unique UID by combining userId hash with timestamp and random component
+    // This prevents UID conflicts when same user joins from multiple sessions/devices
     let hash = 0
     for (let i = 0; i < userId.length; i++) {
       const char = userId.charCodeAt(i)
       hash = (hash << 5) - hash + char
       hash = hash & hash // Convert to 32-bit integer
     }
-    return Math.abs(hash) % 2147483647 // Ensure positive and within Agora's UID range
+    
+    // Use modulo approach to ensure we stay within valid range while maintaining uniqueness
+    const baseHash = Math.abs(hash) % 1000000 // 6 digits max
+    const timestamp = Date.now() % 100000 // 5 digits max  
+    const random = Math.floor(Math.random() * 10000) // 4 digits max
+    
+    // Combine components more carefully to avoid overflow
+    // baseHash (up to 1M) + timestamp (up to 100K) + random (up to 10K) + userId as final component
+    const userIdNum = parseInt(userId) || 1 // Use actual userId as number, fallback to 1
+    const uniqueUID = (baseHash * 1000 + timestamp % 1000) * 100 + random % 100 + (userIdNum % 10) * 10000000
+    
+    // Ensure it's within Agora's valid range (1 to 2^31-1) using modulo to maintain distribution
+    const maxUID = 2147483647
+    const finalUID = (uniqueUID % (maxUID - 1000)) + 1000 // Ensure minimum of 1000 to avoid conflicts
+    
+    return finalUID
   }
 
   private async buildToken(

@@ -8,6 +8,7 @@ import { db } from "@/db"
 import { users, learners, mentors, admins } from "@/db/schema"
 import { compare } from "bcryptjs"
 import { sign } from "jsonwebtoken"
+import { sendBlacklistNotificationEmail, sendSuspensionNotificationEmail } from "@/lib/email/userRestrictionMail"
 
 // Helper function to add timeout to promises
 const withTimeout = <T>(promise: Promise<T>, ms: number): Promise<T> => {
@@ -67,21 +68,44 @@ async function handleLogin(req: NextRequest) {
     }
 
     
-    if (user.status === "blacklisted") {
+    // Check if user is blacklisted
+    if (user.blacklistedAt) {
+      // Send notification email to user about blacklist with appeal option
+      try {
+        await sendBlacklistNotificationEmail(user.email, user.firstName, user.blacklistReason || "Policy violation")
+      } catch (emailError) {
+        console.error('Failed to send blacklist notification email:', emailError)
+      }
+
       return NextResponse.json(
         {
-          error: "Your account has been permanently restricted. Please contact support for more information.",
+          error: "Your account has been permanently restricted due to policy violations. An email has been sent to you with appeal instructions.",
           status: "blacklisted",
+          reason: user.blacklistReason || "Policy violation",
+          canAppeal: true
         },
         { status: 403 },
       )
     }
 
-    if (user.status === "suspended") {
+    // Check if user is suspended
+    if (user.suspendedAt) {
       const now = new Date()
       const suspensionEnd = user.suspensionEndsAt
 
       if (suspensionEnd && now < suspensionEnd) {
+        // Send notification email about suspension
+        try {
+          await sendSuspensionNotificationEmail(
+            user.email, 
+            user.firstName, 
+            user.suspensionReason || "Policy violation",
+            suspensionEnd
+          )
+        } catch (emailError) {
+          console.error('Failed to send suspension notification email:', emailError)
+        }
+
         const endDate = suspensionEnd.toLocaleDateString("en-US", {
           year: "numeric",
           month: "long",
@@ -89,9 +113,11 @@ async function handleLogin(req: NextRequest) {
         })
         return NextResponse.json(
           {
-            error: `Your account is suspended until ${endDate}. Reason: ${user.suspensionReason || "Policy violation"}`,
+            error: `Your account is suspended until ${endDate}. An email has been sent with details and appeal instructions.`,
             status: "suspended",
+            reason: user.suspensionReason || "Policy violation",
             suspensionEndsAt: suspensionEnd,
+            canAppeal: true
           },
           { status: 403 },
         )

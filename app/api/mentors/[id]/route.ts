@@ -66,6 +66,7 @@ export async function GET(
       createdAt: mentorReviews.createdAt,
       learnerFirstName: users.firstName,
       learnerLastName: users.lastName,
+      learnerProfilePictureUrl: learners.profilePictureUrl,
     })
     .from(mentorReviews)
     .where(eq(mentorReviews.mentorId, mentorId))
@@ -77,6 +78,7 @@ export async function GET(
     reviewText: r.reviewText,
     createdAt: r.createdAt,
     learnerName: `${r.learnerFirstName} ${r.learnerLastName}`,
+    learnerProfilePictureUrl: r.learnerProfilePictureUrl,
   }))
 
   const { users: userData, mentors: mentorData } = mentorRow

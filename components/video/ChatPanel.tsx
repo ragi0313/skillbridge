@@ -41,8 +41,9 @@ interface ChatAttachment {
 interface ChatPanelProps {
   sessionId: string
   userRole: "learner" | "mentor"
-  isMinimized?: boolean
-  onToggleMinimize?: () => void
+  isOpen?: boolean
+  onToggle?: () => void
+  participantCount?: number
 }
 
 const EMOJI_LIST = [
@@ -50,7 +51,7 @@ const EMOJI_LIST = [
   "👋", "🙏", "💪", "🎯", "⭐", "✅", "❌", "⚡", "🚀", "💡"
 ]
 
-export default function ChatPanel({ sessionId, userRole, isMinimized = false, onToggleMinimize }: ChatPanelProps) {
+export default function ChatPanel({ sessionId, userRole, isOpen = false, onToggle, participantCount = 2 }: ChatPanelProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [newMessage, setNewMessage] = useState("")
   const [isLoading, setIsLoading] = useState(false)
@@ -221,109 +222,119 @@ export default function ChatPanel({ sessionId, userRole, isMinimized = false, on
     return () => clearInterval(interval)
   }, [sessionId])
 
-  // Track unread messages when minimized
+  // Track unread messages when closed
   useEffect(() => {
-    if (isMinimized) {
+    if (!isOpen) {
       setUnreadCount(prev => prev + (messages.length > 0 ? 1 : 0))
     } else {
       setUnreadCount(0)
     }
-  }, [messages.length, isMinimized])
+  }, [messages.length, isOpen])
 
-  if (isMinimized) {
-    return (
-      <div className="fixed bottom-4 right-4 z-50">
-        <Button
-          onClick={onToggleMinimize}
-          className="rounded-full w-14 h-14 bg-blue-600 hover:bg-blue-700 relative"
-        >
-          <MessageCircle className="h-6 w-6" />
-          {unreadCount > 0 && (
-            <Badge className="absolute -top-2 -right-2 bg-red-500 text-white min-w-[1.25rem] h-5 text-xs">
-              {unreadCount > 99 ? '99+' : unreadCount}
-            </Badge>
-          )}
-        </Button>
-      </div>
-    )
+  // If chat is not open, don't render anything (will be handled by VideoCall component)
+  if (!isOpen) {
+    return null
   }
 
   return (
-    <Card className="w-80 h-96 flex flex-col">
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-sm flex items-center">
-            <MessageCircle className="h-4 w-4 mr-2" />
-            Session Chat
-          </CardTitle>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onToggleMinimize}
-            className="h-6 w-6 p-0"
-          >
-            <ChevronDown className="h-4 w-4" />
-          </Button>
+    <div className="h-full w-full bg-white border-l border-gray-200 flex flex-col">
+      {/* Chat Header - Zoom/Meet style */}
+      <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50">
+        <div className="flex items-center space-x-2">
+          <MessageCircle className="h-5 w-5 text-gray-600" />
+          <h3 className="font-medium text-gray-900">Chat</h3>
+          <Badge variant="secondary" className="text-xs">
+            {participantCount} {participantCount === 1 ? 'participant' : 'participants'}
+          </Badge>
         </div>
-      </CardHeader>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onToggle}
+          className="h-8 w-8 p-0 text-gray-500 hover:text-gray-700"
+        >
+          <X className="h-4 w-4" />
+        </Button>
+      </div>
 
-      <CardContent className="flex-1 flex flex-col p-2 space-y-2">
-        {/* Messages */}
-        <ScrollArea className="flex-1" ref={chatContainerRef}>
-          <div className="space-y-2 pr-2">
+      {/* Messages Area - Zoom/Meet style */}
+      <div className="flex-1 overflow-hidden">
+        <ScrollArea className="h-full">
+          <div className="p-4 space-y-4">
             {isLoading ? (
-              <div className="text-center text-sm text-gray-500 py-4">
+              <div className="text-center text-sm text-gray-500 py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-300 mx-auto mb-2"></div>
                 Loading messages...
               </div>
             ) : messages.length === 0 ? (
-              <div className="text-center text-sm text-gray-500 py-4">
-                No messages yet. Start the conversation!
+              <div className="text-center text-sm text-gray-500 py-8">
+                <MessageCircle className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                <p className="font-medium">No messages yet</p>
+                <p className="text-xs text-gray-400 mt-1">Start the conversation with your session partner!</p>
               </div>
             ) : (
               messages.slice().reverse().map((message) => (
-                <div
-                  key={message.id}
-                  className={`flex ${message.user.id === parseInt(sessionId) ? 'justify-end' : 'justify-start'}`}
-                >
-                  <div
-                    className={`max-w-[80%] rounded-lg p-2 ${
-                      message.user.id === parseInt(sessionId)
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-900'
-                    }`}
-                  >
-                    <div className="text-xs opacity-75 mb-1">
-                      {message.user.firstName} {message.user.lastName}
+                <div key={message.id} className="group">
+                  {/* Message bubble */}
+                  <div className={`flex items-start space-x-3 ${
+                    message.user.role === userRole ? 'flex-row-reverse space-x-reverse' : ''
+                  }`}>
+                    {/* Avatar */}
+                    <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium text-white ${
+                      message.user.role === 'mentor' ? 'bg-purple-500' : 'bg-blue-500'
+                    }`}>
+                      {message.user.firstName[0]}{message.user.lastName[0]}
                     </div>
                     
-                    {message.messageType === 'file' && message.attachments?.[0] ? (
-                      <div className="space-y-1">
-                        <div className="flex items-center space-x-2 text-sm">
-                          {getFileIcon(message.attachments[0].fileType)}
-                          <span className="truncate">{message.attachments[0].fileName}</span>
-                        </div>
-                        <div className="text-xs opacity-75">
-                          {formatFileSize(message.attachments[0].fileSize)}
-                        </div>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-6 text-xs"
-                          onClick={() => window.open(message.attachments![0].fileUrl, '_blank')}
-                        >
-                          <Download className="h-3 w-3 mr-1" />
-                          Download
-                        </Button>
+                    {/* Message content */}
+                    <div className={`flex-1 max-w-[75%] ${
+                      message.user.role === userRole ? 'text-right' : 'text-left'
+                    }`}>
+                      {/* Name and timestamp */}
+                      <div className={`flex items-center space-x-2 mb-1 text-xs text-gray-500 ${
+                        message.user.role === userRole ? 'justify-end' : 'justify-start'
+                      }`}>
+                        <span className="font-medium">
+                          {message.user.role === userRole ? 'You' : `${message.user.firstName} ${message.user.lastName}`}
+                        </span>
+                        <span>•</span>
+                        <span>{formatDistanceToNow(new Date(message.createdAt), { addSuffix: true })}</span>
+                        {message.isEdited && <span className="text-gray-400">(edited)</span>}
                       </div>
-                    ) : (
-                      <div className="text-sm whitespace-pre-wrap break-words">
-                        {message.message}
+                      
+                      {/* Message bubble */}
+                      <div className={`inline-block rounded-2xl px-4 py-2 ${
+                        message.user.role === userRole
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-100 text-gray-900 border'
+                      }`}>
+                        {message.messageType === 'file' && message.attachments?.[0] ? (
+                          <div className="space-y-2">
+                            <div className="flex items-center space-x-2">
+                              {getFileIcon(message.attachments[0].fileType)}
+                              <span className="font-medium text-sm">{message.attachments[0].fileName}</span>
+                            </div>
+                            <div className="text-xs opacity-75">
+                              {formatFileSize(message.attachments[0].fileSize)}
+                            </div>
+                            <Button
+                              size="sm"
+                              variant={message.user.role === userRole ? "secondary" : "outline"}
+                              className="h-7 text-xs"
+                              onClick={() => window.open(message.attachments![0].fileUrl, '_blank')}
+                            >
+                              <Download className="h-3 w-3 mr-1" />
+                              Download
+                            </Button>
+                          </div>
+                        ) : message.messageType === 'emoji' ? (
+                          <span className="text-2xl">{message.message}</span>
+                        ) : (
+                          <p className="text-sm whitespace-pre-wrap break-words leading-relaxed">
+                            {message.message}
+                          </p>
+                        )}
                       </div>
-                    )}
-                    
-                    <div className="text-xs opacity-75 mt-1">
-                      {formatDistanceToNow(new Date(message.createdAt), { addSuffix: true })}
-                      {message.isEdited && " (edited)"}
                     </div>
                   </div>
                 </div>
@@ -332,19 +343,19 @@ export default function ChatPanel({ sessionId, userRole, isMinimized = false, on
             <div ref={messagesEndRef} />
           </div>
         </ScrollArea>
+      </div>
 
-        <Separator />
-
-        {/* Emoji Picker */}
-        {showEmojiPicker && (
-          <div className="bg-white border rounded-lg p-2 shadow-lg">
-            <div className="grid grid-cols-5 gap-1">
+      {/* Emoji Picker */}
+      {showEmojiPicker && (
+        <div className="mx-4 mb-2">
+          <div className="bg-white border border-gray-200 rounded-lg p-3 shadow-lg">
+            <div className="grid grid-cols-10 gap-2">
               {EMOJI_LIST.map((emoji) => (
                 <Button
                   key={emoji}
                   variant="ghost"
                   size="sm"
-                  className="h-8 w-8 p-0 text-lg"
+                  className="h-8 w-8 p-0 text-lg hover:bg-gray-100"
                   onClick={() => sendEmoji(emoji)}
                 >
                   {emoji}
@@ -352,48 +363,67 @@ export default function ChatPanel({ sessionId, userRole, isMinimized = false, on
               ))}
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Message Input */}
-        <div className="flex items-center space-x-2">
+      {/* Message Input Area - Zoom/Meet style */}
+      <div className="border-t border-gray-200 p-4 bg-gray-50">
+        <div className="flex items-end space-x-2">
+          {/* Action buttons */}
           <div className="flex items-center space-x-1">
             <Button
               variant="ghost"
               size="sm"
-              className="h-8 w-8 p-0"
+              className="h-9 w-9 p-0 text-gray-500 hover:text-gray-700 hover:bg-gray-200"
               onClick={() => fileInputRef.current?.click()}
               disabled={isUploading}
+              title="Attach file"
             >
               <Paperclip className="h-4 w-4" />
             </Button>
             <Button
               variant="ghost"
               size="sm"
-              className="h-8 w-8 p-0"
+              className="h-9 w-9 p-0 text-gray-500 hover:text-gray-700 hover:bg-gray-200"
               onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+              title="Add emoji"
             >
               <Smile className="h-4 w-4" />
             </Button>
           </div>
           
-          <Input
-            placeholder="Type a message..."
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            onKeyPress={handleKeyPress}
-            className="flex-1 h-8"
-            disabled={isSending}
-          />
-          
-          <Button
-            size="sm"
-            onClick={sendMessage}
-            disabled={!newMessage.trim() || isSending}
-            className="h-8"
-          >
-            <Send className="h-4 w-4" />
-          </Button>
+          {/* Message input */}
+          <div className="flex-1 flex items-end space-x-2">
+            <Input
+              placeholder="Type a message here..."
+              value={newMessage}
+              onChange={(e) => setNewMessage(e.target.value)}
+              onKeyPress={handleKeyPress}
+              className="flex-1 min-h-[40px] max-h-[120px] py-2 px-3 text-sm border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+              disabled={isSending}
+            />
+            <Button
+              size="sm"
+              onClick={sendMessage}
+              disabled={!newMessage.trim() || isSending}
+              className="h-10 px-4 bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              {isSending ? (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
         </div>
+
+        {/* Upload progress */}
+        {isUploading && (
+          <div className="mt-2 text-xs text-center text-gray-500 flex items-center justify-center">
+            <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-gray-400 mr-2" />
+            Uploading file...
+          </div>
+        )}
 
         {/* Hidden file input */}
         <input
@@ -403,14 +433,7 @@ export default function ChatPanel({ sessionId, userRole, isMinimized = false, on
           onChange={handleFileUpload}
           accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.js,.ts,.html,.css,.json"
         />
-
-        {/* Upload progress */}
-        {isUploading && (
-          <div className="text-xs text-center text-gray-500">
-            Uploading file...
-          </div>
-        )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   )
 }

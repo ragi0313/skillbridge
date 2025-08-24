@@ -355,6 +355,24 @@ export function SessionCard({ session, getStatusColor, formatStatus, userType }:
           </div>
         )}
 
+        {session.status === "mentor_no_response" && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+            {session.cancellationReason && (
+              <p className="text-sm text-red-700">
+                <strong>Reason:</strong> {session.cancellationReason}
+              </p>
+            )}
+            {session.refundAmount && (
+              <p className="text-sm text-red-700 mt-1">
+                <strong>Learner refunded:</strong> {session.refundAmount} credits
+              </p>
+            )}
+            <p className="text-sm text-red-700 mt-1">
+              <strong>Note:</strong> This request expired due to lack of response
+            </p>
+          </div>
+        )}
+
         <div className="flex items-center justify-between pt-4 border-t">
           <div className="flex space-x-2">
             {canJoinNow && (
@@ -453,7 +471,8 @@ export function SessionCard({ session, getStatusColor, formatStatus, userType }:
             
             {(session.status === "completed" || session.status === "cancelled" || 
               session.status === "both_no_show" || session.status === "learner_no_show" || 
-              session.status === "mentor_no_show" || session.status === "technical_issues") && (
+              session.status === "mentor_no_show" || session.status === "technical_issues" ||
+              session.status === "mentor_no_response") && (
               <ReportDialog 
                 session={session}
                 onSubmit={handleReport}

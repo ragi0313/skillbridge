@@ -22,7 +22,6 @@ export class SessionManagementService {
   private static readonly MIN_CONNECTION_TIME_MS = 5 * 60 * 1000 // 5 minutes minimum
   private static readonly NO_SHOW_PATTERN_THRESHOLD = 25 // 25%
   private static readonly ESCROW_HOLD_HOURS = 48
-  private static readonly BONUS_PERCENTAGE = 10 // 10% bonus for mentor no-show
   private static readonly UPCOMING_WINDOW_MINUTES = 30 // Minutes before session to mark as upcoming
   private static readonly AUTO_COMPLETE_BUFFER_MINUTES = 30 // Buffer time after scheduled end
 
@@ -251,10 +250,7 @@ export class SessionManagementService {
               eq(bookingSessions.status, "upcoming")
             ),
             // Session scheduled time + 15 minutes grace period has passed
-            lt(
-              sql`${bookingSessions.scheduledDate} + INTERVAL '15 minutes'`,
-              now
-            )
+            sql`${bookingSessions.scheduledDate} + INTERVAL '15 minutes' < ${now}`
             // REMOVED: Don't skip sessions that have been checked - this was the bug!
             // This allows re-checking sessions and catching new bookings
           )
@@ -265,9 +261,11 @@ export class SessionManagementService {
       for (const session of sessionsToCheck) {
         try {
           // Skip sessions that have already been fully processed (to avoid double processing)
-          if (session.noShowCheckedAt && 
-              ['both_no_show', 'learner_no_show', 'mentor_no_show', 'completed'].includes(session.status)) {
-            console.log(`⏭️  Skipping already processed session ${session.id} (status: ${session.status})`)
+          if (
+            session.noShowCheckedAt !== null &&
+            session.status !== null &&
+            ['both_no_show', 'learner_no_show', 'mentor_no_show', 'completed'].includes(session.status)
+          ) {
             continue
           }
 
@@ -324,11 +322,10 @@ export class SessionManagementService {
       mentorPayout = Math.floor(session.totalCostCredits * (100 - platformFeePercentage) / 100)
       console.log(`👨‍🎓 Learner no-show for session ${session.id} - mentor gets ${mentorPayout} credits`)
     } else if (learnerJoined && !mentorJoined) {
-      // Mentor no-show - learner gets refund + bonus
+      // Mentor no-show - learner gets full refund (no bonus)
       newStatus = "mentor_no_show"
-      const bonusCredits = Math.floor(session.totalCostCredits * SessionManagementService.BONUS_PERCENTAGE / 100)
-      refundAmount = session.totalCostCredits + bonusCredits
-      console.log(`👨‍🏫 Mentor no-show for session ${session.id} - learner gets ${refundAmount} credits (including ${bonusCredits} bonus)`)
+      refundAmount = session.totalCostCredits
+      console.log(`👨‍🏫 Mentor no-show for session ${session.id} - learner gets ${refundAmount} credits refund`)
     } else if (learnerJoined && mentorJoined) {
       // Both joined - this session should have transitioned to 'ongoing' already
       // This indicates a race condition or system issue - transition it now

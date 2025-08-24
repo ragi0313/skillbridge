@@ -8,6 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Video, VideoOff, Mic, MicOff, Settings, Users, Clock, CheckCircle, AlertCircle } from "lucide-react"
 import { SessionCountdown } from "@/components/session/SessionCountdown"
 import { toast } from "@/lib/toast"
+import DeviceTester from "@/components/video/DeviceTester"
 
 interface WaitingRoomProps {
   sessionId: string
@@ -241,14 +242,14 @@ export default function WaitingRoom({ sessionId, userRole, sessionData }: Waitin
   }, [sessionData.status])
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-800 flex items-center justify-center p-4">
       <div className="w-full max-w-4xl grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* Video Preview */}
         <div className="lg:col-span-2">
-          <Card className="h-full">
+          <Card className="h-full bg-gray-800 border-gray-700">
             <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
+              <CardTitle className="flex items-center space-x-2 text-white">
                 <Video className="h-5 w-5" />
                 <span>Camera Preview</span>
                 <Badge variant={connectionStatus === "ready" ? "default" : connectionStatus === "error" ? "destructive" : "secondary"}>
@@ -307,9 +308,9 @@ export default function WaitingRoom({ sessionId, userRole, sessionData }: Waitin
         <div className="space-y-6">
           
           {/* Session Status */}
-          <Card>
+          <Card className="bg-gray-800 border-gray-700">
             <CardHeader>
-              <CardTitle className="text-lg flex items-center space-x-2">
+              <CardTitle className="text-lg flex items-center space-x-2 text-white">
                 {(() => {
                   const statusInfo = getSessionStatusInfo()
                   return (
@@ -333,16 +334,16 @@ export default function WaitingRoom({ sessionId, userRole, sessionData }: Waitin
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-gray-600 mb-4">
+              <p className="text-sm text-gray-300 mb-4">
                 {getSessionStatusInfo().message}
               </p>
             </CardContent>
           </Card>
 
           {/* Session Details */}
-          <Card>
+          <Card className="bg-gray-800 border-gray-700">
             <CardHeader>
-              <CardTitle className="text-lg">Session Details</CardTitle>
+              <CardTitle className="text-lg text-white">Session Details</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center space-x-3">
@@ -354,10 +355,10 @@ export default function WaitingRoom({ sessionId, userRole, sessionData }: Waitin
                   </AvatarFallback>
                 </Avatar>
                 <div>
-                  <p className="font-medium">
+                  <p className="font-medium text-white">
                     {sessionData.otherParticipant.firstName} {sessionData.otherParticipant.lastName}
                   </p>
-                  <p className="text-sm text-gray-600">
+                  <p className="text-sm text-gray-300">
                     {sessionData.otherParticipant.title || `Your ${otherRole}`}
                   </p>
                 </div>
@@ -365,34 +366,37 @@ export default function WaitingRoom({ sessionId, userRole, sessionData }: Waitin
 
               <div className="space-y-2">
                 <div className="flex items-center space-x-2">
-                  <Clock className="h-4 w-4 text-gray-500" />
-                  <span className="text-sm">
+                  <Clock className="h-4 w-4 text-gray-400" />
+                  <span className="text-sm text-gray-300">
                     {new Date(sessionData.scheduledDate).toLocaleString()}
                   </span>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <Users className="h-4 w-4 text-gray-500" />
-                  <span className="text-sm">{sessionData.durationMinutes} minutes</span>
+                  <Users className="h-4 w-4 text-gray-400" />
+                  <span className="text-sm text-gray-300">{sessionData.durationMinutes} minutes</span>
                 </div>
               </div>
 
-              <SessionCountdown
-                sessionDate={sessionData.scheduledDate}
-                status={sessionData.status}
-                showJoinButton={true}
-                className="justify-center"
-              />
+              {/* Prominent Session Countdown */}
+              <div className="mt-4 p-4 bg-gray-900/50 border border-gray-600/50 rounded-lg">
+                <SessionCountdown
+                  sessionDate={sessionData.scheduledDate}
+                  status={sessionData.status}
+                  showJoinButton={true}
+                  className="justify-center"
+                />
+              </div>
             </CardContent>
           </Card>
 
           {/* Participant Status */}
-          <Card>
+          <Card className="bg-gray-800 border-gray-700">
             <CardHeader>
-              <CardTitle className="text-lg">Participants</CardTitle>
+              <CardTitle className="text-lg text-white">Participants</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">You</span>
+                <span className="text-sm font-medium text-white">You</span>
                 <Badge variant={sessionData.isReconnection ? "secondary" : "default"} 
                        className={sessionData.isReconnection ? "bg-orange-100 text-orange-700" : "bg-green-600"}>
                   {sessionData.isReconnection ? (
@@ -416,7 +420,7 @@ export default function WaitingRoom({ sessionId, userRole, sessionData }: Waitin
                 </div>
               )}
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">
+                <span className="text-sm font-medium text-white">
                   {sessionData.otherParticipant.firstName}
                 </span>
                 <Badge variant={otherParticipantJoined ? "default" : "secondary"}>
@@ -437,7 +441,7 @@ export default function WaitingRoom({ sessionId, userRole, sessionData }: Waitin
           </Card>
 
           {/* Join Button */}
-          <Card>
+          <Card className="bg-gray-800 border-gray-700">
             <CardContent className="pt-6">
               <Button
                 onClick={handleJoinSession}
@@ -467,7 +471,7 @@ export default function WaitingRoom({ sessionId, userRole, sessionData }: Waitin
               </Button>
               
               {!canJoinWaitingRoom() && !hasJoinedSession && (
-                <p className="text-sm text-gray-600 text-center mt-2">
+                <p className="text-sm text-gray-400 text-center mt-2">
                   {sessionData.status === "upcoming" 
                     ? "Join window opens 30 minutes before the scheduled time"
                     : "You can join 30 minutes before the scheduled time"}
@@ -481,22 +485,46 @@ export default function WaitingRoom({ sessionId, userRole, sessionData }: Waitin
               )}
               
               {hasJoinedSession && canEnterVideoCall() && (
-                <p className="text-sm text-blue-600 text-center mt-2">
+                <p className="text-sm text-blue-400 text-center mt-2">
                   🚀 Session time has arrived! Click "Enter Room" to join the video call.
                 </p>
               )}
               
               {sessionData.status === "upcoming" && canJoinNow() && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-2">
-                  <div className="flex items-center space-x-2 text-blue-700">
+                <div className="bg-blue-900/20 border border-blue-600/30 rounded-lg p-3 mt-2">
+                  <div className="flex items-center space-x-2 text-blue-400">
                     <AlertCircle className="h-4 w-4" />
                     <span className="text-sm font-medium">Session is ready!</span>
                   </div>
-                  <p className="text-xs text-blue-600 mt-1">
+                  <p className="text-xs text-blue-300 mt-1">
                     You can now join the session. The video call will start at the scheduled time.
                   </p>
                 </div>
               )}
+            </CardContent>
+          </Card>
+
+          {/* Device Testing */}
+          <Card className="bg-gray-800 border-gray-700">
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2 text-white">
+                <Settings className="h-5 w-5" />
+                Device Check
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <DeviceTester 
+                onTestComplete={(result) => {
+                  if (result.success) {
+                    setConnectionStatus("ready")
+                  } else {
+                    setConnectionStatus("error")
+                    if (result.error?.includes("device in use")) {
+                      toast.error("Camera/microphone in use. Try using OBS Virtual Camera for testing.")
+                    }
+                  }
+                }}
+              />
             </CardContent>
           </Card>
         </div>

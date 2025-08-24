@@ -105,8 +105,8 @@ export default function BookMentorSessionPageClient({ session }: Props) {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>()
   const [selectedSkillId, setSelectedSkillId] = useState<number | null>(null)
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<TimeSlot | null>(null)
-  const [durationHours, setDurationHours] = useState(1)
-  const [durationMinutes, setDurationMinutes] = useState(0)
+  const [durationHours, setDurationHours] = useState(0)
+  const [durationMinutes, setDurationMinutes] = useState(30)
   const [sessionNotes, setSessionNotes] = useState("")
   const [estimatedCost, setEstimatedCost] = useState<number | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -157,13 +157,23 @@ export default function BookMentorSessionPageClient({ session }: Props) {
 
   // Create disabled dates array for DayPicker
   const disabledDates = useMemo(() => {
-    if (!mentor?.blockedDates) return { before: new Date() }
+    const today = new Date()
+    const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, today.getDate())
+    const twoMonthsLater = new Date(today.getFullYear(), today.getMonth() + 2, 1) // First day of the month after next month
+    
+    if (!mentor?.blockedDates) {
+      return { 
+        before: new Date(),
+        after: twoMonthsLater
+      }
+    }
     
     // Convert blocked dates to Date objects
     const blockedDateObjects = mentor.blockedDates.map(blocked => new Date(blocked.date + 'T00:00:00'))
     
     return {
       before: new Date(),
+      after: twoMonthsLater,
       disabled: blockedDateObjects
     }
   }, [mentor?.blockedDates])
@@ -175,7 +185,38 @@ export default function BookMentorSessionPageClient({ session }: Props) {
     return mentor.blockedDates.some(blocked => blocked.date === dateStr)
   }, [mentor?.blockedDates])
 
-  // Fixed TIME SLOT LOGIC with proper AM/PM handling
+  // Helper function to check if a time slot has enough continuous availability for a given duration
+  const checkSlotAvailability = useCallback((
+    startMinutes: number, 
+    requestedDuration: number, 
+    availabilityEndMinutes: number, 
+    bookedSessionsForDay: BookedSession[],
+    mentorTz: string,
+    selectedDateStr: string
+  ): boolean => {
+    const slotEndMinutes = startMinutes + requestedDuration
+    
+    // Check if slot extends beyond availability window
+    if (slotEndMinutes > availabilityEndMinutes) {
+      return false
+    }
+    
+    // Check for conflicts with booked sessions
+    for (const bookedSession of bookedSessionsForDay) {
+      const bookedStart = toZonedTime(new Date(bookedSession.scheduledDate), mentorTz)
+      const bookedStartMinutes = bookedStart.getHours() * 60 + bookedStart.getMinutes()
+      const bookedEndMinutes = bookedStartMinutes + bookedSession.durationMinutes
+      
+      // If the requested slot overlaps with any part of a booked session, it's not available
+      if (timeRangesOverlap(startMinutes, slotEndMinutes, bookedStartMinutes, bookedEndMinutes)) {
+        return false
+      }
+    }
+    
+    return true
+  }, [])
+
+  // Dynamic TIME SLOT LOGIC that recalculates based on selected duration
   const availableTimeSlotsForSelectedDay = useMemo(() => {
     if (!mentor || !selectedDate) return []
     
@@ -185,6 +226,7 @@ export default function BookMentorSessionPageClient({ session }: Props) {
     }
     
     const mentorTz = mentor.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone
+    const requestedDurationMinutes = Math.max(15, durationHours * 60 + durationMinutes) // Ensure minimum 15 minutes
 
     // Get "today" in mentor's timezone
     const now = toZonedTime(new Date(), mentorTz)
@@ -194,7 +236,7 @@ export default function BookMentorSessionPageClient({ session }: Props) {
     const day = format(selectedDateInMentorTz, "EEEE").toLowerCase()
     const availabilitySlots = mentor.availability?.filter((slot) => slot.day === day && slot.isActive) || []
 
-    console.log("Debug - Day:", day, "Available slots:", availabilitySlots)
+    console.log("Debug - Day:", day, "Available slots:", availabilitySlots, "Requested duration:", requestedDurationMinutes, "minutes")
 
     if (availabilitySlots.length === 0) return []
 
@@ -207,13 +249,13 @@ export default function BookMentorSessionPageClient({ session }: Props) {
     console.log("Debug - Booked sessions for day:", bookedSessionsForDay)
 
     const timeSlots: TimeSlot[] = []
-    const slotInterval = 60 // 1-hour intervals
+    const slotInterval = 30 // Generate slots every 30 minutes
 
     availabilitySlots.forEach((availSlot) => {
       const startMinutes = timeToMinutes(availSlot.startTime)
       const endMinutes = timeToMinutes(availSlot.endTime)
       
-      console.log("Debug - Processing slot:", {
+      console.log("Debug - Processing availability slot:", {
         startTime: availSlot.startTime,
         endTime: availSlot.endTime,
         startMinutes,
@@ -226,7 +268,11 @@ export default function BookMentorSessionPageClient({ session }: Props) {
       }
 
       for (let currentMinutes = startMinutes; currentMinutes < endMinutes; currentMinutes += slotInterval) {
-        const slotEndMinutes = Math.min(currentMinutes + slotInterval, endMinutes)
+        // Check if there's enough remaining time in the availability window for the requested duration
+        if (currentMinutes + requestedDurationMinutes > endMinutes) {
+          console.log(`Debug - Not enough time at ${minutesToTime12Hour(currentMinutes)} for ${requestedDurationMinutes}min session`)
+          continue
+        }
 
         // Build slot start time as Date in mentor's timezone
         const slotDate = new Date(selectedDateInMentorTz)
@@ -240,38 +286,36 @@ export default function BookMentorSessionPageClient({ session }: Props) {
           console.log("Debug - Slot in past:", minutesToTime12Hour(currentMinutes))
         }
 
-        // Block if slot overlaps with a booked session
-        bookedSessionsForDay.forEach((bookedSession) => {
-          const bookedStart = toZonedTime(new Date(bookedSession.scheduledDate), mentorTz)
-          const bookedStartMinutes = bookedStart.getHours() * 60 + bookedStart.getMinutes()
-          const bookedEndMinutes = bookedStartMinutes + bookedSession.durationMinutes
-          
-          if (timeRangesOverlap(currentMinutes, slotEndMinutes, bookedStartMinutes, bookedEndMinutes)) {
-            isAvailable = false
-            console.log("Debug - Slot conflicts with booking:", {
-              slotStart: minutesToTime12Hour(currentMinutes),
-              slotEnd: minutesToTime12Hour(slotEndMinutes),
-              bookedStart: minutesToTime12Hour(bookedStartMinutes),
-              bookedEnd: minutesToTime12Hour(bookedEndMinutes)
-            })
-          }
-        })
+        // Use our comprehensive availability check
+        if (isAvailable) {
+          isAvailable = checkSlotAvailability(
+            currentMinutes,
+            requestedDurationMinutes,
+            endMinutes,
+            bookedSessionsForDay,
+            mentorTz,
+            selectedDateStr
+          )
+        }
+
+        // Calculate end time for display
+        const displayEndMinutes = currentMinutes + requestedDurationMinutes
 
         timeSlots.push({
           startTime: minutesToTime12Hour(currentMinutes),
-          endTime: minutesToTime12Hour(slotEndMinutes),
+          endTime: minutesToTime12Hour(displayEndMinutes),
           available: isAvailable,
         })
       }
     })
 
-    console.log("Debug - Generated time slots:", timeSlots)
+    console.log("Debug - Generated time slots for", requestedDurationMinutes, "min duration:", timeSlots)
     return timeSlots
-  }, [mentor, selectedDate, isDateBlocked])
+  }, [mentor, selectedDate, isDateBlocked, durationHours, durationMinutes, checkSlotAvailability])
 
   useEffect(() => {
     setSelectedTimeSlot(null)
-  }, [selectedDate])
+  }, [selectedDate, durationHours, durationMinutes])
 
   const computeMaxDurationMinutes = () => {
     if (!selectedTimeSlot || !mentor || !selectedDate) return 0
@@ -322,8 +366,8 @@ export default function BookMentorSessionPageClient({ session }: Props) {
 
   const handleDurationChange = (hours: number, minutes: number) => {
     const totalMinutes = hours * 60 + minutes
-    if (totalMinutes < 60) {
-      toast.warning("Session must be at least 1 hour.")
+    if (totalMinutes < 15) {
+      toast.warning("Session must be at least 15 minutes.")
       return
     }
     if (totalMinutes > maxDuration) {
@@ -355,7 +399,7 @@ export default function BookMentorSessionPageClient({ session }: Props) {
     }
     
     const totalMinutes = durationHours * 60 + durationMinutes
-    if (totalMinutes < 60 || totalMinutes > maxDuration) {
+    if (totalMinutes < 15 || totalMinutes > maxDuration) {
       toast.error("Invalid session duration.")
       return
     }
@@ -484,6 +528,11 @@ export default function BookMentorSessionPageClient({ session }: Props) {
                     <div>
                       <Label className="text-sm font-medium mb-3 block">
                         Available Times - {format(selectedDate, "MMM d, yyyy")}
+                        {mentor?.timezone && (
+                          <span className="text-xs text-gray-500 block">
+                            Times shown in mentor's timezone: {mentor.timezone}
+                          </span>
+                        )}
                       </Label>
                       
                       {isDateBlocked(selectedDate) ? (
@@ -533,7 +582,7 @@ export default function BookMentorSessionPageClient({ session }: Props) {
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  {Array.from({ length: Math.max(1, Math.floor(maxDuration / 60)) }, (_, i) => i + 1).map(
+                                  {Array.from({ length: Math.floor(maxDuration / 60) + 1 }, (_, i) => i).map(
                                     (hour) => (
                                       <SelectItem key={hour} value={hour.toString()}>
                                         {hour}h
@@ -551,6 +600,7 @@ export default function BookMentorSessionPageClient({ session }: Props) {
                                 </SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value="0">0m</SelectItem>
+                                  <SelectItem value="15">15m</SelectItem>
                                   <SelectItem value="30">30m</SelectItem>
                                   <SelectItem value="45">45m</SelectItem>
                                 </SelectContent>

@@ -23,13 +23,15 @@ type Props = {
 }
 
 export default function BlockedDatesSelector({ blockedDates, onBlockedDatesChange }: Props) {
-  const [selectedDates, setSelectedDates] = React.useState<Date[]>(blockedDates)
+  const [selectedDates, setSelectedDates] = React.useState<Date[]>(
+    blockedDates.filter(date => date && !isNaN(date.getTime()))
+  )
   const [reasonInput, setReasonInput] = React.useState<string>("")
   const [currentDateForReason, setCurrentDateForReason] = React.useState<Date | undefined>(undefined)
   const [isPopoverOpen, setIsPopoverOpen] = React.useState(false)
 
   React.useEffect(() => {
-    setSelectedDates(blockedDates)
+    setSelectedDates(blockedDates.filter(date => date && !isNaN(date.getTime())))
   }, [blockedDates])
 
   const handleDateSelect = (dates: Date[] | undefined) => {
@@ -97,7 +99,7 @@ export default function BlockedDatesSelector({ blockedDates, onBlockedDatesChang
             {currentDateForReason && (
               <div className="p-4 border-t">
                 <Label htmlFor="reason" className="text-sm font-semibold mb-2 block">
-                  Reason for blocking {format(currentDateForReason, "PPP")} (Optional)
+                  Reason for blocking {currentDateForReason && !isNaN(currentDateForReason.getTime()) ? format(currentDateForReason, "PPP") : 'Selected Date'} (Optional)
                 </Label>
                 <Input
                   id="reason"
@@ -123,7 +125,7 @@ export default function BlockedDatesSelector({ blockedDates, onBlockedDatesChang
                   key={index}
                   className="flex items-center gap-2 bg-red-100 text-red-800 px-3 py-1 rounded-full text-sm"
                 >
-                  <span>{format(date, "PPP")}</span>
+                  <span>{date && !isNaN(date.getTime()) ? format(date, "PPP") : 'Invalid Date'}</span>
                   <button
                     type="button"
                     onClick={() => removeBlockedDate(date)}

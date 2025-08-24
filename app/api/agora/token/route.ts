@@ -39,8 +39,17 @@ export async function POST(request: NextRequest) {
 
     const sessionData = booking[0]
 
-    // Allow both confirmed and upcoming sessions to generate tokens
-    if (!["confirmed", "upcoming"].includes(sessionData.status)) {
+    // Debug logging for troubleshooting
+    console.log(`[DEBUG] Agora token request for session ${sessionId}:`, {
+      sessionStatus: sessionData.status,
+      userRole: session.role,
+      userId: session.id,
+      agoraChannel: sessionData.agoraChannelName
+    })
+
+    // Allow confirmed, upcoming, and ongoing sessions to generate tokens
+    if (!["confirmed", "upcoming", "ongoing"].includes(sessionData.status)) {
+      console.log(`[ERROR] Invalid session status for token generation: ${sessionData.status}`)
       return NextResponse.json({ error: `Session status '${sessionData.status}' is not ready for video call` }, { status: 400 })
     }
 

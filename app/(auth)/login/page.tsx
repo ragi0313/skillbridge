@@ -10,6 +10,7 @@ import SignupLayout from "@/components/register/SignupLayout";
 import SignupHeader from "@/components/register/SignupHeader";
 import Link from "next/link";
 import { usePasswordVisibility } from "@/app/hooks/usePasswordVisibility";
+import { toast } from "@/lib/toast";
 
 const Login = () => {
   const [formData, setFormData] = useState({ email: "", password: "" })
@@ -36,22 +37,105 @@ const Login = () => {
 
       const data = await res.json()
 
-      if (!res.ok) throw new Error(data.message || "Invalid credentials")
-
-      // Redirect based on role
-      switch (data.role) {
-        case "learner":
-          router.push("/learner/dashboard")
-          break
-        case "mentor":
-          router.push("/mentor/dashboard")
-          break
-        case "admin":
-          router.push("/admin/dashboard")
-          break
-        default:
-          router.push("/")
+      if (!res.ok) {
+        // Handle specific error cases for banned/suspended users
+        if (res.status === 403) {
+          if (data.status === 'blacklisted') {
+            toast.error(
+              `🚨 Account Blacklisted\n\n${data.error}\n\nReason: ${data.reason}\n\n📧 Check your email for appeal instructions!`,
+              {
+                duration: 8000,
+                style: {
+                  background: '#fee2e2',
+                  border: '1px solid #fecaca',
+                  color: '#dc2626',
+                  fontSize: '14px',
+                  maxWidth: '500px',
+                },
+              }
+            )
+            setError(`Your account has been blacklisted. Check your email for appeal instructions.`)
+            // Show appeal link in the UI
+            setTimeout(() => {
+              const appealLink = document.createElement('div')
+              appealLink.innerHTML = `
+                <p class="mt-2 text-sm">
+                  <a href="/appeal" class="text-blue-600 hover:underline font-medium">
+                    → Submit an appeal online
+                  </a>
+                </p>
+              `
+              const errorElement = document.querySelector('.text-red-600')
+              if (errorElement && errorElement.parentNode) {
+                errorElement.parentNode.insertBefore(appealLink, errorElement.nextSibling)
+              }
+            }, 100)
+            return
+          } else if (data.status === 'suspended') {
+            const suspensionEnd = new Date(data.suspensionEndsAt).toLocaleDateString("en-US", {
+              weekday: 'short',
+              year: "numeric",
+              month: "short",
+              day: "numeric",
+            })
+            toast.error(
+              `⏸️ Account Suspended\n\n${data.error}\n\nReason: ${data.reason}\nEnds: ${suspensionEnd}\n\n📧 Check your email for appeal instructions!`,
+              {
+                duration: 8000,
+                style: {
+                  background: '#fef3c7',
+                  border: '1px solid #fde68a',
+                  color: '#d97706',
+                  fontSize: '14px',
+                  maxWidth: '500px',
+                },
+              }
+            )
+            setError(`Your account is suspended until ${suspensionEnd}. Check your email for details.`)
+            // Show appeal link in the UI
+            setTimeout(() => {
+              const appealLink = document.createElement('div')
+              appealLink.innerHTML = `
+                <p class="mt-2 text-sm">
+                  <a href="/appeal" class="text-blue-600 hover:underline font-medium">
+                    → Submit an appeal online
+                  </a>
+                </p>
+              `
+              const errorElement = document.querySelector('.text-red-600')
+              if (errorElement && errorElement.parentNode && !document.querySelector('a[href="/appeal"]')) {
+                errorElement.parentNode.insertBefore(appealLink, errorElement.nextSibling)
+              }
+            }, 100)
+            return
+          }
+        }
+        
+        throw new Error(data.message || data.error || "Invalid credentials")
       }
+
+      // Show success toast
+      toast.success("✅ Login successful! Redirecting...", {
+        duration: 2000,
+      })
+
+      // Small delay for better UX
+      setTimeout(() => {
+        // Redirect based on role
+        switch (data.role) {
+          case "learner":
+            router.push("/learner/dashboard")
+            break
+          case "mentor":
+            router.push("/mentor/dashboard")
+            break
+          case "admin":
+            router.push("/admin/dashboard")
+            break
+          default:
+            router.push("/")
+        }
+      }, 500)
     } catch (err: any) {
       setError(err.message)
     } finally {

@@ -15,6 +15,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   Select,
   SelectContent,
@@ -46,6 +47,7 @@ interface MentorData {
     reviewText: string
     createdAt: string
     learnerName: string
+    learnerProfilePictureUrl?: string
   }[]
 }
 
@@ -251,11 +253,15 @@ export default async function MentorProfilePage({
                     {mentor.reviews.map((review, index) => (
                       <div key={index} className="py-6">
                         <div className="flex items-start gap-4">
-                          <div className="w-12 h-12 bg-gray-200 rounded-full flex items-center justify-center">
-                            <span className="text-gray-600 font-medium">
+                          <Avatar className="w-12 h-12">
+                            <AvatarImage 
+                              src={review.learnerProfilePictureUrl || ""} 
+                              alt={review.learnerName}
+                            />
+                            <AvatarFallback className="bg-gray-200 text-gray-600 font-medium">
                               {review.learnerName.charAt(0).toUpperCase()}
-                            </span>
-                          </div>
+                            </AvatarFallback>
+                          </Avatar>
                           <div className="flex-1">
                             <div className="flex items-center gap-4 mb-2 flex-wrap">
                               <h4 className="font-semibold text-gray-900">

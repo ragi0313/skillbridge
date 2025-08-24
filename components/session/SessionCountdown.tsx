@@ -43,14 +43,14 @@ export function SessionCountdown({
 
   if (status === "ongoing") {
     return (
-      <div className={`flex items-center space-x-2 ${className}`}>
-        <Badge variant="default" className="bg-green-600 animate-pulse">
-          <div className="w-2 h-2 bg-white rounded-full mr-2"></div>
-          Live Now
+      <div className={`flex flex-col items-center space-y-3 p-4 bg-green-900/20 border border-green-600/30 rounded-lg ${className}`}>
+        <Badge variant="default" className="bg-green-600 animate-pulse text-lg px-4 py-2">
+          <div className="w-3 h-3 bg-white rounded-full mr-2 animate-pulse"></div>
+          LIVE NOW
         </Badge>
         {showJoinButton && (
-          <Badge variant="outline" className="text-green-600 border-green-600">
-            <Play className="h-3 w-3 mr-1" />
+          <Badge variant="outline" className="text-green-400 border-green-400 bg-green-900/10 px-3 py-1">
+            <Play className="h-4 w-4 mr-2" />
             Ready to Join
           </Badge>
         )}
@@ -60,24 +60,26 @@ export function SessionCountdown({
 
   if (timeToSession.isExpired) {
     return (
-      <div className={`flex items-center space-x-2 text-red-600 ${className}`}>
-        <AlertCircle className="h-4 w-4" />
-        <span className="text-sm font-medium">Session has started</span>
+      <div className={`flex flex-col items-center space-y-2 p-4 bg-red-900/20 border border-red-600/30 rounded-lg ${className}`}>
+        <AlertCircle className="h-6 w-6 text-red-400" />
+        <span className="text-lg font-semibold text-red-400">Session has started</span>
       </div>
     )
   }
 
   if (canJoin) {
     return (
-      <div className={`flex items-center space-x-2 ${className}`}>
-        <Badge variant="default" className="bg-blue-600">
-          <Clock className="h-3 w-3 mr-1" />
-          Starts in {formatTimeRemaining(timeToSession, { compact: true, showSeconds: timeToSession.totalSeconds < 300 })}
-        </Badge>
+      <div className={`flex flex-col items-center space-y-3 p-6 bg-blue-900/20 border border-blue-600/30 rounded-lg ${className}`}>
+        <div className="text-center">
+          <div className="text-2xl font-mono font-bold text-blue-400 mb-1">
+            {formatTimeRemaining(timeToSession, { compact: true, showSeconds: timeToSession.totalSeconds < 300 })}
+          </div>
+          <div className="text-sm text-blue-300">until session starts</div>
+        </div>
         {showJoinButton && (
-          <Badge variant="outline" className="text-blue-600 border-blue-600 animate-pulse">
-            <Play className="h-3 w-3 mr-1" />
-            Can Join Now
+          <Badge variant="outline" className="text-blue-400 border-blue-400 bg-blue-900/10 animate-pulse px-4 py-2">
+            <Play className="h-4 w-4 mr-2" />
+            Can Join Waiting Room Now
           </Badge>
         )}
       </div>
@@ -86,24 +88,30 @@ export function SessionCountdown({
 
   if (timeToJoin.isExpired) {
     return (
-      <div className={`flex items-center space-x-2 ${className}`}>
-        <Badge variant="secondary">
-          <Clock className="h-3 w-3 mr-1" />
-          Starts in {formatTimeRemaining(timeToSession, { compact: true })}
-        </Badge>
-        <Badge variant="outline" className="text-orange-600 border-orange-600">
-          Join opens in {formatTimeRemaining(timeToJoin, { compact: true, showSeconds: timeToJoin.totalSeconds < 300 })}
-        </Badge>
+      <div className={`flex flex-col items-center space-y-3 p-6 bg-orange-900/20 border border-orange-600/30 rounded-lg ${className}`}>
+        <div className="text-center">
+          <div className="text-xl font-mono font-bold text-gray-300 mb-1">
+            {formatTimeRemaining(timeToSession, { compact: true })}
+          </div>
+          <div className="text-sm text-gray-400 mb-3">until session starts</div>
+          <div className="text-lg font-mono font-semibold text-orange-400">
+            {formatTimeRemaining(timeToJoin, { compact: true, showSeconds: timeToJoin.totalSeconds < 300 })}
+          </div>
+          <div className="text-sm text-orange-300">until you can join waiting room</div>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className={`flex items-center space-x-2 text-gray-600 ${className}`}>
-      <Clock className="h-4 w-4" />
-      <span className="text-sm">
-        Starts in {formatTimeRemaining(timeToSession, { compact: true })}
-      </span>
+    <div className={`flex flex-col items-center space-y-2 p-4 bg-gray-800/50 border border-gray-600/30 rounded-lg ${className}`}>
+      <Clock className="h-6 w-6 text-gray-400" />
+      <div className="text-center">
+        <div className="text-lg font-mono font-semibold text-gray-300">
+          {formatTimeRemaining(timeToSession, { compact: true })}
+        </div>
+        <div className="text-sm text-gray-400">until session starts</div>
+      </div>
     </div>
   )
 }

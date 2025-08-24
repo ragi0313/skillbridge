@@ -99,15 +99,17 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       userRole,
       userId: session.id,
       scheduledDate: booking.scheduledDate,
-      currentTime: new Date().toISOString()
+      currentTime: new Date().toISOString(),
+      agoraChannel: booking.agoraChannelName,
+      callStartedAt: booking.agoraCallStartedAt
     })
 
-    // Check if session is joinable (confirmed or upcoming)
-    if (!["confirmed", "upcoming"].includes(booking.status)) {
+    // Check if session is joinable (confirmed, upcoming, or ongoing for reconnection)
+    if (!["confirmed", "upcoming", "ongoing"].includes(booking.status)) {
       console.log(`[ERROR] Invalid session status: ${booking.status}`)
       return NextResponse.json(
         {
-          error: `Session is ${booking.status}. Only confirmed or upcoming sessions can be joined.`,
+          error: `Session is ${booking.status}. Only confirmed, upcoming, or ongoing sessions can be joined.`,
         },
         { status: 400 },
       )
@@ -120,36 +122,53 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const sessionEndTime = new Date(scheduledDateTime.getTime() + (booking.durationMinutes || 60) * 60 * 1000)
     const noShowGraceTime = new Date(sessionEndTime.getTime() + 5 * 60 * 1000) // 5 minutes after session ends for no-show detection
 
-    if (now < joinStartTime) {
-      const minutesUntilJoin = Math.ceil((joinStartTime.getTime() - now.getTime()) / (1000 * 60))
-      console.log(`[ERROR] Too early to join: ${minutesUntilJoin} minutes remaining`)
-      return NextResponse.json(
-        {
-          error: `Session join window opens 30 minutes before scheduled time. You can join in ${minutesUntilJoin} minutes.`,
-          canJoinAt: joinStartTime.toISOString(),
-          waitingMinutes: minutesUntilJoin,
-          sessionDetails: {
-            scheduledDate: booking.scheduledDate,
-            durationMinutes: booking.durationMinutes,
-            status: booking.status,
-            agoraCallStartedAt: booking.agoraCallStartedAt,
+    // For ongoing sessions, allow reconnection even if past scheduled time
+    if (booking.status === "ongoing") {
+      console.log(`[DEBUG] Allowing reconnection to ongoing session ${sessionId}`)
+      // Still check if it's way past grace period (more than 2 hours past scheduled end)
+      const extendedGraceTime = new Date(sessionEndTime.getTime() + 2 * 60 * 60 * 1000) // 2 hours after session ends
+      if (now > extendedGraceTime) {
+        console.log(`[ERROR] Ongoing session has been inactive too long`)
+        return NextResponse.json(
+          {
+            error: "Session has been inactive for too long and is no longer available for reconnection.",
           },
-          userRole,
-          userName: `${userRole === 'learner' ? booking.learnerUser?.firstName : booking.mentorUser?.firstName} ${userRole === 'learner' ? booking.learnerUser?.lastName : booking.mentorUser?.lastName}`,
-          canJoin: false
-        },
-        { status: 400 },
-      )
-    }
+          { status: 400 },
+        )
+      }
+    } else {
+      // For confirmed/upcoming sessions, use normal time validation
+      if (now < joinStartTime) {
+        const minutesUntilJoin = Math.ceil((joinStartTime.getTime() - now.getTime()) / (1000 * 60))
+        console.log(`[ERROR] Too early to join: ${minutesUntilJoin} minutes remaining`)
+        return NextResponse.json(
+          {
+            error: `Session join window opens 30 minutes before scheduled time. You can join in ${minutesUntilJoin} minutes.`,
+            canJoinAt: joinStartTime.toISOString(),
+            waitingMinutes: minutesUntilJoin,
+            sessionDetails: {
+              scheduledDate: booking.scheduledDate,
+              durationMinutes: booking.durationMinutes,
+              status: booking.status,
+              agoraCallStartedAt: booking.agoraCallStartedAt,
+            },
+            userRole,
+            userName: `${userRole === 'learner' ? booking.learnerUser?.firstName : booking.mentorUser?.firstName} ${userRole === 'learner' ? booking.learnerUser?.lastName : booking.mentorUser?.lastName}`,
+            canJoin: false
+          },
+          { status: 400 },
+        )
+      }
 
-    if (now > noShowGraceTime) {
-      console.log(`[ERROR] Session has ended`)
-      return NextResponse.json(
-        {
-          error: "Session has ended and is no longer available.",
-        },
-        { status: 400 },
-      )
+      if (now > noShowGraceTime) {
+        console.log(`[ERROR] Session has ended`)
+        return NextResponse.json(
+          {
+            error: "Session has ended and is no longer available.",
+          },
+          { status: 400 },
+        )
+      }
     }
 
     // Create or get Agora channel
@@ -161,6 +180,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       // Update booking session with channel name
       await db.update(bookingSessions).set({ agoraChannelName: channel }).where(eq(bookingSessions.id, booking.id))
     }
+
+    const isWithinMeetingTime = now >= scheduledDateTime && now <= sessionEndTime
+    const isInWaitingRoom = now >= joinStartTime && now < scheduledDateTime
 
     return NextResponse.json({
       success: true,
@@ -174,6 +196,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       userName,
       channel,
       canJoin: true,
+      isWithinMeetingTime,
+      isInWaitingRoom,
+      timeUntilMeeting: isInWaitingRoom ? Math.ceil((scheduledDateTime.getTime() - now.getTime()) / 1000) : 0,
     })
   } catch (error) {
     console.error("Error validating session access:", error)
@@ -257,6 +282,9 @@ async function handleSessionJoin(request: NextRequest, context?: { params: Promi
     const sessionEndTime = new Date(scheduledDateTime.getTime() + 60 * 60 * 1000) // 1 hour default
     const graceEndTime = new Date(sessionEndTime.getTime() + 5 * 60 * 1000) // 5 minutes after session end
     
+    // Check if we're within the actual meeting time (not just waiting room)
+    const isWithinMeetingTime = now >= scheduledDateTime && now <= sessionEndTime
+    
     let updateData: any = {}
     let notificationData: any[] = []
     let isReconnect = false
@@ -266,16 +294,19 @@ async function handleSessionJoin(request: NextRequest, context?: { params: Promi
       updateData.learnerJoinedAt = now
       updateData.learnerLeftAt = null
       
-      // If this is the first join and mentor already joined, or if we're reconnecting and mentor is still there
-      // Mark session as ongoing (works for both confirmed and upcoming status)
+      // Only mark session as ongoing if both parties joined AND we're within the actual meeting time
       if (["confirmed", "upcoming"].includes(bookingSession.status)) {
-        if (bookingSession.mentorJoinedAt) {
-          // Both parties are now in the session
+        if (bookingSession.mentorJoinedAt && isWithinMeetingTime) {
+          // Both parties are now in the session during the actual meeting time
           updateData.status = "ongoing"
           updateData.agoraCallStartedAt = isReconnect ? bookingSession.agoraCallStartedAt || now : now
+          console.log(`Session ${sessionId} marked as ongoing - both participants joined during meeting time`)
         } else if (!isReconnect) {
-          // Learner joined first, wait for mentor
-          console.log(`Learner joined session ${sessionId}, waiting for mentor`)
+          if (isWithinMeetingTime) {
+            console.log(`Learner joined session ${sessionId} during meeting time, waiting for mentor`)
+          } else {
+            console.log(`Learner joined session ${sessionId} waiting room, ${Math.ceil((scheduledDateTime.getTime() - now.getTime()) / (1000 * 60))} minutes until meeting starts`)
+          }
         }
       }
 
@@ -284,8 +315,8 @@ async function handleSessionJoin(request: NextRequest, context?: { params: Promi
         notificationData.push({
           userId: bookingSession.mentorUser.id,
           type: "session_joined",
-          title: isReconnect ? "Learner Reconnected" : "Learner Joined Session",
-          message: `${bookingSession.learnerUser?.firstName} has ${isReconnect ? 'reconnected to' : 'joined'} the video call.`,
+          title: isReconnect ? "Learner Reconnected" : (isWithinMeetingTime ? "Learner Joined Session" : "Learner Joined Waiting Room"),
+          message: `${bookingSession.learnerUser?.firstName} has ${isReconnect ? 'reconnected to' : 'joined'} the ${isWithinMeetingTime ? 'video call' : 'waiting room'}.`,
           relatedEntityType: "session",
           relatedEntityId: sessionId,
           createdAt: now,
@@ -296,16 +327,19 @@ async function handleSessionJoin(request: NextRequest, context?: { params: Promi
       updateData.mentorJoinedAt = now
       updateData.mentorLeftAt = null
       
-      // If this is the first join and learner already joined, or if we're reconnecting and learner is still there
-      // Mark session as ongoing (works for both confirmed and upcoming status)
+      // Only mark session as ongoing if both parties joined AND we're within the actual meeting time
       if (["confirmed", "upcoming"].includes(bookingSession.status)) {
-        if (bookingSession.learnerJoinedAt) {
-          // Both parties are now in the session
+        if (bookingSession.learnerJoinedAt && isWithinMeetingTime) {
+          // Both parties are now in the session during the actual meeting time
           updateData.status = "ongoing"
           updateData.agoraCallStartedAt = isReconnect ? bookingSession.agoraCallStartedAt || now : now
+          console.log(`Session ${sessionId} marked as ongoing - both participants joined during meeting time`)
         } else if (!isReconnect) {
-          // Mentor joined first, wait for learner
-          console.log(`Mentor joined session ${sessionId}, waiting for learner`)
+          if (isWithinMeetingTime) {
+            console.log(`Mentor joined session ${sessionId} during meeting time, waiting for learner`)
+          } else {
+            console.log(`Mentor joined session ${sessionId} waiting room, ${Math.ceil((scheduledDateTime.getTime() - now.getTime()) / (1000 * 60))} minutes until meeting starts`)
+          }
         }
       }
 
@@ -314,8 +348,8 @@ async function handleSessionJoin(request: NextRequest, context?: { params: Promi
         notificationData.push({
           userId: bookingSession.learnerUser.id,
           type: "session_joined",
-          title: isReconnect ? "Mentor Reconnected" : "Mentor Joined Session",
-          message: `${bookingSession.mentorUser?.firstName} has ${isReconnect ? 'reconnected to' : 'joined'} the video call.`,
+          title: isReconnect ? "Mentor Reconnected" : (isWithinMeetingTime ? "Mentor Joined Session" : "Mentor Joined Waiting Room"),
+          message: `${bookingSession.mentorUser?.firstName} has ${isReconnect ? 'reconnected to' : 'joined'} the ${isWithinMeetingTime ? 'video call' : 'waiting room'}.`,
           relatedEntityType: "session",
           relatedEntityId: sessionId,
           createdAt: now,

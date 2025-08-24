@@ -7,115 +7,149 @@ import { getSession } from "@/lib/auth/getSession"
 
 export async function POST(request: NextRequest) {
   try {
+    console.log("[DEBUG] Reviews API called")
+    
     const session = await getSession()
     if (!session?.id || session.role !== "learner") {
-      return NextResponse.json({ error: "Unauthorized - learners only" }, { status: 401 })
+      console.log("[ERROR] Unauthorized access - learners only")
+      return NextResponse.json({ error: "Unauthorized - learners only can review mentors" }, { status: 401 })
     }
 
-    const { sessionId, rating, reviewText } = await request.json()
+    const body = await request.json()
+    const { sessionId, rating, reviewText } = body
+    
+    console.log("[DEBUG] Review submission:", { sessionId, rating, hasReviewText: !!reviewText, userId: session.id })
 
-    if (!sessionId || !rating || !reviewText) {
-      return NextResponse.json(
-        { error: "Missing required fields: sessionId, rating, reviewText" },
-        { status: 400 }
-      )
+    // Validate required fields
+    if (!sessionId) {
+      return NextResponse.json({ error: "Session ID is required" }, { status: 400 })
+    }
+    
+    if (!rating) {
+      return NextResponse.json({ error: "Rating is required" }, { status: 400 })
+    }
+
+    // Parse and validate sessionId
+    const sessionIdInt = parseInt(sessionId.toString())
+    if (isNaN(sessionIdInt)) {
+      return NextResponse.json({ error: "Invalid session ID" }, { status: 400 })
     }
 
     // Validate rating
-    if (rating < 1 || rating > 5 || !Number.isInteger(rating)) {
-      return NextResponse.json(
-        { error: "Rating must be an integer between 1 and 5" },
-        { status: 400 }
-      )
+    const ratingInt = parseInt(rating.toString())
+    if (isNaN(ratingInt) || ratingInt < 1 || ratingInt > 5) {
+      return NextResponse.json({ error: "Rating must be a number between 1 and 5" }, { status: 400 })
     }
 
-    // Validate review text
-    if (reviewText.trim().length < 10) {
-      return NextResponse.json(
-        { error: "Review text must be at least 10 characters long" },
-        { status: 400 }
-      )
+    // Validate review text (optional, but if provided must be reasonable length)
+    let reviewTextClean = ""
+    if (reviewText && typeof reviewText === 'string') {
+      reviewTextClean = reviewText.trim()
+      if (reviewTextClean.length > 0 && reviewTextClean.length < 3) {
+        return NextResponse.json({ error: "Review text must be at least 3 characters long when provided" }, { status: 400 })
+      }
+      if (reviewTextClean.length > 1000) {
+        return NextResponse.json({ error: "Review text cannot exceed 1000 characters" }, { status: 400 })
+      }
     }
 
-    // Get session details and verify user access
-    const learnerUsers = alias(users, "learner_users")
+    console.log("[DEBUG] Starting database queries...")
 
+    // Get session details efficiently with single query
     const [bookingSession] = await db
       .select({
         id: bookingSessions.id,
         status: bookingSessions.status,
         learnerId: bookingSessions.learnerId,
         mentorId: bookingSessions.mentorId,
-        learnerUser: {
-          id: learnerUsers.id,
-        },
+        learnerUserId: users.id,
       })
       .from(bookingSessions)
-      .leftJoin(learners, eq(bookingSessions.learnerId, learners.id))
-      .leftJoin(learnerUsers, eq(learners.userId, learnerUsers.id))
-      .where(eq(bookingSessions.id, parseInt(sessionId)))
+      .innerJoin(learners, eq(bookingSessions.learnerId, learners.id))
+      .innerJoin(users, eq(learners.userId, users.id))
+      .where(eq(bookingSessions.id, sessionIdInt))
+      .limit(1)
 
     if (!bookingSession) {
+      console.log("[ERROR] Session not found:", sessionIdInt)
       return NextResponse.json({ error: "Session not found" }, { status: 404 })
     }
 
+    console.log("[DEBUG] Session found:", { 
+      sessionId: bookingSession.id, 
+      status: bookingSession.status,
+      learnerUserId: bookingSession.learnerUserId,
+      currentUserId: session.id 
+    })
+
     // Verify user is the learner for this session
-    if (bookingSession.learnerUser?.id !== session.id) {
-      return NextResponse.json({ error: "Unauthorized access to session" }, { status: 403 })
+    if (bookingSession.learnerUserId !== session.id) {
+      console.log("[ERROR] Unauthorized access to session")
+      return NextResponse.json({ error: "You can only review sessions you participated in" }, { status: 403 })
     }
 
-    // Check if session is completed
-    if (bookingSession.status !== "completed") {
+    // Allow reviews for ongoing and completed sessions
+    if (!["ongoing", "completed"].includes(bookingSession.status)) {
       return NextResponse.json(
-        { error: "Can only review completed sessions" },
+        { error: `Cannot review sessions with status: ${bookingSession.status}. Only ongoing or completed sessions can be reviewed.` },
         { status: 400 }
       )
     }
 
-    // Check if review already exists
-    const existingReview = await db
-      .select()
+    // Check if review already exists (prevent duplicates)
+    const [existingReview] = await db
+      .select({ id: mentorReviews.id })
       .from(mentorReviews)
       .where(
         and(
-          eq(mentorReviews.sessionId, parseInt(sessionId)),
+          eq(mentorReviews.sessionId, sessionIdInt),
           eq(mentorReviews.learnerId, bookingSession.learnerId)
         )
       )
+      .limit(1)
 
-    if (existingReview.length > 0) {
+    if (existingReview) {
       return NextResponse.json(
-        { error: "Review already exists for this session" },
+        { error: "You have already reviewed this session" },
         { status: 409 }
       )
     }
 
-    // Create the review
+    console.log("[DEBUG] Creating mentor review...")
+
+    // Create the mentor review
     const [review] = await db
       .insert(mentorReviews)
       .values({
         mentorId: bookingSession.mentorId,
         learnerId: bookingSession.learnerId,
-        sessionId: parseInt(sessionId),
-        reviewText: reviewText.trim(),
-        rating,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        sessionId: sessionIdInt,
+        reviewText: reviewTextClean,
+        rating: ratingInt,
       })
-      .returning()
+      .returning({ id: mentorReviews.id })
+
+    console.log("[DEBUG] Mentor review created successfully:", review.id)
 
     return NextResponse.json(
       { 
-        message: "Review submitted successfully",
+        success: true,
+        message: "Mentor review submitted successfully",
         reviewId: review.id
       },
       { status: 201 }
     )
 
   } catch (error) {
-    console.error("Error creating review:", error)
+    console.error("[ERROR] Creating mentor review:", error)
+    
+    // Return detailed error info for debugging
     return NextResponse.json(
-      { error: "Internal server error" },
+      { 
+        error: "Internal server error", 
+        details: error instanceof Error ? error.message : "Unknown error",
+        timestamp: new Date().toISOString()
+      },
       { status: 500 }
     )
   }

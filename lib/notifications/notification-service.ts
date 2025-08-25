@@ -135,6 +135,127 @@ export class NotificationService {
       relatedEntityId: sessionId,
     })
   }
+
+  /**
+   * Create comprehensive session status notifications
+   */
+  async createSessionStatusNotification(
+    userId: number,
+    sessionId: number,
+    notificationType: 'session_upcoming' | 'session_started' | 'session_completed' | 'learner_no_show' | 'mentor_no_show' | 'both_no_show' | 'session_ended',
+    data: {
+      isLearner?: boolean;
+      mentorName?: string;
+      learnerName?: string;
+      scheduledDate?: Date;
+      refundAmount?: number;
+      payoutAmount?: number;
+      skillName?: string;
+    } = {}
+  ): Promise<{ success: boolean }> {
+    let title: string
+    let message: string
+    
+    switch (notificationType) {
+      case 'session_upcoming':
+        title = data.isLearner ? "Session Available to Join! 🎯" : "Session Ready - Learner May Join 🎯"
+        message = data.isLearner 
+          ? `Your session with ${data.mentorName || 'your mentor'} is now available. You can join the video room when ready!`
+          : `Your session with the learner is ready. They can now join the video room. Be prepared to help!`
+        break
+
+      case 'session_started':
+        title = data.isLearner ? "Session Started! 🚀" : "Session in Progress! 🚀" 
+        message = data.isLearner
+          ? `Your session with ${data.mentorName || 'your mentor'} has begun. Make the most of your learning time!`
+          : `Your session with the learner has started. Help them achieve their learning goals!`
+        break
+
+      case 'session_completed':
+        title = data.isLearner ? "Session Completed! ⭐" : "Session Successfully Completed! ⭐"
+        message = data.isLearner
+          ? `Great job completing your session! Please rate your experience to help other learners.`
+          : `You've successfully completed another mentoring session. Your expertise makes a difference!`
+        break
+
+      case 'learner_no_show':
+        if (data.isLearner) {
+          title = "Session No-Show Penalty 🚫"
+          message = `You missed your scheduled session. As per our policy, no refund will be issued. Your mentor has been compensated.`
+        } else {
+          title = "Learner No-Show - Compensation Issued 💰"
+          message = `The learner didn't attend the session. You've received ${data.payoutAmount || 0} credits as compensation.`
+        }
+        break
+
+      case 'mentor_no_show':
+        if (data.isLearner) {
+          title = "Mentor No-Show - Refund Issued 💰"
+          message = `Your mentor didn't attend the session. You've received a full refund of ${data.refundAmount || 0} credits.`
+        } else {
+          title = "Session No-Show Penalty 🚫"
+          message = `You missed your scheduled session. This may affect your mentor rating and account standing.`
+        }
+        break
+
+      case 'both_no_show':
+        title = "Session Cancelled - Full Refund 💰"
+        message = `Neither party attended the session. You've received a full refund of ${data.refundAmount || 0} credits.`
+        break
+
+      case 'session_ended':
+        title = data.isLearner ? "Session Ended - Please Rate! ⭐" : "Session Ended Successfully! ⭐"
+        message = data.isLearner
+          ? `Your session has ended. Please take a moment to rate your experience and help other learners.`
+          : `Your mentoring session has ended. Thank you for sharing your expertise!`
+        break
+
+      default:
+        title = "Session Update"
+        message = "Your session status has been updated."
+    }
+
+    return await this.createNotification({
+      userId,
+      type: notificationType,
+      title,
+      message,
+      relatedEntityType: "session",
+      relatedEntityId: sessionId,
+    })
+  }
+
+  /**
+   * Send session notifications to both participants
+   */
+  async notifyBothParticipants(
+    learnerUserId: number,
+    mentorUserId: number,
+    sessionId: number,
+    notificationType: 'session_upcoming' | 'session_started' | 'session_completed' | 'session_ended',
+    data: {
+      mentorName?: string;
+      learnerName?: string;
+      scheduledDate?: Date;
+      skillName?: string;
+    } = {}
+  ): Promise<{ learnerNotified: boolean; mentorNotified: boolean }> {
+    const [learnerResult, mentorResult] = await Promise.all([
+      this.createSessionStatusNotification(learnerUserId, sessionId, notificationType, { 
+        ...data, 
+        isLearner: true 
+      }),
+      this.createSessionStatusNotification(mentorUserId, sessionId, notificationType, { 
+        ...data, 
+        isLearner: false 
+      })
+    ])
+
+    return {
+      learnerNotified: learnerResult.success,
+      mentorNotified: mentorResult.success
+    }
+  }
 }
 
 export const notificationService = NotificationService.getInstance()

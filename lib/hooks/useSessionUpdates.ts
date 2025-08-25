@@ -1,147 +1,133 @@
 "use client"
 
-import { useEffect, useRef, useState, useCallback } from "react"
+import { useEffect, useRef, useCallback, useState } from "react"
 import { toast } from "@/lib/toast"
 
 export interface SessionUpdateData {
-  type: 'connection' | 'heartbeat' | 'session_update'
-  updateType?: 'status_change' | 'mentor_response' | 'cancellation' | 'refund' | 'other'
-  sessionId?: number
-  session?: any
+  type: 'session_update' | 'force_disconnect' | 'session_terminated' | 'participant_joined' | 'participant_left'
+  sessionId: number
+  updateType?: 'status_change' | 'participant_change'
+  newStatus?: string
+  previousStatus?: string
   message?: string
-  timestamp: string
-  connectionId?: string
+  session?: {
+    id: number
+    status: string
+    scheduledDate: string
+    createdAt?: string
+    mentorResponseAt?: string
+    expiresAt?: string
+    mentorUser?: {
+      firstName: string
+      lastName: string
+    }
+    learnerUser?: {
+      firstName: string
+      lastName: string
+    }
+  }
 }
 
 interface UseSessionUpdatesOptions {
   onSessionUpdate?: (data: SessionUpdateData) => void
-  onConnectionChange?: (connected: boolean) => void
   enableToasts?: boolean
-  reconnectDelay?: number
+  reconnectAttempts?: number
+  reconnectInterval?: number
 }
 
-export function useSessionUpdates(options: UseSessionUpdatesOptions = {}) {
-  const {
-    onSessionUpdate,
-    onConnectionChange,
-    enableToasts = true,
-    reconnectDelay = 3000
-  } = options
+interface UseSessionUpdatesReturn {
+  isConnected: boolean
+  reconnect: () => void
+  disconnect: () => void
+  lastMessage: SessionUpdateData | null
+}
 
+export function useSessionUpdates({
+  onSessionUpdate,
+  enableToasts = false,
+  reconnectAttempts = 5,
+  reconnectInterval = 3000
+}: UseSessionUpdatesOptions = {}): UseSessionUpdatesReturn {
   const [isConnected, setIsConnected] = useState(false)
-  const [lastUpdate, setLastUpdate] = useState<SessionUpdateData | null>(null)
-  const [connectionId, setConnectionId] = useState<string | null>(null)
+  const [lastMessage, setLastMessage] = useState<SessionUpdateData | null>(null)
   const eventSourceRef = useRef<EventSource | null>(null)
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const reconnectAttempts = useRef(0)
-  const maxReconnectAttempts = 5
+  const reconnectCountRef = useRef(0)
+  const isManualDisconnectRef = useRef(false)
 
   const connect = useCallback(() => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close()
+    if (eventSourceRef.current && eventSourceRef.current.readyState === EventSource.OPEN) {
+      return // Already connected
     }
 
     try {
-      console.log("Establishing SSE connection for session updates...")
-      const eventSource = new EventSource("/api/sse/session-updates")
+      const eventSource = new EventSource('/api/sse/session-updates')
       eventSourceRef.current = eventSource
 
       eventSource.onopen = () => {
-        console.log("SSE connection established")
+        console.log('[SSE] Connection opened')
         setIsConnected(true)
-        reconnectAttempts.current = 0
-        onConnectionChange?.(true)
+        reconnectCountRef.current = 0
         
-        if (enableToasts && reconnectAttempts.current > 0) {
-          toast.success("Reconnected to real-time updates")
+        if (enableToasts && reconnectCountRef.current > 0) {
+          toast.success('Real-time updates reconnected')
         }
       }
 
       eventSource.onmessage = (event) => {
         try {
           const data: SessionUpdateData = JSON.parse(event.data)
-          setLastUpdate(data)
+          setLastMessage(data)
+          
+          if (onSessionUpdate) {
+            onSessionUpdate(data)
+          }
 
-          if (data.type === 'connection') {
-            setConnectionId(data.connectionId || null)
-            console.log("SSE connection confirmed:", data.connectionId)
-          } else if (data.type === 'session_update') {
-            console.log("Received session update:", data)
-            onSessionUpdate?.(data)
-
-            // Show toast notifications for important updates
-            if (enableToasts && data.updateType) {
-              const session = data.session
-              const sessionInfo = session ? `Session with ${session.mentorUser?.firstName || session.learnerUser?.firstName || 'Unknown'}` : 'Session'
-              
-              switch (data.updateType) {
-                case 'status_change':
-                  if (session?.status === 'confirmed') {
-                    toast.success(`${sessionInfo} has been confirmed!`)
-                  } else if (session?.status === 'rejected') {
-                    toast.error(`${sessionInfo} was declined`)
-                  } else if (session?.status === 'cancelled') {
-                    toast.info(`${sessionInfo} was cancelled`)
-                  } else if (session?.status === 'completed') {
-                    toast.success(`${sessionInfo} was completed`)
-                  } else if (session?.status === 'no_show') {
-                    toast.warning(`${sessionInfo} marked as no-show`)
-                  }
-                  break
-                case 'mentor_response':
-                  toast.info(`Mentor responded to your session request`)
-                  break
-                case 'cancellation':
-                  toast.info(`${sessionInfo} has been cancelled`)
-                  break
-                case 'refund':
-                  toast.success("Refund processed for your session")
-                  break
-              }
+          // Handle toast notifications
+          if (enableToasts) {
+            if (data.type === 'force_disconnect') {
+              toast.error('Session ended - you have been disconnected')
+            } else if (data.type === 'session_terminated') {
+              toast.info('Session completed')
             }
           }
         } catch (error) {
-          console.error("Error parsing SSE message:", error)
+          console.error('[SSE] Failed to parse message:', error)
         }
       }
 
       eventSource.onerror = (error) => {
-        console.error("SSE connection error:", error)
+        console.error('[SSE] Connection error:', error)
         setIsConnected(false)
-        onConnectionChange?.(false)
+        eventSource.close()
 
-        if (eventSource.readyState === EventSource.CLOSED) {
-          console.log("SSE connection closed by server")
+        // Attempt reconnection if not manually disconnected
+        if (!isManualDisconnectRef.current && reconnectCountRef.current < reconnectAttempts) {
+          const delay = reconnectInterval * Math.pow(1.5, reconnectCountRef.current)
           
-          // Attempt to reconnect if we haven't exceeded max attempts
-          if (reconnectAttempts.current < maxReconnectAttempts) {
-            reconnectAttempts.current++
-            console.log(`Attempting to reconnect (${reconnectAttempts.current}/${maxReconnectAttempts}) in ${reconnectDelay}ms`)
-            
-            if (enableToasts) {
-              toast.loading(`Reconnecting to real-time updates... (${reconnectAttempts.current}/${maxReconnectAttempts})`)
-            }
+          if (enableToasts) {
+            toast.error(`Connection lost. Reconnecting in ${delay / 1000}s...`)
+          }
 
-            reconnectTimeoutRef.current = setTimeout(() => {
-              connect()
-            }, reconnectDelay)
-          } else {
-            console.log("Max reconnection attempts reached")
-            if (enableToasts) {
-              toast.error("Lost connection to real-time updates. Please refresh the page.")
-            }
+          reconnectTimeoutRef.current = setTimeout(() => {
+            reconnectCountRef.current++
+            connect()
+          }, delay)
+        } else if (reconnectCountRef.current >= reconnectAttempts) {
+          if (enableToasts) {
+            toast.error('Unable to maintain real-time connection. Please refresh the page.')
           }
         }
       }
-
     } catch (error) {
-      console.error("Failed to establish SSE connection:", error)
+      console.error('[SSE] Failed to establish connection:', error)
       setIsConnected(false)
-      onConnectionChange?.(false)
     }
-  }, [onSessionUpdate, onConnectionChange, enableToasts, reconnectDelay])
+  }, [onSessionUpdate, enableToasts, reconnectAttempts, reconnectInterval])
 
   const disconnect = useCallback(() => {
+    isManualDisconnectRef.current = true
+    
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current)
       reconnectTimeoutRef.current = null
@@ -153,50 +139,38 @@ export function useSessionUpdates(options: UseSessionUpdatesOptions = {}) {
     }
 
     setIsConnected(false)
-    setConnectionId(null)
-    onConnectionChange?.(false)
-    console.log("SSE connection disconnected")
-  }, [onConnectionChange])
+  }, [])
 
   const reconnect = useCallback(() => {
     disconnect()
-    setTimeout(connect, 100) // Small delay before reconnecting
+    isManualDisconnectRef.current = false
+    reconnectCountRef.current = 0
+    setTimeout(connect, 100) // Small delay to ensure clean reconnection
   }, [connect, disconnect])
 
-  // Connect on mount
+  // Initialize connection on mount
   useEffect(() => {
+    isManualDisconnectRef.current = false
     connect()
 
-    // Cleanup on unmount
     return () => {
       disconnect()
     }
   }, [connect, disconnect])
 
-  // Handle page visibility changes
+  // Cleanup on unmount
   useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        // Page is hidden, disconnect to save resources
-        console.log("Page hidden, disconnecting SSE")
-        disconnect()
-      } else {
-        // Page is visible, reconnect
-        console.log("Page visible, reconnecting SSE")
-        connect()
+    return () => {
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current)
       }
     }
-
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
-  }, [connect, disconnect])
+  }, [])
 
   return {
     isConnected,
-    lastUpdate,
-    connectionId,
-    connect,
+    reconnect,
     disconnect,
-    reconnect
+    lastMessage
   }
 }

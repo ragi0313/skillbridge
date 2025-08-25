@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if session is in a reportable state
-    const reportableStatuses = ["completed", "cancelled", "no_show_learner", "no_show_mentor", "technical_issues"]
+    const reportableStatuses = ["completed", "cancelled", "learner_no_show", "mentor_no_show", "both_no_show", "technical_issues"]
     if (!reportableStatuses.includes(bookingSession.status || "")) {
       return NextResponse.json(
         { error: "Session is not in a reportable state" },

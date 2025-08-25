@@ -1,298 +1,365 @@
-import { useCallback, useRef } from "react"
-import { toast } from "@/lib/toast"
-import { CallState, TokenResponse, MediaType, toSafeError } from "../types"
-import { VideoCallLogger } from "../utils/logger"
+"use client"
 
-interface UseAgoraClientProps {
-  sessionId: string
-  callState: CallState
-  setCallState: React.Dispatch<React.SetStateAction<CallState>>
-  localVideoRef: React.RefObject<HTMLDivElement | null>
-  remoteVideoRef: React.RefObject<HTMLDivElement | null>
-  callStartTimeRef: React.MutableRefObject<Date | null>
-  sessionAccessData: any
-  trackSessionJoin: () => Promise<any>
+import { useState, useEffect, useCallback, useRef } from "react"
+import AgoraRTC, { 
+  IAgoraRTCClient, 
+  IAgoraRTCRemoteUser, 
+  ICameraVideoTrack, 
+  IMicrophoneAudioTrack,
+  ConnectionState,
+  NetworkQuality
+} from "agora-rtc-sdk-ng"
+
+export interface AgoraConfig {
+  appId: string
+  channel: string
+  token: string
+  uid: number
+}
+
+export interface UseAgoraClientOptions {
+  onUserJoined?: (user: IAgoraRTCRemoteUser) => void
+  onUserLeft?: (user: IAgoraRTCRemoteUser) => void
+  onConnectionStateChanged?: (state: ConnectionState) => void
+  onNetworkQuality?: (quality: NetworkQuality) => void
+  maxParticipants?: number
+}
+
+export interface UseAgoraClientReturn {
+  client: IAgoraRTCClient | null
+  localVideoTrack: ICameraVideoTrack | null
+  localAudioTrack: IMicrophoneAudioTrack | null
+  remoteUsers: IAgoraRTCRemoteUser[]
+  isConnected: boolean
+  isVideoEnabled: boolean
+  isAudioEnabled: boolean
+  connectionState: ConnectionState
+  networkQuality: NetworkQuality | null
+  participantCount: number
+  error: string | null
+  
+  // Actions
+  join: (config: AgoraConfig) => Promise<void>
+  leave: () => Promise<void>
+  toggleVideo: () => Promise<void>
+  toggleAudio: () => Promise<void>
+  reconnect: () => Promise<void>
 }
 
 export function useAgoraClient({
-  sessionId,
-  callState,
-  setCallState,
-  localVideoRef,
-  remoteVideoRef,
-  callStartTimeRef,
-  sessionAccessData,
-  trackSessionJoin,
-}: UseAgoraClientProps) {
-  const clientRef = useRef<any>(null)
-  const localVideoTrackRef = useRef<any>(null)
-  const localAudioTrackRef = useRef<any>(null)
-  const screenTrackRef = useRef<any>(null)
+  onUserJoined,
+  onUserLeft,
+  onConnectionStateChanged,
+  onNetworkQuality,
+  maxParticipants = 2
+}: UseAgoraClientOptions = {}): UseAgoraClientReturn {
+  const [client, setClient] = useState<IAgoraRTCClient | null>(null)
+  const [localVideoTrack, setLocalVideoTrack] = useState<ICameraVideoTrack | null>(null)
+  const [localAudioTrack, setLocalAudioTrack] = useState<IMicrophoneAudioTrack | null>(null)
+  const [remoteUsers, setRemoteUsers] = useState<IAgoraRTCRemoteUser[]>([])
+  const [isConnected, setIsConnected] = useState(false)
+  const [isVideoEnabled, setIsVideoEnabled] = useState(true)
+  const [isAudioEnabled, setIsAudioEnabled] = useState(true)
+  const [connectionState, setConnectionState] = useState<ConnectionState>("DISCONNECTED")
+  const [networkQuality, setNetworkQuality] = useState<NetworkQuality | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  
+  const configRef = useRef<AgoraConfig | null>(null)
+  const reconnectAttemptsRef = useRef(0)
+  const maxReconnectAttempts = 3
 
-  const safePublish = useCallback(async (tracks: any[], retryCount = 0): Promise<void> => {
-    if (!clientRef.current) {
-      throw new Error("Client not initialized")
-    }
+  // Initialize Agora client
+  useEffect(() => {
+    const agoraClient = AgoraRTC.createClient({
+      mode: "rtc",
+      codec: "vp8"
+    })
 
-    try {
-      await clientRef.current.publish(tracks)
-    } catch (error: unknown) {
-      const safeError = toSafeError(error)
-      if (safeError.message?.includes("haven't joined yet") && retryCount < 3) {
-        VideoCallLogger.log(`Publish retry ${retryCount + 1}/3 after connection delay`)
-        await new Promise(resolve => setTimeout(resolve, 500))
-        return safePublish(tracks, retryCount + 1)
-      }
-      throw error
-    }
-  }, [])
-
-  const setupEventListeners = useCallback((client: any) => {
-    client.on("user-published", async (user: any, mediaType: MediaType) => {
+    // Set up event listeners
+    agoraClient.on("user-published", async (user, mediaType) => {
       try {
-        await client.subscribe(user, mediaType)
-
-        if (mediaType === "video" && remoteVideoRef.current) {
-          user.videoTrack?.play(remoteVideoRef.current)
+        await agoraClient.subscribe(user, mediaType)
+        
+        if (mediaType === "video") {
+          const remoteVideoTrack = user.videoTrack
+          if (remoteVideoTrack) {
+            // Video track is ready to be played
+            console.log(`[AGORA] Subscribed to user ${user.uid} video track`)
+          }
         }
+        
         if (mediaType === "audio") {
-          user.audioTrack?.play()
+          const remoteAudioTrack = user.audioTrack
+          if (remoteAudioTrack) {
+            // Audio track will play automatically
+            console.log(`[AGORA] Subscribed to user ${user.uid} audio track`)
+          }
         }
 
-        setCallState((prev) => {
-          const userExists = prev.remoteUsers.some(u => u.uid === user.uid)
-          if (!userExists) {
-            VideoCallLogger.log(`New user joined: UID ${user.uid}, mediaType: ${mediaType}`)
-            const newCount = prev.participantCount + 1
-            VideoCallLogger.log(`Participant count: ${prev.participantCount} -> ${newCount}`)
-            return {
-              ...prev,
-              participantCount: newCount,
-              remoteUsers: [...prev.remoteUsers, user]
-            }
+        // Update remote users list
+        setRemoteUsers(prevUsers => {
+          const existingIndex = prevUsers.findIndex(u => u.uid === user.uid)
+          if (existingIndex >= 0) {
+            const updatedUsers = [...prevUsers]
+            updatedUsers[existingIndex] = user
+            return updatedUsers
           } else {
-            VideoCallLogger.log(`Existing user published ${mediaType}: UID ${user.uid}`)
+            return [...prevUsers, user]
           }
-          return prev
         })
 
-        const isNewUser = !callState.remoteUsers.some(u => u.uid === user.uid)
-        if (isNewUser && mediaType === 'video') {
-          toast.success("Participant joined the call")
-        }
+        onUserJoined?.(user)
       } catch (error) {
-        VideoCallLogger.error("Error handling user published", error)
+        console.error(`[AGORA] Failed to subscribe to user ${user.uid}:`, error)
       }
     })
 
-    client.on("user-unpublished", (user: any, mediaType: MediaType) => {
-      if (mediaType === "video") {
-        user.videoTrack?.stop()
-      }
-      toast.info("Participant stopped sharing media")
-    })
-
-    client.on("user-left", (user: any) => {
-      setCallState((prev) => {
-        const newCount = Math.max(0, prev.participantCount - 1)
-        VideoCallLogger.log(`User left: UID ${user.uid}`)
-        VideoCallLogger.log(`Participant count: ${prev.participantCount} -> ${newCount}`)
-        return {
-          ...prev,
-          participantCount: newCount,
-          remoteUsers: prev.remoteUsers.filter(u => u.uid !== user.uid)
-        }
-      })
-      toast.info("Participant left the call")
-    })
-
-    client.on("connection-state-change", (curState: string) => {
-      VideoCallLogger.log(`Connection state changed: ${curState}`)
-
-      if (curState === "CONNECTED") {
-        setCallState((prev) => ({
-          ...prev,
-          isConnected: true,
-          isReconnecting: false,
-          connectionLost: false
-        }))
-
-        if (!callStartTimeRef.current && sessionAccessData?.sessionDetails) {
-          if (sessionAccessData.sessionDetails.agoraCallStartedAt) {
-            callStartTimeRef.current = new Date(sessionAccessData.sessionDetails.agoraCallStartedAt)
-          } else if (sessionAccessData.sessionDetails.scheduledDate) {
-            const scheduledStart = new Date(sessionAccessData.sessionDetails.scheduledDate)
-            const now = new Date()
-            callStartTimeRef.current = scheduledStart.getTime() <= now.getTime() ? scheduledStart : now
-          } else {
-            callStartTimeRef.current = new Date()
-          }
-        } else if (!callStartTimeRef.current) {
-          callStartTimeRef.current = new Date()
-        }
-
-        if (callState.connectionLost) {
-          toast.success("Connection restored!")
-        }
-      } else if (curState === "DISCONNECTED") {
-        setCallState((prev) => ({
-          ...prev,
-          isConnected: false,
-          connectionLost: true,
-          lastDisconnectTime: new Date(),
-          disconnectionCount: prev.disconnectionCount + 1
-        }))
-        toast.error("Connection lost. Attempting to reconnect...")
-
-        setTimeout(async () => {
-          if (clientRef.current) {
-            try {
-              setCallState((prev) => ({ ...prev, isReconnecting: true }))
-              const tokenData = await getTokenData()
-              if (tokenData) {
-                await clientRef.current.join(tokenData.appId, tokenData.channel, tokenData.token, tokenData.uid)
-                VideoCallLogger.log("Automatic reconnection successful")
-              }
-            } catch (error) {
-              VideoCallLogger.error("Automatic reconnection failed", error)
-              setCallState((prev) => ({
-                ...prev,
-                isReconnecting: false,
-                reconnectionFailures: prev.reconnectionFailures + 1
-              }))
-              toast.error("Reconnection failed. Please try refreshing the page.")
-            }
-          }
-        }, 3000)
-      } else if (curState === "RECONNECTING") {
-        setCallState((prev) => ({ ...prev, isReconnecting: true }))
-        toast.info("Reconnecting...")
-      }
-    })
-
-    client.on("network-quality", (stats: any) => {
-      const quality: "excellent" | "good" | "poor" = 
-        stats.uplinkNetworkQuality > 3 ? "poor" : 
-        stats.uplinkNetworkQuality > 1 ? "good" : "excellent"
-
-      setCallState((prev) => {
-        const now = new Date()
-        let updatedState = { ...prev, connectionQuality: quality }
-
-        if (quality === "poor") {
-          if (!prev.lastPoorQualityStart) {
-            updatedState.lastPoorQualityStart = now
-          }
-        } else {
-          if (prev.lastPoorQualityStart) {
-            const poorDuration = Math.floor((now.getTime() - prev.lastPoorQualityStart.getTime()) / 1000)
-            updatedState.poorQualityDuration = prev.poorQualityDuration + poorDuration
-            updatedState.lastPoorQualityStart = null
-          }
-        }
-
-        return updatedState
-      })
-    })
-  }, [callState.remoteUsers, callState.connectionLost, callStartTimeRef, sessionAccessData, setCallState, remoteVideoRef])
-
-  const getTokenData = useCallback(async (): Promise<TokenResponse | null> => {
-    try {
-      const response = await fetch("/api/agora/token", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId }),
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        if (response.status === 429) {
-          toast.rateLimited(errorData.retryAfter)
-          throw new Error("Rate limited")
-        }
-        throw new Error(errorData.error || "Failed to get Agora token")
-      }
-
-      return await response.json()
-    } catch (error) {
-      VideoCallLogger.error("Failed to get token data", error)
-      return null
-    }
-  }, [sessionId])
-
-  const createClient = useCallback(async (): Promise<void> => {
-    try {
-      // Load Agora SDK
-      if (typeof window !== "undefined" && !(window as any).AgoraRTC) {
-        const script = document.createElement("script")
-        script.src = "https://download.agora.io/sdk/release/AgoraRTC_N-4.20.0.js"
-        script.async = true
-
-        await new Promise<void>((resolve, reject) => {
-          script.onload = () => resolve()
-          script.onerror = () => reject(new Error("Failed to load Agora SDK"))
-          document.head.appendChild(script)
-        })
-      }
-
-      const AgoraRTC = (window as any).AgoraRTC
-      const tokenData = await getTokenData()
+    agoraClient.on("user-unpublished", (user, mediaType) => {
+      console.log(`[AGORA] User ${user.uid} unpublished ${mediaType}`)
       
-      if (!tokenData) {
-        throw new Error("Failed to get token data")
+      // Update remote users list
+      setRemoteUsers(prevUsers => 
+        prevUsers.map(u => u.uid === user.uid ? user : u)
+      )
+    })
+
+    agoraClient.on("user-left", (user) => {
+      console.log(`[AGORA] User ${user.uid} left the channel`)
+      
+      setRemoteUsers(prevUsers => 
+        prevUsers.filter(u => u.uid !== user.uid)
+      )
+      
+      onUserLeft?.(user)
+    })
+
+    agoraClient.on("connection-state-change", (curState) => {
+      console.log(`[AGORA] Connection state changed to: ${curState}`)
+      setConnectionState(curState)
+      setIsConnected(curState === "CONNECTED")
+      
+      onConnectionStateChanged?.(curState)
+
+      // Handle reconnection logic
+      if (curState === "DISCONNECTED" && configRef.current && reconnectAttemptsRef.current < maxReconnectAttempts) {
+        setTimeout(() => {
+          reconnectAttemptsRef.current++
+          console.log(`[AGORA] Attempting reconnection (${reconnectAttemptsRef.current}/${maxReconnectAttempts})`)
+          join(configRef.current!)
+        }, 2000 * reconnectAttemptsRef.current) // Exponential backoff
       }
+    })
 
-      if (!tokenData.channel || !tokenData.token || !tokenData.appId) {
-        throw new Error(`Missing required Agora data: channel=${tokenData.channel}, token=${!!tokenData.token}, appId=${tokenData.appId}`)
+    agoraClient.on("network-quality", (stats) => {
+      setNetworkQuality(stats.uplinkNetworkQuality)
+      onNetworkQuality?.(stats.uplinkNetworkQuality)
+    })
+
+    agoraClient.on("exception", (event) => {
+      console.error("[AGORA] Exception:", event)
+      setError(event.msg || "Agora client exception occurred")
+    })
+
+    setClient(agoraClient)
+
+    return () => {
+      agoraClient.removeAllListeners()
+    }
+  }, [onUserJoined, onUserLeft, onConnectionStateChanged, onNetworkQuality])
+
+  const join = useCallback(async (config: AgoraConfig) => {
+    if (!client) {
+      setError("Agora client not initialized")
+      return
+    }
+
+    try {
+      setError(null)
+      configRef.current = config
+      
+      console.log(`[AGORA] Joining channel: ${config.channel}`)
+
+      // Check if already connected to prevent double join
+      if (connectionState === "CONNECTED" || connectionState === "CONNECTING") {
+        console.log("[AGORA] Already connected or connecting, skipping join")
+        return
       }
-
-      // Clean up any existing client first
-      if (clientRef.current) {
-        VideoCallLogger.log("Cleaning up existing client before creating new one")
-        try {
-          await clientRef.current.leave()
-        } catch (e) {
-          VideoCallLogger.log("Error leaving existing client", e)
-        }
-        clientRef.current = null
-      }
-
-      // Create Agora client
-      const client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" })
-      clientRef.current = client
-      VideoCallLogger.log(`Created new Agora client for channel: ${tokenData.channel}`)
-
-      setupEventListeners(client)
 
       // Join the channel
-      VideoCallLogger.log(`Joining channel with UID: ${tokenData.uid}`)
-      await client.join(tokenData.appId, tokenData.channel, tokenData.token, tokenData.uid)
+      await client.join(config.appId, config.channel, config.token, config.uid)
+      
+      console.log(`[AGORA] Successfully joined channel with UID: ${config.uid}`)
 
-      // Wait for connection to be fully established
-      await new Promise<void>((resolve) => {
-        const checkConnection = () => {
-          if (client.connectionState === "CONNECTED") {
-            resolve()
-          } else {
-            setTimeout(checkConnection, 100)
+      // Create and publish local tracks
+      const [videoTrack, audioTrack] = await Promise.all([
+        AgoraRTC.createCameraVideoTrack({
+          encoderConfig: {
+            width: 640,
+            height: 480,
+            frameRate: 30,
+            bitrateMin: 400,
+            bitrateMax: 1000,
           }
-        }
-        checkConnection()
-      })
+        }),
+        AgoraRTC.createMicrophoneAudioTrack({
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        })
+      ])
 
-      await trackSessionJoin()
-    } catch (error) {
-      VideoCallLogger.error("Failed to create and join client", error)
+      setLocalVideoTrack(videoTrack)
+      setLocalAudioTrack(audioTrack)
+
+      // Publish tracks if they should be enabled
+      const tracksToPublish = []
+      if (isVideoEnabled) tracksToPublish.push(videoTrack)
+      if (isAudioEnabled) tracksToPublish.push(audioTrack)
+
+      if (tracksToPublish.length > 0) {
+        await client.publish(tracksToPublish)
+        console.log("[AGORA] Published local tracks")
+      }
+
+      reconnectAttemptsRef.current = 0 // Reset reconnect attempts on successful join
+      
+    } catch (error: any) {
+      console.error("[AGORA] Failed to join channel:", error)
+      
+      // Handle specific error cases
+      if (error.code === "INVALID_TOKEN") {
+        setError("Invalid token. Please refresh and try again.")
+      } else if (error.code === "TOKEN_EXPIRED") {
+        setError("Token expired. Please refresh and try again.")
+      } else if (error.code === "DUPLICATE_CONNECTION") {
+        setError("You are already connected from another device/tab.")
+      } else {
+        setError(`Failed to join video call: ${error.message || 'Unknown error'}`)
+      }
+      
       throw error
     }
-  }, [getTokenData, setupEventListeners, trackSessionJoin])
+  }, [client, isVideoEnabled, isAudioEnabled, connectionState])
+
+  const leave = useCallback(async () => {
+    if (!client) return
+
+    try {
+      console.log("[AGORA] Leaving channel")
+      
+      // Stop and close local tracks
+      if (localVideoTrack) {
+        localVideoTrack.stop()
+        localVideoTrack.close()
+        setLocalVideoTrack(null)
+      }
+      
+      if (localAudioTrack) {
+        localAudioTrack.stop()
+        localAudioTrack.close()
+        setLocalAudioTrack(null)
+      }
+
+      // Leave the channel
+      await client.leave()
+      
+      setRemoteUsers([])
+      setIsConnected(false)
+      setConnectionState("DISCONNECTED")
+      setError(null)
+      configRef.current = null
+      reconnectAttemptsRef.current = 0
+      
+      console.log("[AGORA] Successfully left channel")
+      
+    } catch (error: any) {
+      console.error("[AGORA] Failed to leave channel:", error)
+      setError(`Failed to leave video call: ${error.message}`)
+    }
+  }, [client, localVideoTrack, localAudioTrack])
+
+  const toggleVideo = useCallback(async () => {
+    if (!localVideoTrack || !client) return
+
+    try {
+      if (isVideoEnabled) {
+        await localVideoTrack.setEnabled(false)
+        console.log("[AGORA] Video disabled")
+      } else {
+        await localVideoTrack.setEnabled(true)
+        console.log("[AGORA] Video enabled")
+      }
+      setIsVideoEnabled(!isVideoEnabled)
+    } catch (error: any) {
+      console.error("[AGORA] Failed to toggle video:", error)
+      setError(`Failed to toggle video: ${error.message}`)
+    }
+  }, [localVideoTrack, client, isVideoEnabled])
+
+  const toggleAudio = useCallback(async () => {
+    if (!localAudioTrack || !client) return
+
+    try {
+      if (isAudioEnabled) {
+        await localAudioTrack.setEnabled(false)
+        console.log("[AGORA] Audio disabled")
+      } else {
+        await localAudioTrack.setEnabled(true)
+        console.log("[AGORA] Audio enabled")
+      }
+      setIsAudioEnabled(!isAudioEnabled)
+    } catch (error: any) {
+      console.error("[AGORA] Failed to toggle audio:", error)
+      setError(`Failed to toggle audio: ${error.message}`)
+    }
+  }, [localAudioTrack, client, isAudioEnabled])
+
+  const reconnect = useCallback(async () => {
+    if (!configRef.current) {
+      setError("No configuration available for reconnection")
+      return
+    }
+
+    try {
+      console.log("[AGORA] Manual reconnection requested")
+      await leave()
+      setTimeout(() => {
+        join(configRef.current!)
+      }, 1000)
+    } catch (error: any) {
+      console.error("[AGORA] Manual reconnection failed:", error)
+      setError(`Reconnection failed: ${error.message}`)
+    }
+  }, [leave, join])
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (client && connectionState !== "DISCONNECTED") {
+        leave()
+      }
+    }
+  }, [client, connectionState, leave])
+
+  const participantCount = remoteUsers.length + (isConnected ? 1 : 0)
 
   return {
-    clientRef,
-    localVideoTrackRef,
-    localAudioTrackRef,
-    screenTrackRef,
-    safePublish,
-    createClient,
+    client,
+    localVideoTrack,
+    localAudioTrack,
+    remoteUsers,
+    isConnected,
+    isVideoEnabled,
+    isAudioEnabled,
+    connectionState,
+    networkQuality,
+    participantCount,
+    error,
+    
+    join,
+    leave,
+    toggleVideo,
+    toggleAudio,
+    reconnect
   }
 }

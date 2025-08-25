@@ -27,15 +27,21 @@ export async function POST(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { endType = "completed" } = await request.json()
+    const { endType = "completed", noShowType, reason } = await request.json()
 
     // Validate endType
-    const validEndTypes = ["completed", "technical_issues", "no_show_learner", "no_show_mentor"]
+    const validEndTypes = ["completed", "technical_issues", "learner_no_show", "mentor_no_show", "both_no_show", "no_show"]
     if (!validEndTypes.includes(endType)) {
       return NextResponse.json(
         { error: "Invalid end type. Must be one of: " + validEndTypes.join(", ") },
         { status: 400 }
       )
+    }
+
+    // Handle no_show endType with specific noShowType
+    let finalEndType = endType
+    if (endType === "no_show" && noShowType) {
+      finalEndType = noShowType
     }
 
     // Get session details and verify user access
@@ -71,25 +77,30 @@ export async function POST(
       return NextResponse.json({ error: "Session not found" }, { status: 404 })
     }
 
-    // Verify user has access to this session
+    // Verify user has access to this session (allow system-triggered no-show completion)
     const isLearner = bookingSession.learnerUser?.id === session.id
     const isMentor = bookingSession.mentorUser?.id === session.id
+    const isSystemCompletion = finalEndType.includes('no_show') && reason?.includes('Automatic')
 
-    if (!isLearner && !isMentor) {
+    if (!isLearner && !isMentor && !isSystemCompletion) {
       return NextResponse.json({ error: "Unauthorized access to session" }, { status: 403 })
     }
 
-    // Check if session can be completed - allow ongoing or confirmed sessions
-    if (!["ongoing", "confirmed"].includes(bookingSession.status || "")) {
+    // Check if session can be completed - allow different statuses based on end type
+    const allowedStatuses = isSystemCompletion || finalEndType.includes('no_show') 
+      ? ["ongoing", "confirmed", "upcoming"] 
+      : ["ongoing", "confirmed"]
+      
+    if (!allowedStatuses.includes(bookingSession.status || "")) {
       return NextResponse.json(
-        { error: `Session cannot be completed with status: ${bookingSession.status}. Only ongoing or confirmed sessions can be completed.` },
+        { error: `Session cannot be completed with status: ${bookingSession.status}. Allowed statuses for ${finalEndType}: ${allowedStatuses.join(", ")}.` },
         { status: 400 }
       )
     }
 
     // Use the BookingLifecycleService to end the session
     const lifecycleService = BookingLifecycleService.getInstance()
-    const result = await lifecycleService.endVideoSession(sessionId, endType)
+    const result = await lifecycleService.endVideoSession(sessionId, finalEndType)
 
     if (!result.success) {
       return NextResponse.json(
@@ -102,7 +113,7 @@ export async function POST(
     const now = new Date()
     const notificationData = []
 
-    if (endType === "completed") {
+    if (finalEndType === "completed") {
       // Notify learner
       if (bookingSession.learnerUser?.id) {
         notificationData.push({
@@ -128,7 +139,7 @@ export async function POST(
           createdAt: now,
         })
       }
-    } else if (endType === "technical_issues") {
+    } else if (finalEndType === "technical_issues") {
       // Notify both parties about technical issues and refund
       if (bookingSession.learnerUser?.id) {
         notificationData.push({
@@ -153,6 +164,83 @@ export async function POST(
           createdAt: now,
         })
       }
+    } else if (finalEndType === "learner_no_show") {
+      // Notify learner about no-show
+      if (bookingSession.learnerUser?.id) {
+        notificationData.push({
+          userId: bookingSession.learnerUser.id,
+          type: "session_no_show",
+          title: "Session No-Show Recorded",
+          message: "You did not join your scheduled session within the 15-minute grace period. The mentor has been compensated for their time.",
+          relatedEntityType: "session",
+          relatedEntityId: sessionId,
+          createdAt: now,
+        })
+      }
+
+      // Notify mentor about compensation
+      if (bookingSession.mentorUser?.id) {
+        notificationData.push({
+          userId: bookingSession.mentorUser.id,
+          type: "session_compensation",
+          title: "Session No-Show - Compensation Provided",
+          message: `${bookingSession.learnerUser?.firstName} did not join the scheduled session. You have been compensated for your time.`,
+          relatedEntityType: "session",
+          relatedEntityId: sessionId,
+          createdAt: now,
+        })
+      }
+    } else if (finalEndType === "mentor_no_show") {
+      // Notify mentor about no-show
+      if (bookingSession.mentorUser?.id) {
+        notificationData.push({
+          userId: bookingSession.mentorUser.id,
+          type: "session_no_show",
+          title: "Session No-Show Recorded",
+          message: "You did not join your scheduled session within the 15-minute grace period. The learner has been refunded.",
+          relatedEntityType: "session",
+          relatedEntityId: sessionId,
+          createdAt: now,
+        })
+      }
+
+      // Notify learner about refund
+      if (bookingSession.learnerUser?.id) {
+        notificationData.push({
+          userId: bookingSession.learnerUser.id,
+          type: "session_refund",
+          title: "Session No-Show - Refund Processed",
+          message: `${bookingSession.mentorUser?.firstName} did not join the scheduled session. A full refund has been processed to your account.`,
+          relatedEntityType: "session",
+          relatedEntityId: sessionId,
+          createdAt: now,
+        })
+      }
+    } else if (finalEndType === "both_no_show") {
+      // Notify both parties about mutual no-show
+      if (bookingSession.learnerUser?.id) {
+        notificationData.push({
+          userId: bookingSession.learnerUser.id,
+          type: "session_no_show",
+          title: "Session No-Show - Both Parties",
+          message: "Neither you nor your mentor joined the scheduled session within the 15-minute grace period. Session has been cancelled.",
+          relatedEntityType: "session",
+          relatedEntityId: sessionId,
+          createdAt: now,
+        })
+      }
+
+      if (bookingSession.mentorUser?.id) {
+        notificationData.push({
+          userId: bookingSession.mentorUser.id,
+          type: "session_no_show",
+          title: "Session No-Show - Both Parties",
+          message: "Neither you nor your learner joined the scheduled session within the 15-minute grace period. Session has been cancelled.",
+          relatedEntityType: "session",
+          relatedEntityId: sessionId,
+          createdAt: now,
+        })
+      }
     }
 
     // Insert notifications
@@ -164,21 +252,35 @@ export async function POST(
       }
     }
 
-    // Broadcast real-time updates
+    // CRITICAL: Broadcast session completion and force disconnect if needed
     try {
       const { broadcastSessionUpdate } = await import("@/app/api/sse/session-updates/route")
+      
+      // For certain completion types, send force disconnect first
+      if (['technical_issues', 'learner_no_show', 'mentor_no_show', 'both_no_show'].includes(finalEndType)) {
+        await broadcastSessionUpdate(sessionId, 'force_disconnect', {
+          reason: finalEndType,
+          message: `Session ended due to ${finalEndType.replace('_', ' ')}. All participants have been disconnected.`,
+          timestamp: new Date().toISOString()
+        })
+      }
+      
       await broadcastSessionUpdate(sessionId, 'status_change', {
         previousStatus: bookingSession.status,
-        newStatus: endType,
-        completedBy: isLearner ? 'learner' : 'mentor'
+        newStatus: finalEndType,
+        completedBy: isSystemCompletion ? 'system' : (isLearner ? 'learner' : 'mentor'),
+        timestamp: new Date().toISOString()
       })
+      
+      console.log(`[SESSION_COMPLETE] Broadcasted completion for session ${sessionId} with type: ${finalEndType}`)
     } catch (error) {
       console.error("Failed to broadcast session completion:", error)
     }
 
     return NextResponse.json({
       message: "Session ended successfully",
-      endType
+      endType: finalEndType,
+      reason: reason || null
     })
 
   } catch (error) {

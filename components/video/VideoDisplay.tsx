@@ -1,138 +1,168 @@
-import { Users, VideoOff, MicOff, Monitor, AlertTriangle } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { CallState } from "./types"
+"use client"
+
+import { useEffect, useRef } from "react"
+import { ICameraVideoTrack, IAgoraRTCRemoteUser } from "agora-rtc-sdk-ng"
+import { Card } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { VideoOff, MicOff, User } from "lucide-react"
 
 interface VideoDisplayProps {
-  callState: CallState
-  localVideoRef: React.RefObject<HTMLDivElement | null>
-  remoteVideoRef: React.RefObject<HTMLDivElement | null>
-  isLoading: boolean
-  onReconnect: () => void
-  onLeaveCall: () => void
+  localVideoTrack: ICameraVideoTrack | null
+  remoteUsers: IAgoraRTCRemoteUser[]
+  isVideoEnabled: boolean
+  userName: string
 }
 
 export function VideoDisplay({
-  callState,
-  localVideoRef,
-  remoteVideoRef,
-  isLoading,
-  onReconnect,
-  onLeaveCall,
+  localVideoTrack,
+  remoteUsers,
+  isVideoEnabled,
+  userName
 }: VideoDisplayProps) {
+  const localVideoRef = useRef<HTMLDivElement>(null)
+  const remoteVideoRefs = useRef<Map<number, HTMLDivElement>>(new Map())
+
+  // Play local video
+  useEffect(() => {
+    if (localVideoTrack && localVideoRef.current && isVideoEnabled) {
+      localVideoTrack.play(localVideoRef.current)
+      console.log("[VIDEO_DISPLAY] Playing local video")
+    }
+  }, [localVideoTrack, isVideoEnabled])
+
+  // Play remote videos
+  useEffect(() => {
+    remoteUsers.forEach((user) => {
+      const uid = user.uid as number
+      const videoDiv = remoteVideoRefs.current.get(uid)
+      
+      if (user.videoTrack && videoDiv && user.hasVideo) {
+        user.videoTrack.play(videoDiv)
+        console.log(`[VIDEO_DISPLAY] Playing remote video for user ${uid}`)
+      }
+    })
+  }, [remoteUsers])
+
+  const remoteUser = remoteUsers[0] // In 1-on-1, there should only be one remote user
+
   return (
-    <div className="flex-1 bg-gray-900 relative">
-      {/* Remote Video (Main) */}
-      <div
-        ref={remoteVideoRef}
-        className="w-full h-full bg-gray-800 flex items-center justify-center"
-      >
-        {callState.participantCount === 0 && (
-          <div className="text-center text-white">
-            <Users className="h-16 w-16 mx-auto mb-4 opacity-50" />
-            <p className="text-lg">Waiting for other participant...</p>
-            <p className="text-sm opacity-75">They will appear here when they join</p>
+    <div className="h-full relative bg-gray-900">
+      {/* Main video (remote user or local if no remote) */}
+      <div className="h-full w-full relative">
+        {remoteUser ? (
+          <div className="h-full w-full relative">
+            {remoteUser.hasVideo ? (
+              <div
+                ref={(div) => {
+                  if (div && remoteUser.uid) {
+                    remoteVideoRefs.current.set(remoteUser.uid as number, div)
+                  }
+                }}
+                className="h-full w-full object-cover rounded-lg"
+              />
+            ) : (
+              <div className="h-full w-full flex items-center justify-center bg-gray-800 rounded-lg">
+                <div className="text-center">
+                  <div className="w-24 h-24 bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <User className="w-12 h-12 text-gray-400" />
+                  </div>
+                  <p className="text-white text-lg">Remote video is off</p>
+                </div>
+              </div>
+            )}
+            
+            {/* Remote user badges */}
+            <div className="absolute top-4 left-4 flex space-x-2">
+              <Badge variant="secondary" className="bg-black/50 text-white">
+                Remote User
+              </Badge>
+              {!remoteUser.hasVideo && (
+                <Badge variant="destructive" className="bg-red-500/80 text-white">
+                  <VideoOff className="w-3 h-3 mr-1" />
+                  Video Off
+                </Badge>
+              )}
+              {!remoteUser.hasAudio && (
+                <Badge variant="destructive" className="bg-red-500/80 text-white">
+                  <MicOff className="w-3 h-3 mr-1" />
+                  Audio Off
+                </Badge>
+              )}
+            </div>
+          </div>
+        ) : (
+          // No remote user, show local video in main area
+          <div className="h-full w-full relative">
+            {isVideoEnabled && localVideoTrack ? (
+              <div
+                ref={localVideoRef}
+                className="h-full w-full object-cover rounded-lg"
+              />
+            ) : (
+              <div className="h-full w-full flex items-center justify-center bg-gray-800 rounded-lg">
+                <div className="text-center">
+                  <div className="w-24 h-24 bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <User className="w-12 h-12 text-gray-400" />
+                  </div>
+                  <p className="text-white text-lg">Your video is off</p>
+                  <p className="text-gray-400 text-sm mt-2">Waiting for other participant...</p>
+                </div>
+              </div>
+            )}
+            
+            <div className="absolute top-4 left-4">
+              <Badge variant="secondary" className="bg-black/50 text-white">
+                You ({userName})
+              </Badge>
+            </div>
           </div>
         )}
       </div>
 
-      {/* Local Video (Picture-in-Picture) */}
-      <div className="absolute top-4 right-4 w-48 h-36 bg-gray-700 rounded-lg overflow-hidden border-2 border-white shadow-lg">
-        <div
-          ref={localVideoRef}
-          className="w-full h-full bg-gray-800 flex items-center justify-center"
-        >
-          {!callState.isVideoEnabled && (
-            <div className="text-center text-white">
-              <VideoOff className="h-8 w-8 mx-auto mb-2" />
-              <p className="text-xs">Camera Off</p>
+      {/* Picture-in-picture local video when remote user is present */}
+      {remoteUser && (
+        <Card className="absolute bottom-4 right-4 w-48 h-36 overflow-hidden shadow-xl border-2 border-white">
+          {isVideoEnabled && localVideoTrack ? (
+            <div
+              ref={localVideoRef}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center bg-gray-800">
+              <div className="text-center">
+                <User className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                <p className="text-white text-xs">You</p>
+                <p className="text-gray-400 text-xs">Video off</p>
+              </div>
             </div>
           )}
-        </div>
-
-        {/* Local Video Status Indicators */}
-        <div className="absolute bottom-2 left-2 flex space-x-1">
-          {!callState.isAudioEnabled && (
-            <div className="bg-red-500 rounded-full p-1">
-              <MicOff className="h-3 w-3 text-white" />
-            </div>
-          )}
-          {callState.isScreenSharing && (
-            <div className="bg-blue-500 rounded-full p-1">
-              <Monitor className="h-3 w-3 text-white" />
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Screen Share Indicator */}
-      {callState.isScreenSharing && (
-        <div className="absolute top-4 left-4 bg-blue-600 text-white px-3 py-1 rounded-full text-sm flex items-center">
-          <Monitor className="h-4 w-4 mr-2" />
-          You're sharing your screen
-        </div>
-      )}
-
-      {/* Connection Lost Overlay */}
-      {callState.connectionLost && !callState.isReconnecting && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-95 z-50">
-          <div className="text-center text-white bg-gray-800 p-8 rounded-lg border border-gray-600 max-w-md">
-            <AlertTriangle className="h-12 w-12 mx-auto mb-4 text-red-500" />
-            <h3 className="text-xl font-semibold mb-2">Connection Lost</h3>
-            <p className="text-gray-300 mb-6">
-              Your connection to the video call was interrupted.
-              {callState.lastDisconnectTime && (
-                <span className="block text-sm mt-2">
-                  Lost at {callState.lastDisconnectTime.toLocaleTimeString()}
-                </span>
-              )}
-            </p>
-            <div className="space-y-3">
-              <Button onClick={onReconnect} className="w-full bg-blue-600 hover:bg-blue-700">
-                Reconnect to Session
-              </Button>
-              <Button
-                variant="outline"
-                onClick={onLeaveCall}
-                className="w-full border-gray-600 text-gray-300 hover:bg-gray-700"
-              >
-                Leave Session
-              </Button>
-            </div>
+          
+          {/* Local video badges */}
+          <div className="absolute top-2 left-2">
+            <Badge variant="secondary" className="bg-black/70 text-white text-xs">
+              You
+            </Badge>
           </div>
-        </div>
+          
+          {!isVideoEnabled && (
+            <div className="absolute top-2 right-2">
+              <Badge variant="destructive" className="bg-red-500/80 text-white">
+                <VideoOff className="w-2 h-2" />
+              </Badge>
+            </div>
+          )}
+        </Card>
       )}
 
-      {/* Reconnecting Overlay */}
-      {callState.isReconnecting && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-80 z-40">
-          <div className="text-center text-white">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-4"></div>
-            <p className="text-lg">Reconnecting to session...</p>
+      {/* Connection status */}
+      {remoteUsers.length === 0 && (
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center">
+          <div className="bg-black/50 backdrop-blur-sm rounded-lg p-6 text-white">
+            <div className="animate-pulse w-6 h-6 bg-blue-500 rounded-full mx-auto mb-3"></div>
+            <p className="text-lg font-medium">Waiting for other participant</p>
             <p className="text-sm text-gray-300 mt-2">
-              Please wait while we restore your connection
+              Share this session link with your {userName.includes('mentor') ? 'learner' : 'mentor'}
             </p>
-          </div>
-        </div>
-      )}
-
-      {/* Loading Overlay */}
-      {isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-90">
-          <div className="text-center text-white max-w-md">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto mb-4"></div>
-            <p className="text-lg">Connecting to video call...</p>
-            <p className="text-sm opacity-75 mb-2">
-              Please allow camera and microphone access
-            </p>
-            <div className="text-xs opacity-60 mt-4 p-3 bg-gray-800 rounded">
-              <p className="mb-2">
-                <strong>Testing with multiple browsers?</strong>
-              </p>
-              <p>
-                If you get device conflicts, the system will automatically try
-                alternative devices or fallback to audio-only mode.
-              </p>
-            </div>
           </div>
         </div>
       )}

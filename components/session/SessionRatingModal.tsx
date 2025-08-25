@@ -9,25 +9,18 @@ import { Star } from "lucide-react"
 import { toast } from "@/lib/toast"
 
 interface SessionRatingModalProps {
-  isOpen: boolean
+  sessionId: number
   onClose: () => void
-  onSubmit: (rating: number, review?: string) => void
-  sessionId: string
-  mentorName: string
-  isSubmitting?: boolean
 }
 
-export default function SessionRatingModal({
-  isOpen,
-  onClose,
-  onSubmit,
+export function SessionRatingModal({
   sessionId,
-  mentorName,
-  isSubmitting = false
+  onClose
 }: SessionRatingModalProps) {
   const [rating, setRating] = useState(0)
   const [hoverRating, setHoverRating] = useState(0)
   const [review, setReview] = useState("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const handleSubmit = async () => {
     if (rating === 0) {
@@ -35,18 +28,33 @@ export default function SessionRatingModal({
       return
     }
 
-    console.log('[DEBUG] SessionRatingModal submitting:', { rating, reviewLength: review.length })
-
     try {
-      await onSubmit(rating, review.trim() || undefined)
+      setIsSubmitting(true)
       
-      // Reset form
-      setRating(0)
-      setHoverRating(0)
-      setReview("")
-    } catch (error) {
+      const response = await fetch("/api/reviews", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          sessionId,
+          rating,
+          reviewText: review.trim(),
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to submit review")
+      }
+
+      toast.success("Thank you for your review!")
+      onClose()
+    } catch (error: any) {
       console.error("Error submitting mentor rating:", error)
-      toast.error("Failed to submit rating. Please try again.")
+      toast.error(error.message || "Failed to submit rating. Please try again.")
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -76,12 +84,12 @@ export default function SessionRatingModal({
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={() => !isSubmitting && onClose()}>
+    <Dialog open={true} onOpenChange={() => !isSubmitting && onClose()}>
       <DialogContent className="sm:max-w-[425px]" onPointerDownOutside={(e) => isSubmitting && e.preventDefault()}>
         <DialogHeader>
-          <DialogTitle>Rate Your Mentor</DialogTitle>
+          <DialogTitle>Rate Your Session</DialogTitle>
           <DialogDescription>
-            How was your mentor {mentorName}? Your feedback helps other learners find great mentors.
+            How was your mentoring session? Your feedback helps us improve the platform.
           </DialogDescription>
         </DialogHeader>
 

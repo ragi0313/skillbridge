@@ -1,553 +1,264 @@
 "use client"
 
-import { useEffect, useRef, useState, useCallback } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
-import { Video, VideoOff, Mic, MicOff, Settings, RefreshCw, AlertTriangle, CheckCircle, Clock, Users } from "lucide-react"
-import { toast } from "@/lib/toast"
+import { SessionAccessData } from "@/types/session"
+import { 
+  Clock, 
+  Video, 
+  User, 
+  Calendar,
+  CheckCircle,
+  AlertCircle,
+  Timer
+} from "lucide-react"
 
 interface WaitingRoomProps {
-  sessionId: string
-  userRole: "learner" | "mentor"
-  sessionDetails: {
-    scheduledDate: string
-    durationMinutes: number
-    status: string
-  }
-  userName: string
-  onJoinSession: () => void
-  canJoin: boolean
-  waitingMinutes?: number
+  sessionData: SessionAccessData
+  onJoin: () => void
+  disabled?: boolean
 }
 
-interface DeviceState {
-  camera: {
-    available: boolean
-    enabled: boolean
-    device: MediaDeviceInfo | null
-    stream: MediaStream | null
-    error: string | null
-  }
-  microphone: {
-    available: boolean
-    enabled: boolean
-    device: MediaDeviceInfo | null
-    stream: MediaStream | null
-    error: string | null
-  }
-}
+export function WaitingRoom({ sessionData, onJoin, disabled = false }: WaitingRoomProps) {
+  const [timeUntilStart, setTimeUntilStart] = useState<number>(sessionData.timeUntilMeeting || 0)
+  const [currentTime, setCurrentTime] = useState<Date>(new Date())
 
-export default function WaitingRoom({
-  sessionId,
-  userRole,
-  sessionDetails,
-  userName,
-  onJoinSession,
-  canJoin,
-  waitingMinutes
-}: WaitingRoomProps) {
-  const [deviceState, setDeviceState] = useState<DeviceState>({
-    camera: { available: false, enabled: true, device: null, stream: null, error: null },
-    microphone: { available: false, enabled: true, device: null, stream: null, error: null }
-  })
-  
-  const [availableDevices, setAvailableDevices] = useState<{
-    cameras: MediaDeviceInfo[]
-    microphones: MediaDeviceInfo[]
-  }>({ cameras: [], microphones: [] })
-  
-  const [isTestingDevices, setIsTestingDevices] = useState(false)
-  const [countdown, setCountdown] = useState<number | null>(null)
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const streamRef = useRef<MediaStream | null>(null)
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const now = new Date()
+      setCurrentTime(now)
+      
+      const scheduledDate = new Date(sessionData.sessionDetails.scheduledDate)
+      const timeRemaining = Math.max(0, Math.floor((scheduledDate.getTime() - now.getTime()) / 1000))
+      setTimeUntilStart(timeRemaining)
+    }, 1000)
 
-  // Calculate time until session starts
-  const getTimeUntilSession = useCallback(() => {
-    if (!sessionDetails?.scheduledDate) return 0
-    const now = new Date()
-    const sessionStart = sessionDetails?.scheduledDate ? new Date(sessionDetails.scheduledDate) : new Date()
-    const diff = sessionStart.getTime() - now.getTime()
-    return Math.max(0, Math.floor(diff / 1000))
-  }, [sessionDetails?.scheduledDate])
+    return () => clearInterval(timer)
+  }, [sessionData.sessionDetails.scheduledDate])
 
-  // Format time display
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60)
+  const formatTime = (seconds: number): string => {
+    const hours = Math.floor(seconds / 3600)
+    const minutes = Math.floor((seconds % 3600) / 60)
     const secs = seconds % 60
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+    
+    if (hours > 0) {
+      return `${hours}h ${minutes}m ${secs}s`
+    } else if (minutes > 0) {
+      return `${minutes}m ${secs}s`
+    } else {
+      return `${secs}s`
+    }
   }
 
-  // Get available media devices
-  const getAvailableDevices = useCallback(async () => {
-    try {
-      const devices = await navigator.mediaDevices.enumerateDevices()
-      const cameras = devices.filter(device => device.kind === 'videoinput')
-      const microphones = devices.filter(device => device.kind === 'audioinput')
-      
-      setAvailableDevices({ cameras, microphones })
-      
-      return { cameras, microphones }
-    } catch (error) {
-      console.error("Error enumerating devices:", error)
-      toast.error("Failed to detect available devices")
-      return { cameras: [], microphones: [] }
-    }
-  }, [])
+  const formatDateTime = (dateString: string): string => {
+    const date = new Date(dateString)
+    return date.toLocaleString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZoneName: 'short'
+    })
+  }
 
-  // Test camera access
-  const testCamera = useCallback(async (deviceId?: string) => {
-    try {
-      setDeviceState(prev => ({
-        ...prev,
-        camera: { ...prev.camera, error: null }
-      }))
-
-      const constraints: MediaStreamConstraints = {
-        video: deviceId ? { deviceId: { exact: deviceId } } : true,
-        audio: false
-      }
-
-      const stream = await navigator.mediaDevices.getUserMedia(constraints)
-      
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-      }
-
-      const videoTrack = stream.getVideoTracks()[0]
-      const device = availableDevices.cameras.find(d => d.deviceId === videoTrack.getSettings().deviceId)
-
-      setDeviceState(prev => ({
-        ...prev,
-        camera: {
-          available: true,
-          enabled: true,
-          device: device || null,
-          stream,
-          error: null
-        }
-      }))
-
-      // Store the stream reference
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop())
-      }
-      streamRef.current = stream
-
-      return true
-    } catch (error: any) {
-      console.error("Camera test failed:", error)
-      
-      let errorMessage = "Camera access failed"
-      if (error.name === 'NotFoundError') {
-        errorMessage = "No camera found"
-      } else if (error.name === 'NotAllowedError') {
-        errorMessage = "Camera permission denied"
-      } else if (error.name === 'NotReadableError') {
-        errorMessage = "Camera is being used by another application"
-      }
-
-      setDeviceState(prev => ({
-        ...prev,
-        camera: {
-          available: false,
-          enabled: false,
-          device: null,
-          stream: null,
-          error: errorMessage
-        }
-      }))
-
-      return false
-    }
-  }, [availableDevices.cameras])
-
-  // Test microphone access
-  const testMicrophone = useCallback(async (deviceId?: string) => {
-    try {
-      setDeviceState(prev => ({
-        ...prev,
-        microphone: { ...prev.microphone, error: null }
-      }))
-
-      const constraints: MediaStreamConstraints = {
-        video: false,
-        audio: deviceId ? { deviceId: { exact: deviceId } } : true
-      }
-
-      const stream = await navigator.mediaDevices.getUserMedia(constraints)
-      const audioTrack = stream.getAudioTracks()[0]
-      const device = availableDevices.microphones.find(d => d.deviceId === audioTrack.getSettings().deviceId)
-
-      setDeviceState(prev => ({
-        ...prev,
-        microphone: {
-          available: true,
-          enabled: true,
-          device: device || null,
-          stream,
-          error: null
-        }
-      }))
-
-      // Stop the test stream immediately (we just needed to verify access)
-      stream.getTracks().forEach(track => track.stop())
-
-      return true
-    } catch (error: any) {
-      console.error("Microphone test failed:", error)
-      
-      let errorMessage = "Microphone access failed"
-      if (error.name === 'NotFoundError') {
-        errorMessage = "No microphone found"
-      } else if (error.name === 'NotAllowedError') {
-        errorMessage = "Microphone permission denied"
-      } else if (error.name === 'NotReadableError') {
-        errorMessage = "Microphone is being used by another application"
-      }
-
-      setDeviceState(prev => ({
-        ...prev,
-        microphone: {
-          available: false,
-          enabled: false,
-          device: null,
-          stream: null,
-          error: errorMessage
-        }
-      }))
-
-      return false
-    }
-  }, [availableDevices.microphones])
-
-  // Test all devices
-  const testAllDevices = useCallback(async () => {
-    setIsTestingDevices(true)
-    
-    try {
-      // Get available devices first
-      const devices = await getAvailableDevices()
-      
-      // Test camera and microphone
-      const [cameraOk, microphoneOk] = await Promise.all([
-        testCamera(devices.cameras[0]?.deviceId),
-        testMicrophone(devices.microphones[0]?.deviceId)
-      ])
-
-      if (cameraOk && microphoneOk) {
-        toast.success("Camera and microphone are working correctly")
-      } else if (cameraOk) {
-        toast.warning("Camera OK, but microphone has issues")
-      } else if (microphoneOk) {
-        toast.warning("Microphone OK, but camera has issues")
-      } else {
-        toast.error("Both camera and microphone have issues")
-      }
-    } catch (error) {
-      console.error("Device test failed:", error)
-      toast.error("Failed to test devices")
-    } finally {
-      setIsTestingDevices(false)
-    }
-  }, [getAvailableDevices, testCamera, testMicrophone])
-
-  // Toggle camera
-  const toggleCamera = useCallback(() => {
-    if (deviceState.camera.available) {
-      setDeviceState(prev => ({
-        ...prev,
-        camera: { ...prev.camera, enabled: !prev.camera.enabled }
-      }))
-    }
-  }, [deviceState.camera.available])
-
-  // Toggle microphone
-  const toggleMicrophone = useCallback(() => {
-    if (deviceState.microphone.available) {
-      setDeviceState(prev => ({
-        ...prev,
-        microphone: { ...prev.microphone, enabled: !prev.microphone.enabled }
-      }))
-    }
-  }, [deviceState.microphone.available])
-
-  // Initialize devices on mount
-  useEffect(() => {
-    testAllDevices()
-  }, [testAllDevices])
-
-  // Countdown timer
-  useEffect(() => {
-    if (canJoin) {
-      setCountdown(null)
-      return
-    }
-
-    const updateCountdown = () => {
-      const timeLeft = getTimeUntilSession()
-      setCountdown(timeLeft)
-      
-      if (timeLeft <= 0) {
-        window.location.reload() // Refresh to check if can join now
-      }
-    }
-
-    updateCountdown()
-    const interval = setInterval(updateCountdown, 1000)
-
-    return () => clearInterval(interval)
-  }, [canJoin, getTimeUntilSession])
-
-  // Cleanup streams on unmount
-  useEffect(() => {
-    return () => {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop())
-      }
-    }
-  }, [])
-
-  const sessionStart = sessionDetails?.scheduledDate ? new Date(sessionDetails.scheduledDate) : new Date()
-  const readyToJoin = deviceState.camera.available && deviceState.microphone.available
+  const canJoinNow = timeUntilStart <= 0 || sessionData.isWithinMeetingTime
+  const isEarlyAccess = sessionData.isInWaitingRoom && timeUntilStart > 0
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center p-4">
-      <Card className="w-full max-w-4xl mx-auto shadow-2xl">
-        <CardHeader className="text-center bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-t-lg">
-          <CardTitle className="text-2xl font-bold">Session Waiting Room</CardTitle>
-          <p className="text-blue-100">Prepare for your mentoring session</p>
-        </CardHeader>
-        
-        <CardContent className="p-8">
-          {/* Session Info */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-            <div className="space-y-4">
-              <div className="flex items-center space-x-2">
-                <Clock className="h-5 w-5 text-blue-600" />
-                <div>
-                  <p className="font-semibold">Session Time</p>
-                  <p className="text-gray-600">{sessionStart.toLocaleString()}</p>
-                </div>
-              </div>
-              
-              <div className="flex items-center space-x-2">
-                <Users className="h-5 w-5 text-blue-600" />
-                <div>
-                  <p className="font-semibold">Your Role</p>
-                  <p className="text-gray-600 capitalize">{userRole}</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-center">
-              {!canJoin && countdown !== null ? (
-                <div className="text-center">
-                  <div className="text-3xl font-bold text-blue-600 mb-2">
-                    {formatTime(countdown)}
-                  </div>
-                  <p className="text-gray-600">until you can join</p>
-                  <Badge variant="secondary" className="mt-2">
-                    Join window opens 10 minutes before
-                  </Badge>
-                </div>
-              ) : (
-                <Badge variant="default" className="bg-green-600 text-white text-lg px-4 py-2">
-                  Ready to Join!
-                </Badge>
-              )}
-            </div>
-          </div>
-
-          <Separator className="my-6 bg-gray-700" />
-
-          {/* Device Testing */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Video Preview */}
-            <div className="lg:col-span-2">
-              <h3 className="text-lg font-semibold mb-4 flex items-center">
-                <Video className="h-5 w-5 mr-2" />
-                Camera Preview
-              </h3>
-              
-              <div className="relative bg-black rounded-xl overflow-hidden aspect-video mb-6 border-2 border-gray-600 shadow-2xl">
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  muted
-                  playsInline
-                  className={`w-full h-full object-cover transform scale-x-[-1] ${
-                    !deviceState.camera.enabled ? 'hidden' : ''
-                  }`}
-                />
-                
-                {!deviceState.camera.enabled && (
-                  <div className="absolute inset-0 flex items-center justify-center text-white">
-                    <div className="text-center">
-                      <VideoOff className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                      <p>Camera Off</p>
-                    </div>
-                  </div>
-                )}
-
-                {deviceState.camera.error && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-red-900 bg-opacity-90 text-white">
-                    <div className="text-center">
-                      <AlertTriangle className="h-12 w-12 mx-auto mb-2" />
-                      <p className="font-semibold">Camera Error</p>
-                      <p className="text-sm">{deviceState.camera.error}</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex justify-center space-x-8">
-                <Button
-                  variant={deviceState.camera.enabled ? "default" : "destructive"}
-                  onClick={toggleCamera}
-                  disabled={!deviceState.camera.available}
-                  className="rounded-full w-16 h-16 text-white shadow-lg transition-all hover:scale-105"
-                >
-                  {deviceState.camera.enabled ? <Video className="h-7 w-7" /> : <VideoOff className="h-7 w-7" />}
-                </Button>
-
-                <Button
-                  variant={deviceState.microphone.enabled ? "default" : "destructive"}
-                  onClick={toggleMicrophone}
-                  disabled={!deviceState.microphone.available}
-                  className="rounded-full w-16 h-16 text-white shadow-lg transition-all hover:scale-105"
-                >
-                  {deviceState.microphone.enabled ? <Mic className="h-7 w-7" /> : <MicOff className="h-7 w-7" />}
-                </Button>
-              </div>
-              
-              <div className="text-center mt-4">
-                <p className="text-sm text-gray-400">
-                  {deviceState.camera.available && deviceState.microphone.available 
-                    ? "✓ Ready for video call" 
-                    : "⚠ Device setup needed"}
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+      <div className="w-full max-w-2xl">
+        {/* Main Waiting Room Card */}
+        <Card className="shadow-xl border-0 overflow-hidden">
+          <CardHeader className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-2xl font-bold mb-2">
+                  {isEarlyAccess ? "Waiting Room" : "Session Ready"}
+                </CardTitle>
+                <p className="text-blue-100">
+                  You're joining as a <span className="font-semibold">{sessionData.userRole}</span>
                 </p>
               </div>
-            </div>
-
-            {/* Device Status */}
-            <div className="lg:col-span-1">
-              <h3 className="text-lg font-semibold mb-6 flex items-center text-gray-100">
-                <Settings className="h-5 w-5 mr-2 text-blue-400" />
-                Device Status
-              </h3>
-
-              <div className="space-y-4">
-                {/* Camera Status */}
-                <div className="flex items-center justify-between p-4 border rounded-lg">
-                  <div className="flex items-center space-x-3">
-                    <Video className="h-5 w-5 text-blue-600" />
-                    <div>
-                      <p className="font-medium">Camera</p>
-                      <p className="text-sm text-gray-600">
-                        {deviceState.camera.device?.label || "Default Camera"}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    {deviceState.camera.available ? (
-                      <CheckCircle className="h-5 w-5 text-green-600" />
-                    ) : (
-                      <AlertTriangle className="h-5 w-5 text-red-600" />
-                    )}
-                    <Badge variant={deviceState.camera.available ? "default" : "destructive"}>
-                      {deviceState.camera.available ? "Working" : "Error"}
-                    </Badge>
-                  </div>
-                </div>
-
-                {/* Microphone Status */}
-                <div className="flex items-center justify-between p-4 border rounded-lg">
-                  <div className="flex items-center space-x-3">
-                    <Mic className="h-5 w-5 text-blue-600" />
-                    <div>
-                      <p className="font-medium">Microphone</p>
-                      <p className="text-sm text-gray-600">
-                        {deviceState.microphone.device?.label || "Default Microphone"}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    {deviceState.microphone.available ? (
-                      <CheckCircle className="h-5 w-5 text-green-600" />
-                    ) : (
-                      <AlertTriangle className="h-5 w-5 text-red-600" />
-                    )}
-                    <Badge variant={deviceState.microphone.available ? "default" : "destructive"}>
-                      {deviceState.microphone.available ? "Working" : "Error"}
-                    </Badge>
-                  </div>
-                </div>
-
-                {/* Test Devices Button */}
-                <Button
-                  variant="outline"
-                  onClick={testAllDevices}
-                  disabled={isTestingDevices}
-                  className="w-full"
-                >
-                  <RefreshCw className={`h-4 w-4 mr-2 ${isTestingDevices ? 'animate-spin' : ''}`} />
-                  {isTestingDevices ? "Testing Devices..." : "Test Devices Again"}
-                </Button>
-
-                {/* Error Messages */}
-                {(deviceState.camera.error || deviceState.microphone.error) && (
-                  <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                    <h4 className="font-medium text-red-800 mb-2">Device Issues</h4>
-                    {deviceState.camera.error && (
-                      <p className="text-sm text-red-700 mb-1">• Camera: {deviceState.camera.error}</p>
-                    )}
-                    {deviceState.microphone.error && (
-                      <p className="text-sm text-red-700">• Microphone: {deviceState.microphone.error}</p>
-                    )}
-                    <div className="mt-3 text-sm text-red-700">
-                      <p className="font-medium">Troubleshooting:</p>
-                      <ul className="list-disc list-inside mt-1 space-y-1">
-                        <li>Check if devices are connected properly</li>
-                        <li>Allow camera/microphone permissions when prompted</li>
-                        <li>Close other applications using your camera/microphone</li>
-                        <li>Try refreshing the page</li>
-                      </ul>
-                    </div>
-                  </div>
+              <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center">
+                {canJoinNow ? (
+                  <CheckCircle className="w-8 h-8 text-white" />
+                ) : (
+                  <Clock className="w-8 h-8 text-white" />
                 )}
               </div>
             </div>
-          </div>
+          </CardHeader>
 
-          <Separator className="my-6 bg-gray-700" />
+          <CardContent className="p-8">
+            {/* Session Information */}
+            <div className="grid md:grid-cols-2 gap-6 mb-8">
+              <div className="space-y-4">
+                <div className="flex items-start space-x-3">
+                  <Calendar className="w-5 h-5 text-blue-600 mt-1" />
+                  <div>
+                    <h4 className="font-semibold text-gray-900">Scheduled Time</h4>
+                    <p className="text-sm text-gray-600">
+                      {formatDateTime(sessionData.sessionDetails.scheduledDate)}
+                    </p>
+                  </div>
+                </div>
 
-          {/* Join Session */}
-          <div className="text-center">
-            <Button
-              onClick={onJoinSession}
-              disabled={!canJoin || !readyToJoin}
-              size="lg"
-              className="bg-green-600 hover:bg-green-700 text-white px-8 py-3 text-lg"
-            >
-              {!canJoin ? (
-                `Join in ${waitingMinutes || 0} minutes`
-              ) : !readyToJoin ? (
-                "Fix device issues to join"
-              ) : (
-                "Join Session"
-              )}
-            </Button>
-            
-            {canJoin && !readyToJoin && (
-              <p className="mt-2 text-sm text-red-400">
-                Please resolve camera and microphone issues before joining
-              </p>
+                <div className="flex items-start space-x-3">
+                  <Timer className="w-5 h-5 text-blue-600 mt-1" />
+                  <div>
+                    <h4 className="font-semibold text-gray-900">Duration</h4>
+                    <p className="text-sm text-gray-600">
+                      {sessionData.sessionDetails.durationMinutes} minutes
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex items-start space-x-3">
+                  <User className="w-5 h-5 text-blue-600 mt-1" />
+                  <div>
+                    <h4 className="font-semibold text-gray-900">Your Role</h4>
+                    <p className="text-sm text-gray-600 capitalize">
+                      {sessionData.userRole}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start space-x-3">
+                  <Video className="w-5 h-5 text-blue-600 mt-1" />
+                  <div>
+                    <h4 className="font-semibold text-gray-900">Session Status</h4>
+                    <Badge variant="secondary" className="mt-1">
+                      {sessionData.sessionDetails.status}
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Time Until Session */}
+            {!canJoinNow && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 mb-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold text-yellow-800 mb-1">
+                      Session starts in:
+                    </h3>
+                    <p className="text-sm text-yellow-700">
+                      Please wait until the scheduled time to join the video call
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-3xl font-bold text-yellow-800 font-mono">
+                      {formatTime(timeUntilStart)}
+                    </div>
+                    <p className="text-xs text-yellow-600 mt-1">
+                      Current time: {currentTime.toLocaleTimeString()}
+                    </p>
+                  </div>
+                </div>
+              </div>
             )}
-          </div>
-        </CardContent>
-      </Card>
+
+            {/* Ready to Join */}
+            {canJoinNow && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-6 mb-6">
+                <div className="flex items-center space-x-4">
+                  <CheckCircle className="w-8 h-8 text-green-600" />
+                  <div>
+                    <h3 className="text-lg font-semibold text-green-800">Ready to Start!</h3>
+                    <p className="text-green-700">
+                      Your session is ready. Click the button below to join the video call.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Join Button */}
+            <div className="text-center">
+              <Button
+                onClick={onJoin}
+                disabled={disabled || !canJoinNow}
+                size="lg"
+                className={`px-12 py-4 text-lg font-semibold ${
+                  canJoinNow 
+                    ? 'bg-green-600 hover:bg-green-700' 
+                    : 'bg-gray-300 cursor-not-allowed'
+                }`}
+              >
+                {disabled ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
+                    Preparing...
+                  </>
+                ) : canJoinNow ? (
+                  <>
+                    <Video className="w-5 h-5 mr-2" />
+                    Join Video Session
+                  </>
+                ) : (
+                  <>
+                    <Clock className="w-5 h-5 mr-2" />
+                    Wait for Session Time
+                  </>
+                )}
+              </Button>
+              
+              {!canJoinNow && (
+                <p className="text-sm text-gray-500 mt-3">
+                  You can join up to 30 minutes before the scheduled time
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Help Information */}
+        <Card className="mt-6">
+          <CardContent className="p-6">
+            <h4 className="font-semibold text-gray-900 mb-3 flex items-center">
+              <AlertCircle className="w-5 h-5 text-blue-600 mr-2" />
+              Before You Join
+            </h4>
+            <div className="grid md:grid-cols-2 gap-4 text-sm text-gray-600">
+              <ul className="space-y-2">
+                <li className="flex items-start">
+                  <span className="w-2 h-2 bg-blue-600 rounded-full mt-2 mr-3 flex-shrink-0"></span>
+                  Ensure your camera and microphone are working
+                </li>
+                <li className="flex items-start">
+                  <span className="w-2 h-2 bg-blue-600 rounded-full mt-2 mr-3 flex-shrink-0"></span>
+                  Check your internet connection
+                </li>
+                <li className="flex items-start">
+                  <span className="w-2 h-2 bg-blue-600 rounded-full mt-2 mr-3 flex-shrink-0"></span>
+                  Find a quiet, well-lit space
+                </li>
+              </ul>
+              <ul className="space-y-2">
+                <li className="flex items-start">
+                  <span className="w-2 h-2 bg-blue-600 rounded-full mt-2 mr-3 flex-shrink-0"></span>
+                  Close other applications to save bandwidth
+                </li>
+                <li className="flex items-start">
+                  <span className="w-2 h-2 bg-blue-600 rounded-full mt-2 mr-3 flex-shrink-0"></span>
+                  Have your materials ready
+                </li>
+                <li className="flex items-start">
+                  <span className="w-2 h-2 bg-blue-600 rounded-full mt-2 mr-3 flex-shrink-0"></span>
+                  Use headphones for better audio quality
+                </li>
+              </ul>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   )
 }

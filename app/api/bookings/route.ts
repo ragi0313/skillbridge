@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { toZonedTime } from "date-fns-tz";
 import { withRateLimit } from "@/lib/middleware/rate-limit";
 
+
 const timeToMinutes = (timeStr: string): number => {
   if (!timeStr || typeof timeStr !== "string") return 0;
   if (timeStr.includes("AM") || timeStr.includes("PM")) {
@@ -54,7 +55,7 @@ async function handleBooking(req: NextRequest) {
     ) {
       return NextResponse.json({ error: "Missing or invalid fields." }, { status: 400 });
     }
-    if (durationMinutes < 60 || durationMinutes > 240) {
+    if (durationMinutes < 30 || durationMinutes > 240) {
       return NextResponse.json({ error: "Session must be between 60 and 240 minutes." }, { status: 400 });
     }
     if (sessionNotes.length > 1000) {
@@ -163,12 +164,13 @@ async function handleBooking(req: NextRequest) {
         throw new Error(`Mentor is not available on ${dayOfWeek} from ${startTimeStr} to ${endTimeStr}.`);
       }
 
-      // Check conflicts with existing sessions
-      const scheduledDateStr = scheduledStart.toISOString().split('T')[0];
+      // Check conflicts with existing sessions using explicit time fields
       const existingSessions = await tx
         .select({
           id: bookingSessions.id,
           scheduledDate: bookingSessions.scheduledDate,
+          startTime: bookingSessions.startTime,
+          endTime: bookingSessions.endTime,
           durationMinutes: bookingSessions.durationMinutes,
           status: bookingSessions.status
         })
@@ -179,22 +181,31 @@ async function handleBooking(req: NextRequest) {
             or(
               eq(bookingSessions.status, "pending"),
               eq(bookingSessions.status, "confirmed"),
+              eq(bookingSessions.status, "upcoming"),
               eq(bookingSessions.status, "ongoing")
             )
           )
         );
 
       const conflictingSessions = existingSessions.filter(session => {
-        const existingDate = new Date(session.scheduledDate);
-        const existingDateStr = existingDate.toISOString().split('T')[0];
-        if (existingDateStr !== scheduledDateStr) return false;
-        const existingDateInMentorTz = toZonedTime(existingDate, mentorTimezone);
-        const existingStartMinutes = existingDateInMentorTz.getHours() * 60 + existingDateInMentorTz.getMinutes();
-        const existingEndMinutes = existingStartMinutes + session.durationMinutes;
-        return timeRangesOverlap(
-          requestedStartMinutes, requestedEndMinutes,
-          existingStartMinutes, existingEndMinutes
-        );
+        // Use explicit startTime and endTime for more accurate conflict detection
+        if (!session.startTime || !session.endTime) {
+          // Fallback for sessions without explicit time fields (should not happen after migration)
+          const existingDate = new Date(session.scheduledDate);
+          const existingDateStr = existingDate.toISOString().split('T')[0];
+          const scheduledDateStr = scheduledStart.toISOString().split('T')[0];
+          if (existingDateStr !== scheduledDateStr) return false;
+          const existingDateInMentorTz = toZonedTime(existingDate, mentorTimezone);
+          const existingStartMinutes = existingDateInMentorTz.getHours() * 60 + existingDateInMentorTz.getMinutes();
+          const existingEndMinutes = existingStartMinutes + session.durationMinutes;
+          return timeRangesOverlap(
+            requestedStartMinutes, requestedEndMinutes,
+            existingStartMinutes, existingEndMinutes
+          );
+        }
+        
+        // Direct time overlap check using exact timestamps
+        return scheduledStart < session.endTime && scheduledEnd > session.startTime;
       });
       
       if (conflictingSessions.length > 0) {
@@ -207,6 +218,8 @@ async function handleBooking(req: NextRequest) {
         mentorId: mentor.id,
         mentorSkillId,
         scheduledDate: scheduledStart,
+        startTime: scheduledStart,
+        endTime: scheduledEnd,
         durationMinutes,
         totalCostCredits,
         escrowCredits: totalCostCredits,

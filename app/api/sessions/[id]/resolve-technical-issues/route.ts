@@ -39,11 +39,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
       const now = new Date()
 
-      // Update session to mark technical issues as resolved
+      // Mark technical issues as resolved - this doesn't change session status
+      // The session monitoring service will handle status transitions
       await tx
         .update(bookingSessions)
         .set({
           updatedAt: now,
+          // Could add a technicalIssuesResolvedAt field if needed
         })
         .where(eq(bookingSessions.id, sessionId))
 

@@ -1,484 +1,470 @@
 "use client"
 
-import { useEffect, useRef, useState, useCallback } from "react"
-import { useRouter } from "next/navigation"
-import { Card, CardContent } from "@/components/ui/card"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { Button } from "@/components/ui/button"
-import { VideoOff, MessageCircle } from "lucide-react"
-import { toast } from "@/lib/toast"
-
-import WaitingRoom from "@/components/session/WaitingRoom"
-import ChatPanel from "@/components/video/ChatPanel"
-import SessionRatingModal from "@/components/session/SessionRatingModal"
-
-import { ConnectionStatus } from "./ConnectionStatus"
-import { VideoControls } from "./VideoControls"
+import { Card } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
 import { VideoDisplay } from "./VideoDisplay"
+import { VideoControls } from "./VideoControls"
+import { ConnectionStatus } from "./ConnectionStatus"
+import { WaitingRoom } from "./WaitingRoom"
+import { SessionRatingModal } from "../session/SessionRatingModal"
 import { useAgoraClient } from "./hooks/useAgoraClient"
-import { useMediaControls } from "./hooks/useMediaControls"
-import { VideoCallLogger } from "./utils/logger"
-import { CallState, VideoCallProps, SessionAccessData, toSafeError } from "./types"
+import { useSessionUpdates } from "@/lib/hooks/useSessionUpdates"
+import { SessionAccessData } from "@/types/session"
+import { toast } from "@/lib/toast"
+import { 
+  Phone, 
+  PhoneOff, 
+  AlertTriangle, 
+  Clock, 
+  Users,
+  Wifi,
+  WifiOff 
+} from "lucide-react"
 
-export default function VideoCall({ sessionId, userRole, agoraChannel }: VideoCallProps) {
-  const router = useRouter()
-  
-  // State management
-  const [isLoading, setIsLoading] = useState(true)
+interface VideoCallMainProps {
+  sessionId: string
+}
+
+export function VideoCallMain({ sessionId }: VideoCallMainProps) {
+  const [sessionData, setSessionData] = useState<SessionAccessData | null>(null)
+  const [agoraToken, setAgoraToken] = useState<string | null>(null)
+  const [callStarted, setCallStarted] = useState(false)
+  const [callEnded, setCallEnded] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [sessionAccessData, setSessionAccessData] = useState<SessionAccessData | null>(null)
-  const [showWaitingRoom, setShowWaitingRoom] = useState(false)
-  const [isChatOpen, setIsChatOpen] = useState(false)
+  const [timeRemaining, setTimeRemaining] = useState<number>(0)
   const [showRatingModal, setShowRatingModal] = useState(false)
-  const [isSubmittingRating, setIsSubmittingRating] = useState(false)
+  const [sessionCompleted, setSessionCompleted] = useState(false)
   
-  const [callState, setCallState] = useState<CallState>({
-    isConnected: false,
-    isVideoEnabled: true,
-    isAudioEnabled: true,
-    isScreenSharing: false,
-    participantCount: 0,
-    connectionQuality: "excellent",
-    callDuration: 0,
-    isReconnecting: false,
-    connectionLost: false,
-    lastDisconnectTime: null,
-    remoteUsers: [],
-    disconnectionCount: 0,
-    poorQualityDuration: 0,
-    lastPoorQualityStart: null,
-    reconnectionFailures: 0,
-    technicalIssuesDetected: false,
+  const timerRef = useRef<NodeJS.Timeout | null>(null)
+  const endTimeRef = useRef<Date | null>(null)
+  const forceDisconnectRef = useRef(false)
+
+  // Agora client hook
+  const {
+    client,
+    localVideoTrack,
+    localAudioTrack,
+    remoteUsers,
+    isConnected: agoraConnected,
+    isVideoEnabled,
+    isAudioEnabled,
+    connectionState,
+    networkQuality,
+    participantCount,
+    error: agoraError,
+    join: joinAgora,
+    leave: leaveAgora,
+    toggleVideo,
+    toggleAudio,
+    reconnect: reconnectAgora
+  } = useAgoraClient({
+    onUserJoined: (user) => {
+      console.log(`[VIDEO_CALL] User ${user.uid} joined`)
+      toast.success(`${sessionData?.userRole === 'learner' ? 'Mentor' : 'Learner'} joined the call`)
+    },
+    onUserLeft: (user) => {
+      console.log(`[VIDEO_CALL] User ${user.uid} left`)
+      toast.info(`${sessionData?.userRole === 'learner' ? 'Mentor' : 'Learner'} left the call`)
+    },
+    maxParticipants: 2
   })
 
-  // Refs
-  const localVideoRef = useRef<HTMLDivElement | null>(null)
-  const remoteVideoRef = useRef<HTMLDivElement | null>(null)
-  const callStartTimeRef = useRef<Date | null>(null)
-  const durationIntervalRef = useRef<NodeJS.Timeout | null>(null)
-
-  // Navigation handler
-  const handleCallEnd = useCallback(() => {
-    const redirectPath = userRole === "learner" ? "/learner/sessions" : "/mentor/sessions"
-    router.push(redirectPath)
-  }, [userRole, router])
-
-  // Session tracking
-  const trackSessionJoin = useCallback(async () => {
-    try {
-      const response = await fetch(`/api/sessions/${sessionId}/join`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        VideoCallLogger.log("Session join tracked", data)
-        return data
+  // Session updates hook
+  const { isConnected: sseConnected, lastMessage } = useSessionUpdates({
+    onSessionUpdate: (data) => {
+      if (data.sessionId.toString() === sessionId) {
+        if (data.type === 'force_disconnect') {
+          handleForceDisconnect(data.message || 'Session ended by system')
+        } else if (data.type === 'session_terminated') {
+          handleSessionComplete()
+        }
       }
-    } catch (error) {
-      VideoCallLogger.error("Failed to track session join", error)
-    }
-    return null
-  }, [sessionId])
+    },
+    enableToasts: true
+  })
 
-  const trackSessionLeave = useCallback(async () => {
+  // Load session access data
+  const loadSessionData = useCallback(async () => {
     try {
-      const response = await fetch(`/api/sessions/${sessionId}/leave`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      })
+      setLoading(true)
+      setError(null)
 
-      if (response.ok) {
-        const data = await response.json()
-        VideoCallLogger.log("Session leave tracked", data)
-        return data
+      const response = await fetch(`/api/sessions/${sessionId}/join`)
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Failed to load session')
       }
-    } catch (error) {
-      VideoCallLogger.error("Failed to track session leave", error)
-    }
-    return null
-  }, [sessionId])
-
-  // Initialize hooks
-  const agoraClient = useAgoraClient({
-    sessionId,
-    callState,
-    setCallState,
-    localVideoRef,
-    remoteVideoRef,
-    callStartTimeRef,
-    sessionAccessData,
-    trackSessionJoin,
-  })
-
-  const mediaControls = useMediaControls({
-    callState,
-    setCallState,
-    clientRef: agoraClient.clientRef,
-    localVideoRef,
-    localVideoTrackRef: agoraClient.localVideoTrackRef,
-    localAudioTrackRef: agoraClient.localAudioTrackRef,
-    screenTrackRef: agoraClient.screenTrackRef,
-    safePublish: agoraClient.safePublish,
-  })
-
-  // Technical issues detection
-  const checkTechnicalIssues = useCallback(() => {
-    const issues = {
-      excessiveDisconnections: callState.disconnectionCount >= 8,
-      prolongedPoorQuality: callState.poorQualityDuration >= 300,
-      multipleReconnectionFailures: callState.reconnectionFailures >= 5,
-    }
-
-    const hasTechnicalIssues = Object.values(issues).some(Boolean)
-    
-    if (hasTechnicalIssues && !callState.technicalIssuesDetected) {
-      VideoCallLogger.log("Technical issues detected automatically", issues)
-      setCallState(prev => ({ ...prev, technicalIssuesDetected: true }))
-      
-      toast.error("Severe technical issues detected. Session will be ended with automatic refund.")
-      
-      setTimeout(() => {
-        leaveCall('technical_issues')
-      }, 5000)
-      
-      return true
-    }
-    
-    return false
-  }, [callState])
-
-  // Session access check
-  const checkSessionAccess = useCallback(async (): Promise<boolean> => {
-    try {
-      setIsLoading(true)
-      
-      const response = await fetch(`/api/sessions/${sessionId}/join`, {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-      })
 
       const data = await response.json()
-      
-      if (!response.ok) {
-        if (response.status === 400 && data.waitingMinutes) {
-          setSessionAccessData(data)
-          setShowWaitingRoom(true)
-          setIsLoading(false)
-          return false
-        } else {
-          throw new Error(data.error || "Failed to access session")
-        }
+      setSessionData(data)
+
+      // Calculate time remaining for session
+      if (data.sessionDetails.scheduledDate && data.sessionDetails.durationMinutes) {
+        const scheduledStart = new Date(data.sessionDetails.scheduledDate)
+        const sessionEnd = new Date(scheduledStart.getTime() + data.sessionDetails.durationMinutes * 60 * 1000)
+        endTimeRef.current = sessionEnd
+        
+        const now = new Date()
+        const remaining = Math.max(0, Math.floor((sessionEnd.getTime() - now.getTime()) / 1000))
+        setTimeRemaining(remaining)
       }
 
-      setSessionAccessData(data)
-      setShowWaitingRoom(false)
-      return true
-    } catch (error) {
-      const safeError = toSafeError(error)
-      VideoCallLogger.error("Session access check failed", error)
-      setError(safeError.message || "Failed to check session access")
-      setIsLoading(false)
-      return false
+      // Generate Agora token
+      const tokenResponse = await fetch('/api/agora/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          channel: data.channel,
+          role: data.userRole
+        })
+      })
+
+      if (!tokenResponse.ok) {
+        throw new Error('Failed to generate video token')
+      }
+
+      const tokenData = await tokenResponse.json()
+      setAgoraToken(tokenData.token)
+
+    } catch (err: any) {
+      console.error('[VIDEO_CALL] Error loading session:', err)
+      setError(err.message || 'Failed to load session data')
+    } finally {
+      setLoading(false)
     }
   }, [sessionId])
 
-  // Cleanup function
-  const cleanupVideoCall = useCallback(async () => {
-    if (durationIntervalRef.current) {
-      clearInterval(durationIntervalRef.current)
-      durationIntervalRef.current = null
+  // Handle joining the video call
+  const handleJoinCall = useCallback(async () => {
+    if (!sessionData || !agoraToken) {
+      setError('Session data or token not available')
+      return
     }
 
-    if (agoraClient.localVideoTrackRef.current) {
-      agoraClient.localVideoTrackRef.current.close()
-      agoraClient.localVideoTrackRef.current = null
-    }
-    if (agoraClient.localAudioTrackRef.current) {
-      agoraClient.localAudioTrackRef.current.close()
-      agoraClient.localAudioTrackRef.current = null
-    }
-    if (agoraClient.screenTrackRef.current) {
-      agoraClient.screenTrackRef.current.close()
-      agoraClient.screenTrackRef.current = null
-    }
-
-    if (agoraClient.clientRef.current) {
-      await agoraClient.clientRef.current.leave()
-      agoraClient.clientRef.current = null
-    }
-
-    setCallState((prev) => ({ ...prev, isConnected: false }))
-  }, [agoraClient])
-
-  // Leave call without completing session
-  const leaveCallOnly = useCallback(async () => {
     try {
-      VideoCallLogger.log("User leaving call (session remains ongoing)")
-      await trackSessionLeave()
-      await cleanupVideoCall()
-      handleCallEnd()
-    } catch (error) {
-      VideoCallLogger.error("Error leaving call", error)
-      handleCallEnd()
-    }
-  }, [handleCallEnd, trackSessionLeave, cleanupVideoCall])
-
-  // Complete session and leave
-  const leaveCall = useCallback(async (endType: 'technical_issues' = 'technical_issues') => {
-    try {
-      VideoCallLogger.log(`Completing session with endType: ${endType}`)
-      
-      await trackSessionLeave()
-      
-      if (endType === 'technical_issues') {
-        // Complete session for technical issues
-        const response = await fetch(`/api/sessions/${sessionId}/complete`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ endType })
-        })
-
-        if (response.ok) {
-          toast.success("Session ended due to technical issues. Refund processed.")
-        }
-      }
-
-      await cleanupVideoCall()
-      handleCallEnd()
-    } catch (error) {
-      VideoCallLogger.error("Error in leaveCall", error)
-      handleCallEnd()
-    }
-  }, [sessionId, trackSessionLeave, cleanupVideoCall, handleCallEnd])
-
-  // Handle rating submission
-  const handleRatingSubmit = useCallback(async (rating: number, reviewText?: string) => {
-    setIsSubmittingRating(true)
-    VideoCallLogger.debug('Submitting mentor rating', { sessionId, rating, hasReviewText: !!reviewText })
-    
-    try {
-      const requestBody = {
-        sessionId: parseInt(sessionId),
-        rating,
-        reviewText: reviewText || ""
-      }
-
-      const response = await fetch('/api/reviews', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody)
+      // Record join in database
+      const joinResponse = await fetch(`/api/sessions/${sessionId}/join`, {
+        method: 'POST'
       })
 
-      const responseData = await response.json()
+      if (!joinResponse.ok) {
+        const errorData = await joinResponse.json()
+        if (errorData.code === 'ALREADY_CONNECTED') {
+          setError('You are already connected from another device/browser. This is a 1-on-1 session.')
+          return
+        }
+        throw new Error(errorData.error || 'Failed to join session')
+      }
+
+      // Join Agora channel
+      await joinAgora({
+        appId: process.env.NEXT_PUBLIC_AGORA_APP_ID!,
+        channel: sessionData.channel,
+        token: agoraToken,
+        uid: Date.now() // Generate unique UID
+      })
+
+      setCallStarted(true)
+      toast.success('Connected to video call')
+
+    } catch (err: any) {
+      console.error('[VIDEO_CALL] Error joining call:', err)
+      setError(err.message || 'Failed to join video call')
+    }
+  }, [sessionData, agoraToken, sessionId, joinAgora])
+
+  // Handle leaving the video call
+  const handleLeaveCall = useCallback(async () => {
+    try {
+      // Leave Agora channel
+      await leaveAgora()
+
+      // Record leave in database
+      await fetch(`/api/sessions/${sessionId}/leave`, {
+        method: 'POST'
+      })
+
+      setCallStarted(false)
+      toast.info('Left video call')
+
+    } catch (err: any) {
+      console.error('[VIDEO_CALL] Error leaving call:', err)
+      toast.error('Error leaving call')
+    }
+  }, [leaveAgora, sessionId])
+
+  // Handle session completion
+  const handleSessionComplete = useCallback(() => {
+    setSessionCompleted(true)
+    setCallEnded(true)
+    leaveAgora()
+    
+    if (sessionData?.userRole === 'learner') {
+      setShowRatingModal(true)
+    }
+  }, [leaveAgora, sessionData])
+
+  // Handle force disconnect
+  const handleForceDisconnect = useCallback((reason: string) => {
+    forceDisconnectRef.current = true
+    setCallEnded(true)
+    setError(reason)
+    leaveAgora()
+    toast.error(reason)
+  }, [leaveAgora])
+
+  // Handle manual session end
+  const handleEndSession = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/sessions/${sessionId}/complete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ endType: 'completed' })
+      })
 
       if (!response.ok) {
-        throw new Error(responseData.error || responseData.details || 'Failed to submit mentor rating')
+        throw new Error('Failed to end session')
       }
 
-      toast.success('Thank you for rating your mentor!')
-      setShowRatingModal(false)
-      await leaveCallOnly()
-      
-    } catch (error) {
-      VideoCallLogger.error('Error submitting rating', error)
-      toast.error(toSafeError(error).message || 'Failed to submit rating')
-    } finally {
-      setIsSubmittingRating(false)
+      handleSessionComplete()
+      toast.success('Session completed successfully')
+
+    } catch (err: any) {
+      console.error('[VIDEO_CALL] Error ending session:', err)
+      toast.error(err.message || 'Failed to end session')
     }
-  }, [sessionId, leaveCallOnly])
+  }, [sessionId, handleSessionComplete])
 
-  // Initialize call
-  const initializeCall = useCallback(async () => {
-    VideoCallLogger.log(`initializeCall called for session ${sessionId}`)
-    try {
-      setIsLoading(true)
-
-      const canAccess = await checkSessionAccess()
-      if (!canAccess) return
-
-      await agoraClient.createClient()
-      await mediaControls.createMediaTracks()
-
-      setIsLoading(false)
-      setCallState((prev) => ({ ...prev, isConnected: true }))
-      toast.success("Connected to video call")
-    } catch (error) {
-      const safeError = toSafeError(error)
-      VideoCallLogger.error("Failed to initialize Agora call", error)
-      if (safeError.message !== "Rate limited") {
-        toast.error(safeError.message || "Failed to connect to video call")
-      }
-      setError(safeError.message || "Failed to connect to video call")
-      setIsLoading(false)
-    }
-  }, [sessionId, checkSessionAccess, agoraClient, mediaControls])
-
-  // Format duration utility
-  const formatDuration = (seconds: number) => {
-    const mins = Math.floor(seconds / 60)
-    const secs = seconds % 60
-    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`
-  }
-
-  // Effects
+  // Timer for session duration
   useEffect(() => {
-    if (callState.isConnected) {
-      const interval = setInterval(checkTechnicalIssues, 5000)
-      return () => clearInterval(interval)
-    }
-  }, [checkTechnicalIssues, callState.isConnected])
-
-  useEffect(() => {
-    if (callState.isConnected && callStartTimeRef.current && !durationIntervalRef.current) {
-      durationIntervalRef.current = setInterval(() => {
-        if (callStartTimeRef.current) {
-          const now = new Date()
-          const duration = Math.floor((now.getTime() - callStartTimeRef.current.getTime()) / 1000)
-          setCallState((prev) => ({ ...prev, callDuration: duration }))
-        }
+    if (callStarted && timeRemaining > 0) {
+      timerRef.current = setInterval(() => {
+        setTimeRemaining(prev => {
+          if (prev <= 1) {
+            handleSessionComplete()
+            return 0
+          }
+          return prev - 1
+        })
       }, 1000)
     }
 
     return () => {
-      if (durationIntervalRef.current) {
-        clearInterval(durationIntervalRef.current)
-        durationIntervalRef.current = null
+      if (timerRef.current) {
+        clearInterval(timerRef.current)
       }
     }
-  }, [callState.isConnected])
+  }, [callStarted, timeRemaining, handleSessionComplete])
 
-  // Initialize call on mount - only once!
+  // Load session data on mount
   useEffect(() => {
-    let isInitialized = false
-    
-    const initCall = async () => {
-      if (!isInitialized) {
-        isInitialized = true
-        await initializeCall()
-      }
-    }
-    
-    initCall()
+    loadSessionData()
+  }, [loadSessionData])
 
-    return () => {
-      if (agoraClient.clientRef.current) {
-        try {
-          cleanupVideoCall()
-        } catch (error) {
-          VideoCallLogger.error('Cleanup error', error)
-        }
-      }
+  // Format time remaining
+  const formatTime = (seconds: number): string => {
+    const hours = Math.floor(seconds / 3600)
+    const minutes = Math.floor((seconds % 3600) / 60)
+    const secs = seconds % 60
+    
+    if (hours > 0) {
+      return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
     }
-  }, [sessionId])
+    return `${minutes}:${secs.toString().padStart(2, '0')}`
+  }
 
-  // Error state
-  if (error) {
+  if (loading) {
     return (
-      <Card className="w-full max-w-4xl mx-auto">
-        <CardContent className="p-8 text-center">
-          <div className="text-red-500 mb-4">
-            <VideoOff className="h-12 w-12 mx-auto mb-2" />
-            <h3 className="text-lg font-semibold">Connection Error</h3>
-          </div>
-          <p className="text-gray-600 mb-4">{error}</p>
-          <Button onClick={() => window.location.reload()}>Try Again</Button>
-        </CardContent>
-      </Card>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <Card className="w-full max-w-md p-6 text-center">
+          <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading session...</p>
+        </Card>
+      </div>
     )
   }
 
-  // Waiting room state
-  if (showWaitingRoom && sessionAccessData && sessionAccessData.sessionDetails) {
-    const sessionData = {
-      scheduledDate: new Date(sessionAccessData.sessionDetails.scheduledDate),
-      durationMinutes: sessionAccessData.sessionDetails.durationMinutes,
-      status: sessionAccessData.sessionDetails.status,
-      otherParticipant: {
-        firstName: "Other",
-        lastName: "Participant",
-        profilePictureUrl: undefined,
-        title: userRole === "learner" ? "Mentor" : "Learner",
-      },
-    }
+  if (error && !callStarted) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <Card className="w-full max-w-md p-6 text-center">
+          <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Unable to Join Session</h3>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <Button onClick={loadSessionData} className="w-full">
+            Try Again
+          </Button>
+        </Card>
+      </div>
+    )
+  }
 
+  if (!sessionData) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <Card className="w-full max-w-md p-6 text-center">
+          <AlertTriangle className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Session Not Available</h3>
+          <p className="text-gray-600">This session is not accessible.</p>
+        </Card>
+      </div>
+    )
+  }
+
+  // Show waiting room if not within meeting time
+  if (!sessionData.isWithinMeetingTime && !callStarted) {
     return (
       <WaitingRoom
-        sessionId={sessionId}
-        userRole={userRole}
         sessionData={sessionData}
+        onJoin={handleJoinCall}
+        disabled={!agoraToken}
       />
     )
   }
 
-  return (
-    <div className="w-full h-full flex bg-gray-900">
-      {/* Main Video Area */}
-      <div className={`${isChatOpen ? 'flex-1' : 'w-full'} flex flex-col`}>
-        {/* Connection Status */}
-        <ConnectionStatus callState={callState} formatDuration={formatDuration} />
-        
-        {/* Chat Toggle */}
-        <div className="flex items-center justify-end p-2 bg-gray-800">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setIsChatOpen(!isChatOpen)}
-            className={`text-white hover:bg-gray-700 ${isChatOpen ? 'bg-gray-700' : ''}`}
+  if (callEnded) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <Card className="w-full max-w-md p-6 text-center">
+          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Phone className="w-8 h-8 text-green-600" />
+          </div>
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">
+            {sessionCompleted ? 'Session Completed' : 'Call Ended'}
+          </h3>
+          <p className="text-gray-600 mb-4">
+            {forceDisconnectRef.current 
+              ? 'The session was ended by the system.' 
+              : 'Thank you for your session!'}
+          </p>
+          <Button 
+            onClick={() => window.close()} 
+            className="w-full"
           >
-            <MessageCircle className="h-4 w-4 mr-2" />
-            Chat
+            Close Window
           </Button>
+        </Card>
+
+        {showRatingModal && (
+          <SessionRatingModal
+            sessionId={parseInt(sessionId)}
+            onClose={() => setShowRatingModal(false)}
+          />
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div className="h-screen flex flex-col bg-gray-900">
+      {/* Header */}
+      <div className="bg-white border-b border-gray-200 p-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <Badge variant={callStarted ? "default" : "secondary"}>
+              {callStarted ? 'Connected' : 'Ready to Join'}
+            </Badge>
+            <div className="flex items-center space-x-2 text-sm text-gray-600">
+              <Users className="w-4 h-4" />
+              <span>{participantCount}/2 participants</span>
+            </div>
+          </div>
+          
+          <div className="flex items-center space-x-4">
+            {callStarted && (
+              <div className="flex items-center space-x-2 text-sm text-gray-600">
+                <Clock className="w-4 h-4" />
+                <span>{formatTime(timeRemaining)}</span>
+              </div>
+            )}
+            
+            <div className="flex items-center space-x-2">
+              {sseConnected ? (
+                <Wifi className="w-4 h-4 text-green-500" />
+              ) : (
+                <WifiOff className="w-4 h-4 text-red-500" />
+              )}
+              <ConnectionStatus 
+                connectionState={connectionState}
+                networkQuality={networkQuality}
+              />
+            </div>
+          </div>
         </div>
-
-        {/* Video Display */}
-        <VideoDisplay
-          callState={callState}
-          localVideoRef={localVideoRef}
-          remoteVideoRef={remoteVideoRef}
-          isLoading={isLoading}
-          onReconnect={() => window.location.reload()}
-          onLeaveCall={leaveCallOnly}
-        />
-
-        {/* Video Controls */}
-        <VideoControls
-          callState={callState}
-          onToggleVideo={mediaControls.toggleVideo}
-          onToggleAudio={mediaControls.toggleAudio}
-          onToggleScreenShare={mediaControls.toggleScreenShare}
-          onLeaveCall={leaveCallOnly}
-        />
       </div>
 
-      {/* Chat Panel */}
-      {isChatOpen && (
-        <div className="w-80 h-full">
-          <ChatPanel
-            sessionId={sessionId}
-            userRole={userRole}
-            isOpen={isChatOpen}
-            onToggle={() => setIsChatOpen(false)}
-            participantCount={callState.participantCount + 1}
+      {/* Video Display */}
+      <div className="flex-1 relative">
+        {callStarted ? (
+          <VideoDisplay
+            localVideoTrack={localVideoTrack}
+            remoteUsers={remoteUsers}
+            isVideoEnabled={isVideoEnabled}
+            userName={sessionData.userName}
+          />
+        ) : (
+          <div className="h-full flex items-center justify-center">
+            <Card className="p-8 text-center">
+              <div className="w-24 h-24 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                <Phone className="w-12 h-12 text-blue-600" />
+              </div>
+              <h3 className="text-xl font-semibold mb-2">Ready to Start Session</h3>
+              <p className="text-gray-600 mb-6">
+                Click the button below to join your video session with your{' '}
+                {sessionData.userRole === 'learner' ? 'mentor' : 'learner'}.
+              </p>
+              <Button
+                onClick={handleJoinCall}
+                disabled={!agoraToken || loading}
+                size="lg"
+                className="px-8"
+              >
+                {loading ? 'Connecting...' : 'Join Video Call'}
+              </Button>
+            </Card>
+          </div>
+        )}
+      </div>
+
+      {/* Controls */}
+      {callStarted && (
+        <div className="bg-white border-t border-gray-200 p-4">
+          <VideoControls
+            isVideoEnabled={isVideoEnabled}
+            isAudioEnabled={isAudioEnabled}
+            onToggleVideo={toggleVideo}
+            onToggleAudio={toggleAudio}
+            onEndCall={handleLeaveCall}
+            onCompleteSession={handleEndSession}
+            userRole={sessionData.userRole}
           />
         </div>
       )}
 
-      {/* Rating Modal */}
-      {userRole === 'learner' && (
-        <SessionRatingModal
-          isOpen={showRatingModal}
-          onClose={() => {
-            if (!isSubmittingRating) {
-              setShowRatingModal(false)
-              leaveCallOnly()
-            }
-          }}
-          onSubmit={handleRatingSubmit}
-          sessionId={sessionId}
-          mentorName={sessionAccessData?.otherParticipant?.name || "your mentor"}
-          isSubmitting={isSubmittingRating}
-        />
+      {/* Error Display */}
+      {(error || agoraError) && (
+        <div className="absolute top-20 right-4 bg-red-50 border border-red-200 rounded-lg p-3 max-w-sm">
+          <div className="flex items-start space-x-2">
+            <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+            <div>
+              <h4 className="text-sm font-medium text-red-800">Connection Issue</h4>
+              <p className="text-sm text-red-700">{error || agoraError}</p>
+              {agoraError && (
+                <Button
+                  onClick={reconnectAgora}
+                  size="sm"
+                  variant="outline"
+                  className="mt-2"
+                >
+                  Reconnect
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

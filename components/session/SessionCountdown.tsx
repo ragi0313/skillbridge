@@ -27,6 +27,11 @@ export function SessionCountdown({
   const timeToJoin = useRealTimeTimer(joinWindowStart)
   
   const [canJoin, setCanJoin] = useState(false)
+  const [isClient, setIsClient] = useState(false)
+
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
 
   useEffect(() => {
     const now = new Date()
@@ -40,6 +45,21 @@ export function SessionCountdown({
       }
     }
   }, [timeToJoin, status, joinWindowStart, canJoin, onCanJoin])
+
+  // Show loading state during SSR to prevent hydration mismatch
+  if (!isClient) {
+    return (
+      <div className={`flex flex-col items-center space-y-2 p-4 bg-gray-800/50 border border-gray-600/30 rounded-lg ${className}`}>
+        <Clock className="h-6 w-6 text-gray-400" />
+        <div className="text-center">
+          <div className="text-lg font-mono font-semibold text-gray-300">
+            Loading...
+          </div>
+          <div className="text-sm text-gray-400">calculating time</div>
+        </div>
+      </div>
+    )
+  }
 
   if (status === "ongoing") {
     return (

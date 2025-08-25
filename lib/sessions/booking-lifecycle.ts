@@ -1,20 +1,9 @@
-// Comprehensive booking lifecycle management with refund policy implementation
-
 import { db } from "@/db"
-import { bookingSessions, learners, mentors, creditTransactions, notifications, mentorPayouts } from "@/db/schema"
-import { eq, and, or, lt, gte, count } from "drizzle-orm"
+import { bookingSessions, creditTransactions, mentorPayouts } from "@/db/schema"
+import { eq } from "drizzle-orm"
 
 export class BookingLifecycleService {
   private static instance: BookingLifecycleService
-  
-  // Configuration constants
-  private static readonly EXPIRY_HOURS = 48 
-  private static readonly MIN_BOOKING_BUFFER_MINUTES = 30 
-  private static readonly MAX_DAILY_REQUESTS_PER_LEARNER = 10 
-  private static readonly FULL_REFUND_HOURS = 24 
-  private static readonly PARTIAL_REFUND_HOURS = 2 
-  private static readonly NO_SHOW_GRACE_MINUTES = 15 
-  private static readonly PLATFORM_FEE_PERCENTAGE = 20 
 
   static getInstance(): BookingLifecycleService {
     if (!BookingLifecycleService.instance) {
@@ -23,1032 +12,123 @@ export class BookingLifecycleService {
     return BookingLifecycleService.instance
   }
 
-
-  calculateExpiryTime(sessionStartTime: Date): Date {
-    const now = new Date()
-    const standardExpiry = new Date(now.getTime() + BookingLifecycleService.EXPIRY_HOURS * 60 * 60 * 1000)
-    
-    // If session starts before standard expiry, set expiry to 2 hours before session
-    const sessionBufferTime = new Date(sessionStartTime.getTime() - 2 * 60 * 60 * 1000)
-    
-    return new Date(Math.min(standardExpiry.getTime(), sessionBufferTime.getTime()))
-  }
-
-  private calculateRefundPolicy(
-    scheduledDateTime: Date,
-    totalCostCredits: number,
-    cancelledBy: 'learner' | 'mentor' | 'system',
-    cancellationTime: Date = new Date()
-  ): {
-    refundAmount: number
-    mentorPayout: number
-    refundType: 'full' | 'partial' | 'none'
-    reason: string
-  } {
-    const hoursUntilSession = (scheduledDateTime.getTime() - cancellationTime.getTime()) / (1000 * 60 * 60)
-    const mentorEarnings = Math.floor(totalCostCredits * (100 - BookingLifecycleService.PLATFORM_FEE_PERCENTAGE) / 100)
-
-    if (cancelledBy === 'system') {
-      return {
-        refundAmount: totalCostCredits,
-        mentorPayout: 0,
-        refundType: 'full',
-        reason: 'System auto-cancellation'
-      }
-    }
-
-    if (cancelledBy === 'mentor') {
-      if (hoursUntilSession >= BookingLifecycleService.FULL_REFUND_HOURS) {
-        // Mentor cancels 24+ hours before
-        return {
-          refundAmount: totalCostCredits,
-          mentorPayout: 0,
-          refundType: 'full',
-          reason: 'Mentor cancellation with sufficient notice'
-        }
-      } else {
-        // Mentor cancels < 24 hours before (penalty + bonus to learner)
-        const bonusCredits = Math.floor(totalCostCredits * 0.1) // 10% bonus
-        return {
-          refundAmount: totalCostCredits + bonusCredits,
-          mentorPayout: 0,
-          refundType: 'full',
-          reason: 'Mentor short-notice cancellation with penalty bonus'
-        }
-      }
-    }
-
-    if (cancelledBy === 'learner') {
-      if (hoursUntilSession >= BookingLifecycleService.FULL_REFUND_HOURS) {
-        // Learner cancels 24+ hours before - full refund
-        return {
-          refundAmount: totalCostCredits,
-          mentorPayout: 0,
-          refundType: 'full',
-          reason: 'Learner cancellation with sufficient notice'
-        }
-      } else if (hoursUntilSession >= BookingLifecycleService.PARTIAL_REFUND_HOURS) {
-        // Learner cancels 2-24 hours before - partial refund
-        const refundAmount = Math.floor(totalCostCredits * 0.5)
-        const mentorPayout = Math.floor((totalCostCredits - refundAmount) * (100 - BookingLifecycleService.PLATFORM_FEE_PERCENTAGE) / 100)
-        return {
-          refundAmount,
-          mentorPayout,
-          refundType: 'partial',
-          reason: 'Learner partial refund policy (2-24 hours notice)'
-        }
-      } else {
-        // Learner cancels < 2 hours before or no-show - no refund
-        return {
-          refundAmount: 0,
-          mentorPayout: mentorEarnings,
-          refundType: 'none',
-          reason: 'Learner late cancellation or no-show'
-        }
-      }
-    }
-
-    // Default fallback
-    return {
-      refundAmount: 0,
-      mentorPayout: 0,
-      refundType: 'none',
-      reason: 'Unknown cancellation scenario'
-    }
-  }
-
-  /**
-   * Validate booking request before creation
-   */
-  async validateBookingRequest(params: {
-    learnerId: number
-    mentorId: number
-    mentorSkillId: number
-    scheduledDate: Date
-    durationMinutes: number
-    totalCostCredits: number
-  }): Promise<{ valid: boolean; error?: string }> {
-    const { learnerId, mentorId, mentorSkillId, scheduledDate, durationMinutes, totalCostCredits } = params
-
+  async endVideoSession(
+    sessionId: number,
+    endType: string
+  ): Promise<{ success: boolean; error?: string }> {
     try {
-      // 1. Check if booking is too close to start time
       const now = new Date()
-      const minBookingTime = new Date(now.getTime() + BookingLifecycleService.MIN_BOOKING_BUFFER_MINUTES * 60 * 1000)
-      if (scheduledDate < minBookingTime) {
-        return { valid: false, error: `Bookings must be made at least ${BookingLifecycleService.MIN_BOOKING_BUFFER_MINUTES} minutes in advance` }
-      }
-
-      // 2. Check if booking is in the past
-      if (scheduledDate < now) {
-        return { valid: false, error: "Cannot book sessions in the past" }
-      }
-
-      // 3. Check learner's credit balance
-      const [learner] = await db
-        .select({ creditsBalance: learners.creditsBalance })
-        .from(learners)
-        .where(eq(learners.id, learnerId))
-
-      if (!learner || learner.creditsBalance < totalCostCredits) {
-        return { valid: false, error: "Insufficient credits" }
-      }
-
-      // 4. Rate limiting - check daily request count
-      const todayStart = new Date()
-      todayStart.setHours(0, 0, 0, 0)
-      const todayEnd = new Date()
-      todayEnd.setHours(23, 59, 59, 999)
-
-      const [requestCount] = await db
-        .select({ count: count() })
-        .from(bookingSessions)
-        .where(
-          and(
-            eq(bookingSessions.learnerId, learnerId),
-            gte(bookingSessions.createdAt, todayStart),
-            lt(bookingSessions.createdAt, todayEnd)
-          )
-        )
-
-      if (requestCount.count >= BookingLifecycleService.MAX_DAILY_REQUESTS_PER_LEARNER) {
-        return { valid: false, error: "Daily booking request limit exceeded" }
-      }
-
-      return { valid: true }
-    } catch (error) {
-      console.error("Error validating booking request:", error)
-      return { valid: false, error: "Failed to validate booking request" }
-    }
-  }
-
-  /**
-   * Process expired booking requests (auto-cancellation)
-   */
-  async processExpiredBookings(): Promise<{ processed: number; errors: string[] }> {
-    const now = new Date()
-    const errors: string[] = []
-    let processed = 0
-
-    try {
-      // Find all expired pending bookings
-      const expiredBookings = await db
+      
+      // Get session details first
+      const [session] = await db
         .select({
           id: bookingSessions.id,
+          status: bookingSessions.status,
+          totalCostCredits: bookingSessions.totalCostCredits,
           learnerId: bookingSessions.learnerId,
           mentorId: bookingSessions.mentorId,
-          totalCostCredits: bookingSessions.totalCostCredits,
-          escrowCredits: bookingSessions.escrowCredits,
+          agoraChannelName: bookingSessions.agoraChannelName,
         })
         .from(bookingSessions)
-        .where(
-          and(
-            eq(bookingSessions.status, "pending"),
-            lt(bookingSessions.expiresAt, now)
-          )
-        )
+        .where(eq(bookingSessions.id, sessionId))
 
-      for (const booking of expiredBookings) {
-        try {
-          await db.transaction(async (tx) => {
-            // Update booking status to mentor_no_response if expired without mentor response
-            await tx
-              .update(bookingSessions)
-              .set({
-                status: "mentor_no_response",
-                cancelledAt: now,
-                cancelledBy: "system",
-                cancellationReason: "Mentor did not respond to request within the allowed time",
-                refundAmount: booking.escrowCredits,
-                updatedAt: now,
-              })
-              .where(eq(bookingSessions.id, booking.id))
-
-            // Refund credits to learner
-            const [learner] = await tx
-              .select({ creditsBalance: learners.creditsBalance, userId: learners.userId })
-              .from(learners)
-              .where(eq(learners.id, booking.learnerId))
-
-            if (learner) {
-              const newBalance = learner.creditsBalance + booking.escrowCredits
-              await tx
-                .update(learners)
-                .set({ 
-                  creditsBalance: newBalance,
-                  updatedAt: now 
-                })
-                .where(eq(learners.id, booking.learnerId))
-
-              // Record refund transaction
-              await tx.insert(creditTransactions).values({
-                userId: learner.userId,
-                type: "session_refund",
-                direction: "credit",
-                amount: booking.escrowCredits,
-                balanceBefore: learner.creditsBalance,
-                balanceAfter: newBalance,
-                relatedSessionId: booking.id,
-                description: "Refund for expired booking request",
-                metadata: { reason: "expired", systemProcessed: true },
-                createdAt: now,
-              })
-
-              // Notify learner
-              await tx.insert(notifications).values({
-                userId: learner.userId,
-                type: "booking_expired",
-                title: "Booking Request Expired",
-                message: `Your booking request expired without a response from the mentor. ${booking.escrowCredits} credits have been refunded to your account.`,
-                relatedEntityType: "session",
-                relatedEntityId: booking.id,
-                createdAt: now,
-              })
-            }
-
-            // Notify mentor about missed opportunity
-            const [mentor] = await tx
-              .select({ userId: mentors.userId })
-              .from(mentors)
-              .where(eq(mentors.id, booking.mentorId))
-
-            if (mentor) {
-              await tx.insert(notifications).values({
-                userId: mentor.userId,
-                type: "booking_expired",
-                title: "Booking Request Expired",
-                message: "A booking request expired because you didn't respond in time. Please check your notifications regularly to avoid missing opportunities.",
-                relatedEntityType: "session",
-                relatedEntityId: booking.id,
-                createdAt: now,
-              })
-            }
-          })
-
-          processed++
-        } catch (error) {
-          console.error(`Error processing expired booking ${booking.id}:`, error)
-          errors.push(`Booking ${booking.id}: ${error instanceof Error ? error.message : 'Unknown error'}`)
-        }
+      if (!session) {
+        return { success: false, error: "Session not found" }
       }
 
-      return { processed, errors }
-    } catch (error) {
-      console.error("Error in processExpiredBookings:", error)
-      return { processed, errors: [error instanceof Error ? error.message : 'Unknown error'] }
-    }
-  }
-
-  /**
-   * Check if a session can be cancelled based on 24-hour rule
-   */
-  private canCancelSession(scheduledDate: Date, userRole: 'learner' | 'mentor'): { canCancel: boolean; reason?: string } {
-    const now = new Date()
-    const hoursUntilSession = (scheduledDate.getTime() - now.getTime()) / (1000 * 60 * 60)
-    
-    // 24-hour restriction applies to both learners and mentors
-    if (hoursUntilSession < 24) {
-      return {
-        canCancel: false,
-        reason: `Cannot cancel sessions within 24 hours of start time. Session is scheduled for ${scheduledDate.toLocaleString()}.`
+      // Determine refund and payment logic based on end type
+      let refundAmount = 0
+      let mentorPayment = 0
+      
+      switch (endType) {
+        case 'completed':
+          // Normal completion - mentor gets paid, no refund
+          mentorPayment = Math.floor(session.totalCostCredits * 0.8) // 80% to mentor
+          break
+          
+        case 'technical_issues':
+          // Technical issues - full refund to learner
+          refundAmount = session.totalCostCredits
+          break
+          
+        case 'learner_no_show':
+          // Learner no show - mentor gets paid, no refund
+          mentorPayment = session.totalCostCredits
+          break
+          
+        case 'mentor_no_show':
+          // Mentor no show - full refund to learner
+          refundAmount = session.totalCostCredits
+          break
+          
+        case 'both_no_show':
+          // Both no show - full refund to learner
+          refundAmount = session.totalCostCredits
+          break
       }
-    }
-    
-    return { canCancel: true }
-  }
 
-  /**
-   * Cancel a booking with comprehensive refund policy and 24-hour restriction
-   */
-  async cancelBooking(
-    bookingId: number,
-    userId: number,
-    userRole: 'learner' | 'mentor',
-    reason?: string
-  ): Promise<{ 
-    success: boolean; 
-    error?: string; 
-    refundAmount?: number; 
-    refundType?: 'full' | 'partial' | 'none';
-    mentorPayout?: number;
-  }> {
-    try {
-      const result = await db.transaction(async (tx) => {
-        // Get booking details
-        const [booking] = await tx
-          .select({
-            id: bookingSessions.id,
-            learnerId: bookingSessions.learnerId,
-            mentorId: bookingSessions.mentorId,
-            status: bookingSessions.status,
-            totalCostCredits: bookingSessions.totalCostCredits,
-            escrowCredits: bookingSessions.escrowCredits,
-            scheduledDate: bookingSessions.scheduledDate,
-            durationMinutes: bookingSessions.durationMinutes,
-          })
-          .from(bookingSessions)
-          .where(eq(bookingSessions.id, bookingId))
-
-        if (!booking) {
-          throw new Error("Booking not found")
-        }
-
-        // Verify user authorization
-        const [learner] = await tx.select({ userId: learners.userId }).from(learners).where(eq(learners.id, booking.learnerId))
-        const [mentor] = await tx.select({ userId: mentors.userId }).from(mentors).where(eq(mentors.id, booking.mentorId))
-
-        const isAuthorized = (userRole === 'learner' && learner?.userId === userId) || 
-                           (userRole === 'mentor' && mentor?.userId === userId)
-
-        if (!isAuthorized) {
-          throw new Error("Unauthorized to cancel this booking")
-        }
-
-        // Check if booking can be cancelled - Fixed null handling
-        const currentStatus = booking.status || "unknown"
-        if (!['pending', 'confirmed'].includes(currentStatus)) {
-          throw new Error(`Cannot cancel booking with status: ${currentStatus}`)
-        }
-
-        const now = new Date()
-        const scheduledDateTime = booking.scheduledDate
-
-        // Check 24-hour cancellation restriction
-        const cancellationCheck = this.canCancelSession(scheduledDateTime, userRole)
-        if (!cancellationCheck.canCancel) {
-          throw new Error(cancellationCheck.reason)
-        }
-
-        // Calculate refund policy
-        const refundPolicy = this.calculateRefundPolicy(
-          scheduledDateTime,
-          booking.totalCostCredits,
-          userRole,
-          now
-        )
-
-        // Update booking status
+      // Update session status and financial data
+      await db.transaction(async (tx) => {
+        // Update session
         await tx
           .update(bookingSessions)
           .set({
-            status: "cancelled",
-            cancelledBy: userRole,
-            cancelledAt: now,
-            cancellationReason: reason || `Cancelled by ${userRole}`,
-            refundAmount: refundPolicy.refundAmount,
+            status: endType,
+            agoraCallEndedAt: now,
+            refundAmount: refundAmount > 0 ? refundAmount : null,
             updatedAt: now,
           })
-          .where(eq(bookingSessions.id, bookingId))
+          .where(eq(bookingSessions.id, sessionId))
 
-        // Process refund if applicable
-        if (refundPolicy.refundAmount > 0 && learner) {
-          const [learnerData] = await tx
-            .select({ creditsBalance: learners.creditsBalance })
-            .from(learners)
-            .where(eq(learners.id, booking.learnerId))
-
-          if (learnerData) {
-            const newBalance = learnerData.creditsBalance + refundPolicy.refundAmount
-            await tx
-              .update(learners)
-              .set({ 
-                creditsBalance: newBalance,
-                updatedAt: now 
-              })
-              .where(eq(learners.id, booking.learnerId))
-
-            // Record refund transaction
-            await tx.insert(creditTransactions).values({
-              userId: learner.userId,
-              type: "session_refund",
-              direction: "credit",
-              amount: refundPolicy.refundAmount,
-              balanceBefore: learnerData.creditsBalance,
-              balanceAfter: newBalance,
-              relatedSessionId: bookingId,
-              description: `${refundPolicy.refundType} refund: ${refundPolicy.reason}`,
-              metadata: { 
-                reason: `${userRole}_cancelled`, 
-                cancellationReason: reason,
-                hoursUntilSession: Math.round(((scheduledDateTime.getTime() - now.getTime()) / (1000 * 60 * 60)) * 100) / 100
-              },
-              createdAt: now,
-            })
-          }
-        }
-
-        // Process mentor payout if applicable
-        if (refundPolicy.mentorPayout > 0 && mentor) {
-          const [mentorData] = await tx
-            .select({ creditsBalance: mentors.creditsBalance })
-            .from(mentors)
-            .where(eq(mentors.id, booking.mentorId))
-
-          if (mentorData) {
-            // Update mentor balance
-            await tx
-              .update(mentors)
-              .set({ 
-                creditsBalance: mentorData.creditsBalance + refundPolicy.mentorPayout,
-                updatedAt: now 
-              })
-              .where(eq(mentors.id, booking.mentorId))
-
-            // Create payout record
-            await tx.insert(mentorPayouts).values({
-              mentorId: booking.mentorId,
-              sessionId: bookingId,
-              earnedCredits: refundPolicy.mentorPayout,
-              platformFeeCredits: booking.totalCostCredits - refundPolicy.refundAmount - refundPolicy.mentorPayout,
-              feePercentage: BookingLifecycleService.PLATFORM_FEE_PERCENTAGE,
-              status: "released",
-              releasedAt: now,
-              createdAt: now,
-            })
-
-            // Record mentor earning transaction
-            await tx.insert(creditTransactions).values({
-              userId: mentor.userId,
-              type: "mentor_payout",
-              direction: "credit",
-              amount: refundPolicy.mentorPayout,
-              balanceBefore: mentorData.creditsBalance,
-              balanceAfter: mentorData.creditsBalance + refundPolicy.mentorPayout,
-              relatedSessionId: bookingId,
-              description: `Partial payout for cancelled session: ${refundPolicy.reason}`,
-              createdAt: now,
-            })
-          }
-        }
-
-        // Notify the other party
-        const notifyUserId = userRole === 'learner' ? mentor?.userId : learner?.userId
-        if (notifyUserId) {
-          const refundMessage = refundPolicy.refundAmount > 0 
-            ? ` ${refundPolicy.refundAmount} credits have been refunded.`
-            : ''
-          const payoutMessage = refundPolicy.mentorPayout > 0 
-            ? ` You will receive ${refundPolicy.mentorPayout} credits as compensation.`
-            : ''
-
-          await tx.insert(notifications).values({
-            userId: notifyUserId,
-            type: "booking_cancelled",
-            title: "Session Cancelled",
-            message: `Your session has been cancelled by the ${userRole}.${refundMessage}${payoutMessage}`,
-            relatedEntityType: "session",
-            relatedEntityId: bookingId,
+        // Process refund if needed
+        if (refundAmount > 0) {
+          await tx.insert(creditTransactions).values({
+            userId: session.learnerId,
+            type: 'session_refund',
+            direction: 'credit',
+            amount: refundAmount,
+            balanceBefore: 0, // Would need to calculate actual balance
+            balanceAfter: refundAmount, // Would need to calculate actual balance
+            relatedSessionId: sessionId,
+            description: `Refund for session ${sessionId} - ${endType}`,
             createdAt: now,
           })
         }
 
-        // Notify the cancelling user about the outcome
-        await tx.insert(notifications).values({
-          userId: userId,
-          type: "booking_cancelled",
-          title: "Session Cancelled Successfully",
-          message: `Your session has been cancelled. ${refundPolicy.reason}. ${
-            refundPolicy.refundAmount > 0 ? `${refundPolicy.refundAmount} credits refunded.` : 'No refund applicable.'
-          }`,
-          relatedEntityType: "session",
-          relatedEntityId: bookingId,
-          createdAt: now,
-        })
+        // Process mentor payment if needed
+        if (mentorPayment > 0) {
+          const platformFee = session.totalCostCredits - mentorPayment
 
-        return { 
-          success: true, 
-          refundAmount: refundPolicy.refundAmount,
-          refundType: refundPolicy.refundType,
-          mentorPayout: refundPolicy.mentorPayout
+          await tx.insert(mentorPayouts).values({
+            mentorId: session.mentorId,
+            sessionId: sessionId,
+            earnedCredits: mentorPayment,
+            platformFeeCredits: platformFee,
+            feePercentage: 20,
+            status: 'pending',
+            createdAt: now,
+          })
         }
       })
 
-      return result
-    } catch (error) {
-      console.error("Error cancelling booking:", error)
-      return { success: false, error: error instanceof Error ? error.message : "Failed to cancel booking" }
-    }
-  }
-
-  /**
-   * Handle no-show scenarios
-   */
-  async handleNoShow(
-    bookingId: number,
-    noShowParty: 'learner' | 'mentor',
-    reportedBy: number
-  ): Promise<{ success: boolean; error?: string }> {
-    try {
-      const result = await db.transaction(async (tx) => {
-        const [booking] = await tx
-          .select({
-            id: bookingSessions.id,
-            learnerId: bookingSessions.learnerId,
-            mentorId: bookingSessions.mentorId,
-            status: bookingSessions.status,
-            totalCostCredits: bookingSessions.totalCostCredits,
-            scheduledDate: bookingSessions.scheduledDate,
-          })
-          .from(bookingSessions)
-          .where(eq(bookingSessions.id, bookingId))
-
-        // Fixed null handling for status check
-        const currentStatus = booking?.status || "unknown"
-        if (!booking || currentStatus !== 'confirmed') {
-          throw new Error("Booking not found or not in confirmed status")
-        }
-
-        const now = new Date()
-        const scheduledDateTime = booking.scheduledDate
-        const graceEndTime = new Date(scheduledDateTime.getTime() + BookingLifecycleService.NO_SHOW_GRACE_MINUTES * 60 * 1000)
-
-        // Check if we're past the grace period
-        if (now < graceEndTime) {
-          throw new Error(`Grace period not yet expired. Please wait until ${graceEndTime.toLocaleTimeString()}`)
-        }
-
-        const mentorEarnings = Math.floor(booking.totalCostCredits * (100 - BookingLifecycleService.PLATFORM_FEE_PERCENTAGE) / 100)
-
-        if (noShowParty === 'learner') {
-          // Learner no-show: No refund, mentor gets full payout
-          await tx
-            .update(bookingSessions)
-            .set({
-              status: "completed",
-              cancelledAt: now,
-              cancelledBy: "system",
-              cancellationReason: "Learner no-show",
-              refundAmount: 0,
-              updatedAt: now,
-            })
-            .where(eq(bookingSessions.id, bookingId))
-
-          // Pay mentor
-          const [mentorData] = await tx
-            .select({ creditsBalance: mentors.creditsBalance, userId: mentors.userId })
-            .from(mentors)
-            .where(eq(mentors.id, booking.mentorId))
-
-          if (mentorData) {
-            await tx
-              .update(mentors)
-              .set({ 
-                creditsBalance: mentorData.creditsBalance + mentorEarnings,
-                updatedAt: now 
-              })
-              .where(eq(mentors.id, booking.mentorId))
-
-            await tx.insert(mentorPayouts).values({
-              mentorId: booking.mentorId,
-              sessionId: bookingId,
-              earnedCredits: mentorEarnings,
-              platformFeeCredits: booking.totalCostCredits - mentorEarnings,
-              feePercentage: BookingLifecycleService.PLATFORM_FEE_PERCENTAGE,
-              status: "released",
-              releasedAt: now,
-              createdAt: now,
-            })
-
-            // Notify mentor
-            await tx.insert(notifications).values({
-              userId: mentorData.userId,
-              type: "no_show_payout",
-              title: "No-Show Payout Processed",
-              message: `The learner didn't show up for the session. You've received ${mentorEarnings} credits as compensation.`,
-              relatedEntityType: "session",
-              relatedEntityId: bookingId,
-              createdAt: now,
-            })
-          }
-
-        } else {
-          // Mentor no-show: Full refund + bonus to learner
-          const bonusCredits = Math.floor(booking.totalCostCredits * 0.1) // 10% bonus
-          const totalRefund = booking.totalCostCredits + bonusCredits
-
-          await tx
-            .update(bookingSessions)
-            .set({
-              status: "cancelled",
-              cancelledAt: now,
-              cancelledBy: "system",
-              cancellationReason: "Mentor no-show",
-              refundAmount: totalRefund,
-              updatedAt: now,
-            })
-            .where(eq(bookingSessions.id, bookingId))
-
-          // Refund learner with bonus
-          const [learnerData] = await tx
-            .select({ creditsBalance: learners.creditsBalance, userId: learners.userId })
-            .from(learners)
-            .where(eq(learners.id, booking.learnerId))
-
-          if (learnerData) {
-            await tx
-              .update(learners)
-              .set({ 
-                creditsBalance: learnerData.creditsBalance + totalRefund,
-                updatedAt: now 
-              })
-              .where(eq(learners.id, booking.learnerId))
-
-            await tx.insert(creditTransactions).values({
-              userId: learnerData.userId,
-              type: "session_refund",
-              direction: "credit",
-              amount: totalRefund,
-              balanceBefore: learnerData.creditsBalance,
-              balanceAfter: learnerData.creditsBalance + totalRefund,
-              relatedSessionId: bookingId,
-              description: `Full refund + 10% bonus for mentor no-show`,
-              createdAt: now,
-            })
-
-            // Notify learner
-            await tx.insert(notifications).values({
-              userId: learnerData.userId,
-              type: "no_show_refund",
-              title: "No-Show Refund Processed",
-              message: `The mentor didn't show up for the session. You've received a full refund of ${booking.totalCostCredits} credits plus a ${bonusCredits} credit bonus for the inconvenience.`,
-              relatedEntityType: "session",
-              relatedEntityId: bookingId,
-              createdAt: now,
-            })
-          }
-        }
-
-        return { success: true }
-      })
-
-      return result
-    } catch (error) {
-      console.error("Error handling no-show:", error)
-      return { success: false, error: error instanceof Error ? error.message : "Failed to process no-show" }
-    }
-  }
-
-  /**
-   * Update session status to 'upcoming' when it's within join window (30 minutes before)
-   */
-  async updateToUpcoming(sessionId: number): Promise<{ success: boolean; error?: string }> {
-    try {
-      const now = new Date()
-      const result = await db.transaction(async (tx) => {
-        const [session] = await tx
-          .select({
-            id: bookingSessions.id,
-            status: bookingSessions.status,
-            scheduledDate: bookingSessions.scheduledDate,
-          })
-          .from(bookingSessions)
-          .where(eq(bookingSessions.id, sessionId))
-
-        if (!session || session.status !== 'confirmed') {
-          throw new Error("Session not found or not in confirmed status")
-        }
-
-        const joinWindowStart = new Date(session.scheduledDate.getTime() - 30 * 60 * 1000) // 30 minutes before
-
-        if (now >= joinWindowStart) {
-          await tx
-            .update(bookingSessions)
-            .set({
-              status: "upcoming",
-              updatedAt: now,
-            })
-            .where(eq(bookingSessions.id, sessionId))
-        }
-
-        return { success: true }
-      })
-
-      return result
-    } catch (error) {
-      console.error("Error updating session to upcoming:", error)
-      return { success: false, error: error instanceof Error ? error.message : "Failed to update session status" }
-    }
-  }
-
-  /**
-   * Start a video session and update status to 'in_progress'
-   */
-  async startVideoSession(sessionId: number, channelName: string): Promise<{ success: boolean; error?: string }> {
-    try {
-      const now = new Date()
-      const result = await db.transaction(async (tx) => {
-        const [session] = await tx
-          .select({
-            id: bookingSessions.id,
-            status: bookingSessions.status,
-            scheduledDate: bookingSessions.scheduledDate,
-          })
-          .from(bookingSessions)
-          .where(eq(bookingSessions.id, sessionId))
-
-        if (!session) {
-          throw new Error("Session not found")
-        }
-
-        if (!['confirmed', 'upcoming'].includes(session.status || '')) {
-          throw new Error(`Cannot start session with status: ${session.status}`)
-        }
-
-        await tx
-          .update(bookingSessions)
-          .set({
-            status: "ongoing",
-            agoraChannelName: channelName,
-            agoraCallStartedAt: now,
-            updatedAt: now,
-          })
-          .where(eq(bookingSessions.id, sessionId))
-
-        return { success: true }
-      })
-
-      return result
-    } catch (error) {
-      console.error("Error starting video session:", error)
-      return { success: false, error: error instanceof Error ? error.message : "Failed to start video session" }
-    }
-  }
-
-  /**
-   * Cleanup stuck ongoing sessions that should have ended
-   */
-  async cleanupStuckSessions(): Promise<{ processed: number; errors: string[] }> {
-    const now = new Date()
-    const errors: string[] = []
-    let processed = 0
-
-    try {
-      // Find ongoing sessions that should have ended (2+ hours past scheduled end)
-      const stuckSessions = await db
-        .select({
-          id: bookingSessions.id,
-          learnerId: bookingSessions.learnerId,
-          mentorId: bookingSessions.mentorId,
-          totalCostCredits: bookingSessions.totalCostCredits,
-          scheduledDate: bookingSessions.scheduledDate,
-          durationMinutes: bookingSessions.durationMinutes,
-          learnerJoinedAt: bookingSessions.learnerJoinedAt,
-          mentorJoinedAt: bookingSessions.mentorJoinedAt,
-        })
-        .from(bookingSessions)
-        .where(eq(bookingSessions.status, "ongoing"))
-
-      for (const session of stuckSessions) {
+      // End Agora channel if it exists
+      if (session.agoraChannelName) {
         try {
-          const scheduledEndTime = new Date(session.scheduledDate.getTime() + (session.durationMinutes || 60) * 60 * 1000)
-          const hoursOverdue = (now.getTime() - scheduledEndTime.getTime()) / (1000 * 60 * 60)
-
-          // Only cleanup sessions that are ACTUALLY stuck (4+ hours past scheduled END time)
-          // This prevents auto-completion of active sessions
-          if (hoursOverdue < 4) {
-            console.log(`[SKIP] Session ${session.id} not stuck yet - only ${Math.round(hoursOverdue * 10) / 10} hours past end time`)
-            continue
-          }
-
-          console.log(`[CLEANUP] Auto-completing stuck session ${session.id}, ${Math.round(hoursOverdue * 10) / 10} hours overdue`)
-
-          // Complete the session - assume success if it was ongoing
-          const result = await this.endVideoSession(session.id, 'completed')
-          
-          if (result.success) {
-            processed++
-          } else {
-            errors.push(`Session ${session.id}: ${result.error}`)
-          }
-        } catch (error) {
-          console.error(`Error cleaning up session ${session.id}:`, error)
-          errors.push(`Session ${session.id}: ${error instanceof Error ? error.message : 'Unknown error'}`)
+          const { agoraService } = await import('@/lib/agora/AgoraService')
+          await agoraService.endCall(session.agoraChannelName)
+          console.log(`[BOOKING_LIFECYCLE] Ended Agora channel: ${session.agoraChannelName}`)
+        } catch (agoraError) {
+          console.error(`[BOOKING_LIFECYCLE] Failed to end Agora channel:`, agoraError)
+          // Don't fail the entire operation for Agora cleanup issues
         }
       }
 
-      return { processed, errors }
+      console.log(`[BOOKING_LIFECYCLE] Session ${sessionId} ended with type: ${endType}`)
+
+      return { success: true }
     } catch (error) {
-      console.error("Error in cleanupStuckSessions:", error)
-      return { processed, errors: [error instanceof Error ? error.message : 'Unknown error'] }
-    }
-  }
-
-  /**
-   * Monitor and update session statuses based on current time
-   */
-  async monitorSessionStatuses(): Promise<{ updated: number; errors: string[] }> {
-    const now = new Date()
-    const errors: string[] = []
-    let updated = 0
-
-    try {
-      // 1. Update confirmed sessions to upcoming when within join window (30 mins before)
-      const sessionsToUpdateToUpcoming = await db
-        .select({ id: bookingSessions.id, scheduledDate: bookingSessions.scheduledDate })
-        .from(bookingSessions)
-        .where(
-          and(
-            eq(bookingSessions.status, "confirmed"),
-            // Within 30 minutes of start time
-            lt(bookingSessions.scheduledDate, new Date(now.getTime() + 30 * 60 * 1000)),
-            // But not started yet
-            gte(bookingSessions.scheduledDate, now)
-          )
-        )
-
-      for (const session of sessionsToUpdateToUpcoming) {
-        try {
-          const result = await this.updateToUpcoming(session.id)
-          if (result.success) {
-            updated++
-            console.log(`[MONITOR] Updated session ${session.id} to upcoming`)
-          } else {
-            errors.push(`Session ${session.id} to upcoming: ${result.error}`)
-          }
-        } catch (error) {
-          errors.push(`Session ${session.id} to upcoming: ${error instanceof Error ? error.message : 'Unknown error'}`)
-        }
-      }
-
-      // 2. Cleanup stuck ongoing sessions
-      const cleanupResult = await this.cleanupStuckSessions()
-      updated += cleanupResult.processed
-      errors.push(...cleanupResult.errors)
-
-      return { updated, errors }
-    } catch (error) {
-      console.error("Error in monitorSessionStatuses:", error)
-      return { updated, errors: [error instanceof Error ? error.message : 'Unknown error'] }
-    }
-  }
-
-  /**
-   * End a video session and complete it
-   */
-  async endVideoSession(
-    sessionId: number,
-    endType: 'completed' | 'technical_issues' | 'no_show_learner' | 'no_show_mentor'
-  ): Promise<{ success: boolean; error?: string }> {
-    try {
-      const now = new Date()
-      const result = await db.transaction(async (tx) => {
-        const [session] = await tx
-          .select({
-            id: bookingSessions.id,
-            status: bookingSessions.status,
-            learnerId: bookingSessions.learnerId,
-            mentorId: bookingSessions.mentorId,
-            totalCostCredits: bookingSessions.totalCostCredits,
-            learnerJoinedAt: bookingSessions.learnerJoinedAt,
-            mentorJoinedAt: bookingSessions.mentorJoinedAt,
-            learnerLeftAt: bookingSessions.learnerLeftAt,
-            mentorLeftAt: bookingSessions.mentorLeftAt,
-            scheduledDate: bookingSessions.scheduledDate,
-            durationMinutes: bookingSessions.durationMinutes,
-          })
-          .from(bookingSessions)
-          .where(eq(bookingSessions.id, sessionId))
-
-        if (!session || !['ongoing', 'confirmed'].includes(session.status || '')) {
-          throw new Error("Session not found or not in valid state for completion")
-        }
-
-        // For normal completion, both participants must have joined
-        if (endType === 'completed' && (!session.learnerJoinedAt || !session.mentorJoinedAt)) {
-          throw new Error("Cannot complete session - both participants must have joined the video call")
-        }
-
-        // For normal completion, check if participants stayed for a reasonable duration
-        if (endType === 'completed') {
-          const sessionStartTime = new Date(session.scheduledDate)
-          const sessionEndTime = new Date(session.scheduledDate.getTime() + session.durationMinutes * 60 * 1000)
-          const actualCallDuration = now.getTime() - sessionStartTime.getTime()
-          const scheduledDuration = session.durationMinutes * 60 * 1000
-          const minimumDuration = Math.min(scheduledDuration * 0.5, 10 * 60 * 1000) // At least 50% of scheduled time or 10 minutes, whichever is less
-          
-          // Only check for early completion if the session was very short compared to what was scheduled
-          if (actualCallDuration < minimumDuration) {
-            // Check if users left very early (more than 15 minutes before scheduled end)
-            const earlyLeaveThreshold = new Date(sessionEndTime.getTime() - 15 * 60 * 1000)
-            
-            const learnerLeftVeryEarly = session.learnerLeftAt && session.learnerLeftAt < earlyLeaveThreshold
-            const mentorLeftVeryEarly = session.mentorLeftAt && session.mentorLeftAt < earlyLeaveThreshold
-            
-            // Only block completion if BOTH users left very early AND the total duration was too short
-            if ((learnerLeftVeryEarly && mentorLeftVeryEarly) || actualCallDuration < 5 * 60 * 1000) { // Less than 5 minutes total
-              console.log(`[WARNING] Very short session detected: ${Math.round(actualCallDuration / 60000)} minutes`)
-              // Don't throw error, but log for review - allow completion anyway
-            }
-          }
-          
-          console.log(`[DEBUG] Session completion validation passed. Duration: ${Math.round(actualCallDuration / 60000)} minutes of ${session.durationMinutes} scheduled minutes`)
-        }
-
-        const mentorEarnings = Math.floor(session.totalCostCredits * (100 - BookingLifecycleService.PLATFORM_FEE_PERCENTAGE) / 100)
-
-        if (endType === 'completed') {
-          // Normal completion - mentor gets paid
-          await tx
-            .update(bookingSessions)
-            .set({
-              status: "completed",
-              agoraCallEndedAt: now,
-              updatedAt: now,
-            })
-            .where(eq(bookingSessions.id, sessionId))
-
-          // Pay mentor
-          const [mentorData] = await tx
-            .select({ creditsBalance: mentors.creditsBalance, userId: mentors.userId })
-            .from(mentors)
-            .where(eq(mentors.id, session.mentorId))
-
-          if (mentorData) {
-            await tx
-              .update(mentors)
-              .set({ 
-                creditsBalance: mentorData.creditsBalance + mentorEarnings,
-                updatedAt: now 
-              })
-              .where(eq(mentors.id, session.mentorId))
-
-            await tx.insert(mentorPayouts).values({
-              mentorId: session.mentorId,
-              sessionId: sessionId,
-              earnedCredits: mentorEarnings,
-              platformFeeCredits: session.totalCostCredits - mentorEarnings,
-              feePercentage: BookingLifecycleService.PLATFORM_FEE_PERCENTAGE,
-              status: "released",
-              releasedAt: now,
-              createdAt: now,
-            })
-
-            await tx.insert(creditTransactions).values({
-              userId: mentorData.userId,
-              type: "mentor_payout",
-              direction: "credit",
-              amount: mentorEarnings,
-              balanceBefore: mentorData.creditsBalance,
-              balanceAfter: mentorData.creditsBalance + mentorEarnings,
-              relatedSessionId: sessionId,
-              description: "Session completion payout",
-              createdAt: now,
-            })
-          }
-
-        } else if (endType === 'technical_issues') {
-          // Technical issues - full refund to learner
-          await tx
-            .update(bookingSessions)
-            .set({
-              status: "technical_issues",
-              agoraCallEndedAt: now,
-              cancellationReason: "Session ended due to technical issues",
-              refundAmount: session.totalCostCredits,
-              updatedAt: now,
-            })
-            .where(eq(bookingSessions.id, sessionId))
-
-          // Refund learner
-          const [learnerData] = await tx
-            .select({ creditsBalance: learners.creditsBalance, userId: learners.userId })
-            .from(learners)
-            .where(eq(learners.id, session.learnerId))
-
-          if (learnerData) {
-            await tx
-              .update(learners)
-              .set({ 
-                creditsBalance: learnerData.creditsBalance + session.totalCostCredits,
-                updatedAt: now 
-              })
-              .where(eq(learners.id, session.learnerId))
-
-            await tx.insert(creditTransactions).values({
-              userId: learnerData.userId,
-              type: "session_refund",
-              direction: "credit",
-              amount: session.totalCostCredits,
-              balanceBefore: learnerData.creditsBalance,
-              balanceAfter: learnerData.creditsBalance + session.totalCostCredits,
-              relatedSessionId: sessionId,
-              description: "Refund for technical issues",
-              createdAt: now,
-            })
-          }
-
-        } else if (endType === 'no_show_learner') {
-          return await this.handleNoShow(sessionId, 'learner', session.mentorId)
-        } else if (endType === 'no_show_mentor') {
-          return await this.handleNoShow(sessionId, 'mentor', session.learnerId)
-        }
-
-        return { success: true }
-      })
-
-      return result
-    } catch (error) {
-      console.error("Error ending video session:", error)
-      return { success: false, error: error instanceof Error ? error.message : "Failed to end video session" }
+      console.error(`[BOOKING_LIFECYCLE] Error ending session:`, error)
+      return { success: false, error: "Failed to end session" }
     }
   }
 }

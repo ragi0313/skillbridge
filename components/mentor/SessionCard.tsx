@@ -373,6 +373,52 @@ export function SessionCard({ session, getStatusColor, formatStatus, userType }:
           </div>
         )}
 
+        {/* No Show Status Notifications */}
+        {session.status === "learner_no_show" && (
+          <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+            <p className="text-sm text-green-700">
+              <strong>Learner No Show:</strong> The learner didn't attend the session. You've been compensated for your time.
+            </p>
+            {session.refundAmount === 0 && (
+              <p className="text-sm text-green-700 mt-1">
+                <strong>Payment:</strong> You received payment as the learner didn't show up
+              </p>
+            )}
+          </div>
+        )}
+
+        {session.status === "mentor_no_show" && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+            <p className="text-sm text-red-700">
+              <strong>Mentor No Show:</strong> You missed this scheduled session.
+            </p>
+            {session.refundAmount && (
+              <p className="text-sm text-red-700 mt-1">
+                <strong>Learner refunded:</strong> {session.refundAmount} credits due to no show
+              </p>
+            )}
+            <p className="text-sm text-red-700 mt-1">
+              <strong>Note:</strong> This may affect your mentor rating and account standing
+            </p>
+          </div>
+        )}
+
+        {session.status === "both_no_show" && (
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+            <p className="text-sm text-gray-700">
+              <strong>Both No Show:</strong> Neither party attended the session.
+            </p>
+            {session.refundAmount && (
+              <p className="text-sm text-gray-700 mt-1">
+                <strong>Learner refunded:</strong> {session.refundAmount} credits (full refund)
+              </p>
+            )}
+            <p className="text-sm text-gray-700 mt-1">
+              <strong>Result:</strong> No payment processed as session didn't occur
+            </p>
+          </div>
+        )}
+
         <div className="flex items-center justify-between pt-4 border-t">
           <div className="flex space-x-2">
             {canJoinNow && (

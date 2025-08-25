@@ -3,92 +3,97 @@
 import { useState, useEffect } from "react"
 
 interface TimeRemaining {
-  days: number
+  totalSeconds: number
   hours: number
   minutes: number
   seconds: number
-  totalSeconds: number
   isExpired: boolean
 }
 
-export function useRealTimeTimer(targetDate: Date | string): TimeRemaining {
-  const [timeRemaining, setTimeRemaining] = useState<TimeRemaining>(() => 
-    calculateTimeRemaining(targetDate)
-  )
+export function useRealTimeTimer(targetDate: Date): TimeRemaining {
+  const [timeRemaining, setTimeRemaining] = useState<TimeRemaining>(() => {
+    // During SSR, return a default state to prevent hydration mismatch
+    if (typeof window === 'undefined') {
+      return {
+        totalSeconds: 0,
+        hours: 0,
+        minutes: 0,
+        seconds: 0,
+        isExpired: false
+      }
+    }
+    return calculateTimeRemaining(targetDate)
+  })
 
   useEffect(() => {
-    const timer = setInterval(() => {
+    // Set the initial time immediately on client side
+    setTimeRemaining(calculateTimeRemaining(targetDate))
+    
+    const interval = setInterval(() => {
       setTimeRemaining(calculateTimeRemaining(targetDate))
     }, 1000)
 
-    return () => clearInterval(timer)
+    return () => clearInterval(interval)
   }, [targetDate])
 
   return timeRemaining
 }
 
-function calculateTimeRemaining(targetDate: Date | string): TimeRemaining {
-  const now = new Date().getTime()
-  const target = new Date(targetDate).getTime()
-  const difference = target - now
-
-  if (difference <= 0) {
+function calculateTimeRemaining(targetDate: Date): TimeRemaining {
+  const now = new Date()
+  const diffInMs = targetDate.getTime() - now.getTime()
+  
+  if (diffInMs <= 0) {
     return {
-      days: 0,
+      totalSeconds: 0,
       hours: 0,
       minutes: 0,
       seconds: 0,
-      totalSeconds: 0,
       isExpired: true
     }
   }
 
-  const days = Math.floor(difference / (1000 * 60 * 60 * 24))
-  const hours = Math.floor((difference % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
-  const minutes = Math.floor((difference % (1000 * 60 * 60)) / (1000 * 60))
-  const seconds = Math.floor((difference % (1000 * 60)) / 1000)
+  const totalSeconds = Math.floor(diffInMs / 1000)
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
 
   return {
-    days,
+    totalSeconds,
     hours,
     minutes,
     seconds,
-    totalSeconds: Math.floor(difference / 1000),
     isExpired: false
   }
 }
 
-export function formatTimeRemaining(timeRemaining: TimeRemaining, options?: {
-  showSeconds?: boolean
+interface FormatOptions {
   compact?: boolean
-}): string {
-  const { showSeconds = false, compact = false } = options || {}
-  
-  if (timeRemaining.isExpired) {
-    return "Expired"
+  showSeconds?: boolean
+}
+
+export function formatTimeRemaining(timeRemaining: TimeRemaining, options: FormatOptions = {}): string {
+  const { compact = false, showSeconds = true } = options
+  const { hours, minutes, seconds, isExpired } = timeRemaining
+
+  if (isExpired) {
+    return "00:00"
   }
 
-  const parts: string[] = []
-  
-  if (timeRemaining.days > 0) {
-    parts.push(`${timeRemaining.days}${compact ? 'd' : ' day' + (timeRemaining.days !== 1 ? 's' : '')}`)
+  if (compact) {
+    if (hours > 0) {
+      return showSeconds ? `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}` 
+                         : `${hours}:${minutes.toString().padStart(2, '0')}`
+    } else {
+      return showSeconds ? `${minutes}:${seconds.toString().padStart(2, '0')}`
+                         : `${minutes}m`
+    }
+  } else {
+    const parts = []
+    if (hours > 0) parts.push(`${hours}h`)
+    if (minutes > 0) parts.push(`${minutes}m`)
+    if (showSeconds && seconds > 0) parts.push(`${seconds}s`)
+    
+    return parts.join(' ') || '0s'
   }
-  
-  if (timeRemaining.hours > 0 || timeRemaining.days > 0) {
-    parts.push(`${timeRemaining.hours}${compact ? 'h' : ' hour' + (timeRemaining.hours !== 1 ? 's' : '')}`)
-  }
-  
-  if (timeRemaining.minutes > 0 || timeRemaining.hours > 0 || timeRemaining.days > 0) {
-    parts.push(`${timeRemaining.minutes}${compact ? 'm' : ' minute' + (timeRemaining.minutes !== 1 ? 's' : '')}`)
-  }
-  
-  if (showSeconds && timeRemaining.days === 0 && timeRemaining.hours === 0) {
-    parts.push(`${timeRemaining.seconds}${compact ? 's' : ' second' + (timeRemaining.seconds !== 1 ? 's' : '')}`)
-  }
-
-  if (parts.length === 0) {
-    return showSeconds ? "Less than 1 second" : "Less than 1 minute"
-  }
-
-  return parts.join(compact ? ' ' : ', ')
 }

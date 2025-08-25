@@ -187,6 +187,19 @@ class AgoraService {
     }
   }
 
+  async endRoom(channel: string, reason: string = 'session_ended'): Promise<void> {
+    try {
+      console.log(`Ending room for channel: ${channel}, reason: ${reason}`)
+      
+      // Use the existing endCall functionality
+      await this.endCall(channel)
+      
+    } catch (error) {
+      console.error("Error ending room:", error)
+      throw error
+    }
+  }
+
   private async kickAllUsersFromChannel(channel: string): Promise<void> {
     try {
       // First, get list of users in the channel

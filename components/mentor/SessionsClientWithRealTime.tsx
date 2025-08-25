@@ -9,37 +9,8 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Search, Filter, Wifi, WifiOff, RefreshCw, Bell } from "lucide-react"
 import { useSessionUpdates, SessionUpdateData } from "@/lib/hooks/useSessionUpdates"
+import { SessionData } from "@/types/session"
 import { toast } from "@/lib/toast"
-
-interface SessionData {
-  id: number
-  status: string | null
-  scheduledDate: Date
-  durationMinutes: number
-  totalCostCredits: number
-  sessionNotes: string
-  refundAmount?: number | null
-  cancelledBy?: string | null
-  cancellationReason?: string | null
-  mentorResponseAt?: Date | null
-  mentorResponseMessage?: string | null
-  rejectionReason?: string | null
-  expiresAt: Date | null
-  createdAt: Date | null
-  learner: {
-    id: number
-    profilePictureUrl?: string | null
-    experienceLevel: string
-  } | null
-  learnerUser: {
-    firstName: string
-    lastName: string
-  } | null
-  skill: {
-    skillName: string
-    ratePerHour: number
-  } | null
-}
 
 interface SessionsClientProps {
   initialSessions: SessionData[]
@@ -134,7 +105,7 @@ export function SessionsClientWithRealTime({ initialSessions }: SessionsClientPr
   const completedSessions = sessions.filter(s => s.status === "completed")
   const cancelledSessions = sessions.filter(s => ["cancelled"].includes(s.status || ""))
   const rejectedSessions = sessions.filter(s => s.status === "rejected")
-  const noShowSessions = sessions.filter(s => ["no_show", "both_no_show", "learner_no_show", "mentor_no_show"].includes(s.status || ""))
+  const noShowSessions = sessions.filter(s => ["both_no_show", "learner_no_show", "mentor_no_show"].includes(s.status || ""))
   const technicalIssuesSessions = sessions.filter(s => s.status === "technical_issues")
 
   // Calculate totals for header
@@ -221,10 +192,14 @@ export function SessionsClientWithRealTime({ initialSessions }: SessionsClientPr
         return "bg-gray-100 text-gray-800"
       case "rejected":
         return "bg-red-100 text-red-800"
-      case "no_show":
+      case "both_no_show":
+      case "learner_no_show":
+      case "mentor_no_show":
         return "bg-orange-100 text-orange-800"
       case "technical_issues":
         return "bg-purple-100 text-purple-800"
+      case "mentor_no_response":
+        return "bg-red-100 text-red-800"
       default:
         return "bg-gray-100 text-gray-800"
     }
@@ -246,10 +221,16 @@ export function SessionsClientWithRealTime({ initialSessions }: SessionsClientPr
         return "Cancelled"
       case "rejected":
         return "Declined"
-      case "no_show":
-        return "No Show"
+      case "both_no_show":
+        return "Both No Show"
+      case "learner_no_show":
+        return "Learner No Show"
+      case "mentor_no_show":
+        return "Mentor No Show"
       case "technical_issues":
         return "Technical Issues"
+      case "mentor_no_response":
+        return "No Response"
       default:
         return status ? status.replace("_", " ").replace(/\b\w/g, l => l.toUpperCase()) : "Unknown"
     }

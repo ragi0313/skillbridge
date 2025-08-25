@@ -7,6 +7,9 @@ import { alias } from "drizzle-orm/pg-core"
 import { getSession } from "@/lib/auth/getSession"
 import { agoraService } from "@/lib/agora/AgoraService"
 
+// Initialize session monitoring
+import "@/lib/initialize"
+
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getSession()
@@ -33,6 +36,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         mentorId: bookingSessions.mentorId,
         status: bookingSessions.status,
         scheduledDate: bookingSessions.scheduledDate,
+        startTime: bookingSessions.startTime,
+        endTime: bookingSessions.endTime,
         durationMinutes: bookingSessions.durationMinutes,
         agoraChannelName: bookingSessions.agoraChannelName,
         agoraCallStartedAt: bookingSessions.agoraCallStartedAt,
@@ -61,37 +66,21 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     const booking = bookingData[0]
 
-    // Verify user has access to this session
-    let userRole: "mentor" | "learner" | null = null
-    let userName = ""
-
-    if (session.role === "mentor") {
-      const [mentor] = await db
-        .select({ id: mentors.id })
-        .from(mentors)
-        .where(eq(mentors.userId, session.id))
-        .limit(1)
-
-      if (mentor && mentor.id === booking.mentorId) {
-        userRole = "mentor"
-        userName = `${booking.mentorUser?.firstName} ${booking.mentorUser?.lastName}`
-      }
-    } else if (session.role === "learner") {
-      const [learner] = await db
-        .select({ id: learners.id })
-        .from(learners)
-        .where(eq(learners.userId, session.id))
-        .limit(1)
-
-      if (learner && learner.id === booking.learnerId) {
-        userRole = "learner"
-        userName = `${booking.learnerUser?.firstName} ${booking.learnerUser?.lastName}`
-      }
+    // ENHANCED: Verify user has access to this session using access control utility
+    const { validateSessionAccess } = await import('@/lib/sessions/access-control')
+    const accessValidation = await validateSessionAccess(Number.parseInt(sessionId), session.id)
+    
+    if (!accessValidation.isAuthorized || !accessValidation.userRole) {
+      console.log(`[SESSION_ACCESS] Access denied for user ${session.id} to session ${sessionId}: ${accessValidation.error}`)
+      return NextResponse.json({ 
+        error: accessValidation.error || "Access denied. Only the booked mentor and learner can join this session." 
+      }, { status: 403 })
     }
 
-    if (!userRole) {
-      return NextResponse.json({ error: "Access denied" }, { status: 403 })
-    }
+    const userRole = accessValidation.userRole
+    const userName = userRole === "mentor" 
+      ? `${booking.mentorUser?.firstName} ${booking.mentorUser?.lastName}`
+      : `${booking.learnerUser?.firstName} ${booking.learnerUser?.lastName}`
 
     // Debug logging for troubleshooting
     console.log(`[DEBUG] Session ${sessionId} join attempt:`, {
@@ -357,11 +346,76 @@ async function handleSessionJoin(request: NextRequest, context?: { params: Promi
       }
     }
 
-    // Update session with join information
+    // CRITICAL: Check for existing active connections using enhanced access control
+    const activeConnections = await db
+      .select({
+        learnerJoinedAt: bookingSessions.learnerJoinedAt,
+        learnerLeftAt: bookingSessions.learnerLeftAt,
+        mentorJoinedAt: bookingSessions.mentorJoinedAt,
+        mentorLeftAt: bookingSessions.mentorLeftAt,
+        agoraCallEndedAt: bookingSessions.agoraCallEndedAt,
+        status: bookingSessions.status,
+      })
+      .from(bookingSessions)
+      .where(eq(bookingSessions.id, sessionId))
+      .limit(1)
+
+    const currentConnection = activeConnections[0]
+    
+    // CRITICAL: Prevent multiple connections for 1-on-1 sessions
+    if (isLearner) {
+      // Check if learner is already connected (joined but hasn't left, and session not ended)
+      const learnerAlreadyActive = currentConnection.learnerJoinedAt && 
+                                   !currentConnection.learnerLeftAt && 
+                                   !currentConnection.agoraCallEndedAt &&
+                                   !isReconnect
+      
+      if (learnerAlreadyActive) {
+        console.log(`[SESSION_JOIN] Learner duplicate connection blocked for session ${sessionId}`)
+        return NextResponse.json({
+          error: "You are already connected to this session from another device/browser. This is a 1-on-1 session - only one connection per participant is allowed.",
+          code: "ALREADY_CONNECTED"
+        }, { status: 409 })
+      }
+    } else if (isMentor) {
+      // Check if mentor is already connected (joined but hasn't left, and session not ended)
+      const mentorAlreadyActive = currentConnection.mentorJoinedAt && 
+                                  !currentConnection.mentorLeftAt && 
+                                  !currentConnection.agoraCallEndedAt &&
+                                  !isReconnect
+      
+      if (mentorAlreadyActive) {
+        console.log(`[SESSION_JOIN] Mentor duplicate connection blocked for session ${sessionId}`)
+        return NextResponse.json({
+          error: "You are already connected to this session from another device/browser. This is a 1-on-1 session - only one connection per participant is allowed.",
+          code: "ALREADY_CONNECTED"
+        }, { status: 409 })
+      }
+    }
+
+    // ENHANCED: Update session with join information and enforce participant limits
     await db.transaction(async (tx) => {
+      // Double-check session hasn't been completed/cancelled while we were processing
+      const [currentSessionState] = await tx
+        .select({ status: bookingSessions.status, agoraCallEndedAt: bookingSessions.agoraCallEndedAt })
+        .from(bookingSessions)
+        .where(eq(bookingSessions.id, sessionId))
+        .limit(1)
+      
+      if (!currentSessionState || 
+          !['confirmed', 'upcoming', 'ongoing'].includes(currentSessionState.status) ||
+          currentSessionState.agoraCallEndedAt) {
+        throw new Error(`Session state changed during join process: ${currentSessionState?.status || 'unknown'}`)
+      }
+
+      // Update with participant tracking
       await tx
         .update(bookingSessions)
-        .set(updateData)
+        .set({
+          ...updateData,
+          // Reset left times when joining/rejoining to prevent confusion
+          ...(isLearner ? { learnerLeftAt: null } : { mentorLeftAt: null })
+        })
         .where(eq(bookingSessions.id, sessionId))
 
       // Insert notifications
@@ -373,19 +427,10 @@ async function handleSessionJoin(request: NextRequest, context?: { params: Promi
     // Determine user role for broadcast
     const userRole = isLearner ? "learner" : "mentor"
     
-    // Broadcast real-time update if status changed to ongoing
+    // Note: Real-time session updates would be handled by separate broadcast service
+    // For now, the database update is sufficient for session state tracking
     if (updateData.status === "ongoing") {
-      try {
-        const { broadcastSessionUpdate } = await import("@/app/api/sse/session-updates/route")
-        await broadcastSessionUpdate(sessionId, 'status_change', {
-          previousStatus: 'confirmed',
-          newStatus: 'ongoing',
-          userJoined: userRole,
-          bothPartiesJoined: bookingSession.learnerJoinedAt && bookingSession.mentorJoinedAt
-        })
-      } catch (error) {
-        console.error("Failed to broadcast session start:", error)
-      }
+      console.log(`[SESSION_JOIN] Session ${sessionId} marked as ongoing - both participants joined`)
     }
 
     return NextResponse.json({
@@ -393,7 +438,10 @@ async function handleSessionJoin(request: NextRequest, context?: { params: Promi
       status: updateData.status || bookingSession.status,
       isOngoing: updateData.status === "ongoing",
       isReconnect,
-      noShowDetected: updateData.status === "no_show"
+      noShowDetected: updateData.status === "no_show",
+      participantRole: userRole,
+      sessionId: sessionId,
+      enforceOneOnOne: true // Signal to client that this is a 1-on-1 session
     })
 
   } catch (error) {

@@ -128,6 +128,8 @@ export const bookingSessions = pgTable("booking_sessions", {
   mentorId: integer("mentor_id").notNull().references(() => mentors.id, { onDelete: "cascade" }),
   mentorSkillId: integer("mentor_skill_id").notNull().references(() => mentorSkills.id),
   scheduledDate: timestamp("scheduled_date", { withTimezone: true }).notNull(),
+  startTime: timestamp("start_time", { withTimezone: true }).notNull(),
+  endTime: timestamp("end_time", { withTimezone: true }).notNull(),
   durationMinutes: integer("duration_minutes").notNull(),
   totalCostCredits: integer("total_cost_credits").notNull(),
   escrowCredits: integer("escrow_credits").notNull(),

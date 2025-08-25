@@ -3,6 +3,7 @@ import { db } from "@/db"
 import { bookingSessions, learners, mentors } from "@/db/schema"
 import { eq, and } from "drizzle-orm"
 import { getSession } from "@/lib/auth/getSession"
+import { notificationService } from "@/lib/notifications/notification-service"
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -62,20 +63,41 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     const now = new Date()
 
-    // Update session status
+    // Update session to mark video call as ended
+    // The monitoring service will handle completion after scheduled end time
     await db
       .update(bookingSessions)
       .set({
-        status: "completed",
         agoraCallEndedAt: now,
         updatedAt: now,
       })
       .where(eq(bookingSessions.id, sessionId))
 
+    // Send session ended notifications to both participants
+    try {
+      const [learner, mentor] = await Promise.all([
+        db.select({ userId: learners.userId }).from(learners).where(eq(learners.id, bookingSession.learnerId)).limit(1),
+        db.select({ userId: mentors.userId }).from(mentors).where(eq(mentors.id, bookingSession.mentorId)).limit(1)
+      ])
+
+      if (learner.length > 0 && mentor.length > 0) {
+        await notificationService.notifyBothParticipants(
+          learner[0].userId,
+          mentor[0].userId,
+          sessionId,
+          'session_ended'
+        )
+      }
+    } catch (notificationError) {
+      console.error("Failed to send session ended notifications:", notificationError)
+      // Don't fail the request if notifications fail
+    }
+
     return NextResponse.json({
       success: true,
-      message: "Session ended successfully",
+      message: "Video call ended successfully",
       endedAt: now,
+      shouldShowRating: session.role === "learner", // Only learners rate mentors
     })
   } catch (error: any) {
     console.error("Error ending session:", error)

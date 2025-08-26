@@ -1,11 +1,5 @@
 {
   "env": {
     "NODE_ENV": "production"
-  },
-  "crons": [
-    {
-      "path": "/api/cron/session-monitor",
-      "schedule": "*/5 * * * *"
-    }
-  ]
+  }
 }

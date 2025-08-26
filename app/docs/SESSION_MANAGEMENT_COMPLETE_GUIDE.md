@@ -702,5 +702,8 @@ const channelInfo = await agoraService.getChannelInfo(session.agoraChannelName)
 - No-show detection prevents fraud
 
 ---
+- Booking functionality already created focus on sessions management and video calls
+- Create sessions management  for learner and mentor in learner/sessions mentor/sessions and also api routes if needed
+- sessions/[id] api route and page to conduct the waiting and 1 on 1 video session room
 
 This comprehensive documentation covers all aspects of the session management system. For specific implementation details, refer to the individual component files and their inline comments.

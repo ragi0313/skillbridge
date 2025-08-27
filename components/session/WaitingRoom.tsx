@@ -1,534 +1,681 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
+import { useState, useEffect, useCallback, useRef } from "react"
+import { Card, CardHeader, CardContent } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Video, VideoOff, Mic, MicOff, Settings, Users, Clock, CheckCircle, AlertCircle } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Separator } from "@/components/ui/separator"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Clock, User, VideoIcon, AlertCircle, Users, CheckCircle, Loader2, Camera, Mic, MicOff, CameraOff, Volume2 } from "lucide-react"
 import { SessionCountdown } from "@/components/session/SessionCountdown"
-import { toast } from "@/lib/toast"
-import DeviceTester from "@/components/video/DeviceTester"
+import { useRealTimeTimer, formatTimeRemaining } from "@/lib/hooks/useRealTimeTimer"
 
 interface WaitingRoomProps {
   sessionId: string
-  userRole: "learner" | "mentor"
   sessionData: {
-    scheduledDate: Date
-    durationMinutes: number
+    id: number
+    scheduledDate: string
+    startTime: string
+    endTime: string
     status: string
-    otherParticipant: {
-      firstName: string
-      lastName: string
-      profilePictureUrl?: string
-      title?: string
-    }
-    isReconnection?: boolean
-    previouslyJoinedAt?: Date | null
-    previouslyLeftAt?: Date | null
+    durationMinutes: number
   }
+  userRole: "learner" | "mentor"
+  otherParticipant: {
+    firstName: string
+    lastName: string
+    profilePictureUrl?: string | null
+    title: string
+  }
+  onJoinVideoCall: () => void
+  isReconnection?: boolean
+  previouslyJoinedAt?: string | null
 }
 
-export default function WaitingRoom({ sessionId, userRole, sessionData }: WaitingRoomProps) {
-  const [isVideoEnabled, setIsVideoEnabled] = useState(true)
-  const [isAudioEnabled, setIsAudioEnabled] = useState(true)
-  const [otherParticipantJoined, setOtherParticipantJoined] = useState(false)
-  const [connectionStatus, setConnectionStatus] = useState<"checking" | "ready" | "error">("checking")
-  const [isJoining, setIsJoining] = useState(false)
-  
-  const localVideoRef = useRef<HTMLVideoElement>(null)
-  const streamRef = useRef<MediaStream | null>(null)
+type JoinStatus = "waiting" | "ready" | "error"
 
-  const otherRole = userRole === "learner" ? "mentor" : "learner"
+export function WaitingRoom({
+  sessionId,
+  sessionData,
+  userRole,
+  otherParticipant,
+  onJoinVideoCall,
+  isReconnection = false,
+  previouslyJoinedAt
+}: WaitingRoomProps) {
+  const [joinStatus, setJoinStatus] = useState<JoinStatus>("waiting")
+  const [otherUserStatus, setOtherUserStatus] = useState<"not_joined" | "joined" | "unknown">("unknown")
+  const [errorMessage, setErrorMessage] = useState<string>("")
+  const [isSessionStarted, setIsSessionStarted] = useState(false)
   
-  // Check if user can join the waiting room (30 minutes before)
-  const canJoinWaitingRoom = () => {
-    const now = new Date()
-    const sessionStart = new Date(sessionData.scheduledDate)
-    const joinWindowStart = new Date(sessionStart.getTime() - 30 * 60 * 1000)
-    return now >= joinWindowStart && ["confirmed", "upcoming", "ongoing"].includes(sessionData.status)
-  }
+  // Media testing state
+  const [cameraEnabled, setCameraEnabled] = useState(false)
+  const [microphoneEnabled, setMicrophoneEnabled] = useState(false)
+  const [audioPlaybackEnabled, setAudioPlaybackEnabled] = useState(false)
+  const [mediaError, setMediaError] = useState<string>("")
+  const [audioLevel, setAudioLevel] = useState(0)
   
-  // Check if it's time to enter the actual video call (session start time)
-  const canEnterVideoCall = () => {
-    const now = new Date()
-    const sessionStart = new Date(sessionData.scheduledDate)
-    return now >= sessionStart && ["confirmed", "upcoming", "ongoing"].includes(sessionData.status)
-  }
-  
-  // Legacy function for backward compatibility
-  const canJoinNow = canJoinWaitingRoom
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const audioContextRef = useRef<AudioContext | null>(null)
+  const analyserRef = useRef<AnalyserNode | null>(null)
+  const gainNodeRef = useRef<GainNode | null>(null)
+  const cameraStreamRef = useRef<MediaStream | null>(null)
+  const microphoneStreamRef = useRef<MediaStream | null>(null)
 
-  const getSessionStatusInfo = () => {
-    if (sessionData.status === "upcoming") {
-      return {
-        title: "Session Ready",
-        message: "Your session is ready to join. The mentor has confirmed your booking and you can enter the waiting room.",
-        color: "blue",
-        icon: "clock"
-      }
-    } else if (sessionData.status === "confirmed") {
-      return {
-        title: "Session Confirmed",
-        message: "Your session is confirmed and ready to join when the time comes.",
-        color: "green",
-        icon: "check"
-      }
-    } else if (sessionData.status === "ongoing") {
-      return {
-        title: "Session In Progress",
-        message: "The session is currently active. Join now to participate.",
-        color: "red",
-        icon: "live"
-      }
-    }
-    return {
-      title: "Session Ready",
-      message: "Preparing for your session...",
-      color: "gray",
-      icon: "clock"
-    }
-  }
+  const sessionStart = new Date(sessionData.startTime)
+  const joinWindowStart = new Date(sessionStart.getTime() - 30 * 60 * 1000)
+  
+  const timeToSession = useRealTimeTimer(sessionStart)
+  const canJoin = new Date() >= joinWindowStart && ["confirmed", "upcoming", "ongoing"].includes(sessionData.status)
+  const isSessionTime = new Date() >= sessionStart
 
-  // Initialize camera and microphone
+  // Set initial session status and handle automatic video call start
   useEffect(() => {
-    const initializeMedia = async () => {
-      try {
-        setConnectionStatus("checking")
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: true
+    if (sessionData.status === "ongoing") {
+      setIsSessionStarted(true)
+      setJoinStatus("ready")
+    }
+    
+    // If session time has arrived and we're in the waiting room, automatically start video call
+    if (isSessionTime && (joinStatus === "waiting" || joinStatus === "ready")) {
+      setIsSessionStarted(true)
+      setJoinStatus("ready")
+      // Automatically join video call when session time starts
+      onJoinVideoCall()
+    }
+  }, [sessionData.status, isSessionTime, joinStatus, onJoinVideoCall])
+
+  // Camera test functions
+  const toggleCamera = useCallback(async () => {
+    try {
+      setMediaError("")
+      
+      if (cameraEnabled) {
+        // Turn off camera
+        if (cameraStreamRef.current) {
+          cameraStreamRef.current.getVideoTracks().forEach(track => {
+            track.stop()
+            console.log('Camera track stopped:', track.label)
+          })
+          cameraStreamRef.current = null
+        }
+        if (videoRef.current) {
+          videoRef.current.srcObject = null
+        }
+        setCameraEnabled(false)
+      } else {
+        // Check if camera devices are available
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          throw new Error('Camera access is not supported in this browser')
+        }
+        // Turn on camera with optimized constraints
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { 
+            width: { ideal: 640, min: 320, max: 1280 }, 
+            height: { ideal: 480, min: 240, max: 720 },
+            facingMode: 'user',
+            frameRate: { ideal: 15, max: 30 }
+          }, 
+          audio: false 
         })
         
-        streamRef.current = stream
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = stream
+        cameraStreamRef.current = stream
+        
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream
         }
         
-        setConnectionStatus("ready")
-      } catch (error) {
-        console.error("Media access error:", error)
-        setConnectionStatus("error")
-        toast.error("Unable to access camera or microphone. Please check your permissions.")
+        setCameraEnabled(true)
       }
+    } catch (error: any) {
+      console.error("Camera error:", error)
+      let errorMessage = "Unable to access camera."
+      
+      if (error.name === 'NotAllowedError') {
+        errorMessage = "Camera access denied. Please allow camera permissions and try again."
+      } else if (error.name === 'NotFoundError') {
+        errorMessage = "No camera found. Please connect a camera and try again."
+      } else if (error.name === 'NotReadableError') {
+        errorMessage = "Camera is already in use by another application."
+      } else if (error.name === 'OverconstrainedError') {
+        errorMessage = "Camera constraints not supported. Trying with basic settings..."
+        // Retry with simpler constraints
+        try {
+          const simpleStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+          cameraStreamRef.current = simpleStream
+          if (videoRef.current) {
+            videoRef.current.srcObject = simpleStream
+          }
+          setCameraEnabled(true)
+          setMediaError("")
+          return
+        } catch (retryError) {
+          console.error("Camera retry failed:", retryError)
+          errorMessage = "Camera not compatible with this device."
+        }
+      }
+      
+      setMediaError(errorMessage)
+      setCameraEnabled(false)
+    }
+  }, [cameraEnabled])
+
+  // Microphone test functions
+  const toggleMicrophone = useCallback(async () => {
+    try {
+      setMediaError("")
+      
+      if (microphoneEnabled) {
+        // Turn off microphone
+        if (microphoneStreamRef.current) {
+          microphoneStreamRef.current.getAudioTracks().forEach(track => track.stop())
+        }
+        if (audioContextRef.current) {
+          audioContextRef.current.close()
+        }
+        setMicrophoneEnabled(false)
+        setAudioLevel(0)
+        microphoneStreamRef.current = null
+        audioContextRef.current = null
+        analyserRef.current = null
+      } else {
+        // Turn on microphone
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+        microphoneStreamRef.current = stream
+        
+        // Set up audio analysis and playback for testing
+        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)()
+        
+        // Resume audio context if it's suspended (required by some browsers)
+        if (audioContext.state === 'suspended') {
+          await audioContext.resume()
+        }
+        
+        const analyser = audioContext.createAnalyser()
+        const microphone = audioContext.createMediaStreamSource(stream)
+        const gainNode = audioContext.createGain()
+        
+        analyser.fftSize = 256
+        // Connect microphone -> gain -> analyser for level detection
+        microphone.connect(gainNode)
+        gainNode.connect(analyser)
+        
+        // Set initial gain to low level to avoid feedback
+        gainNode.gain.value = 0.1
+        
+        audioContextRef.current = audioContext
+        analyserRef.current = analyser
+        gainNodeRef.current = gainNode
+        
+        // Start audio level monitoring
+        const updateAudioLevel = () => {
+          if (analyserRef.current && microphoneEnabled) {
+            const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount)
+            analyserRef.current.getByteFrequencyData(dataArray)
+            const average = dataArray.reduce((a, b) => a + b) / dataArray.length
+            setAudioLevel(Math.min(100, average * 2))
+            requestAnimationFrame(updateAudioLevel)
+          }
+        }
+        
+        setMicrophoneEnabled(true)
+        updateAudioLevel()
+      }
+    } catch (error) {
+      console.error("Microphone error:", error)
+      setMediaError("Unable to access microphone. Please check your microphone permissions.")
+      setMicrophoneEnabled(false)
+    }
+  }, [microphoneEnabled])
+
+  // Audio playback toggle for testing
+  const toggleAudioPlayback = useCallback(() => {
+    if (!microphoneEnabled || !gainNodeRef.current || !audioContextRef.current) {
+      setMediaError("Please enable microphone first to test audio playback.")
+      return
     }
 
-    initializeMedia()
+    try {
+      if (audioPlaybackEnabled) {
+        // Disconnect from speakers to stop playback
+        gainNodeRef.current.disconnect(audioContextRef.current.destination)
+        setAudioPlaybackEnabled(false)
+      } else {
+        // Connect to speakers for playback (be careful of feedback)
+        gainNodeRef.current.connect(audioContextRef.current.destination)
+        setAudioPlaybackEnabled(true)
+        // Show warning about feedback
+        setMediaError("Audio playback enabled. Use headphones to avoid feedback.")
+        // Auto-disable after 5 seconds to prevent prolonged feedback
+        setTimeout(() => {
+          if (gainNodeRef.current && audioContextRef.current) {
+            gainNodeRef.current.disconnect(audioContextRef.current.destination)
+            setAudioPlaybackEnabled(false)
+            setMediaError("")
+          }
+        }, 5000)
+      }
+    } catch (error) {
+      console.error("Audio playback error:", error)
+      setMediaError("Unable to control audio playback.")
+      setAudioPlaybackEnabled(false)
+    }
+  }, [microphoneEnabled, audioPlaybackEnabled])
 
+  // Cleanup media streams on unmount
+  useEffect(() => {
     return () => {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop())
+      if (cameraStreamRef.current) {
+        cameraStreamRef.current.getTracks().forEach(track => track.stop())
+      }
+      if (microphoneStreamRef.current) {
+        microphoneStreamRef.current.getTracks().forEach(track => track.stop())
+      }
+      if (audioContextRef.current) {
+        audioContextRef.current.close()
       }
     }
   }, [])
 
-  // Toggle video
-  const toggleVideo = async () => {
-    if (streamRef.current) {
-      const videoTracks = streamRef.current.getVideoTracks()
-      if (videoTracks.length > 0) {
-        const newState = !isVideoEnabled
-        videoTracks.forEach(track => track.enabled = newState)
-        setIsVideoEnabled(newState)
-      }
-    }
-  }
-
-  // Toggle audio
-  const toggleAudio = async () => {
-    if (streamRef.current) {
-      const audioTracks = streamRef.current.getAudioTracks()
-      if (audioTracks.length > 0) {
-        const newState = !isAudioEnabled
-        audioTracks.forEach(track => track.enabled = newState)
-        setIsAudioEnabled(newState)
-      }
-    }
-  }
-
-  // State to track if user has joined the session
-  const [hasJoinedSession, setHasJoinedSession] = useState(false)
-
-  // Handle joining the session
-  const handleJoinSession = async () => {
-    if (!canJoinWaitingRoom()) {
-      toast.error("Cannot join session yet. Please wait for the join window to open.")
-      return
-    }
-
-    // If it's time for the video call, transition directly
-    if (canEnterVideoCall()) {
-      setIsJoining(true)
-      try {
-        const response = await fetch(`/api/sessions/${sessionId}/join`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        })
-
-        if (response.ok) {
-          window.location.reload() // Transition to video call
-        } else {
-          const errorData = await response.json()
-          toast.error(errorData.error || "Failed to join session")
-          setIsJoining(false)
-        }
-      } catch (error) {
-        console.error("Error joining session:", error)
-        toast.error("Failed to join session. Please try again.")
-        setIsJoining(false)
-      }
-      return
-    }
-
-    // Otherwise, just mark as joined and stay in waiting room
-    setIsJoining(true)
+  const handleStartVideoCall = useCallback(async () => {
+    // Clean up waiting room media streams before starting video call
     try {
-      const response = await fetch(`/api/sessions/${sessionId}/join`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      })
-
-      if (response.ok) {
-        setHasJoinedSession(true)
-        setIsJoining(false)
-        toast.success("Joined waiting room! You'll automatically enter the call when the session starts.")
-      } else {
-        const errorData = await response.json()
-        toast.error(errorData.error || "Failed to join session")
-        setIsJoining(false)
+      // Clean up camera stream
+      if (cameraStreamRef.current) {
+        cameraStreamRef.current.getTracks().forEach(track => {
+          track.stop()
+          console.log('Stopped camera track:', track.label)
+        })
+        cameraStreamRef.current = null
+        setCameraEnabled(false)
       }
+      
+      // Clean up microphone stream  
+      if (microphoneStreamRef.current) {
+        microphoneStreamRef.current.getTracks().forEach(track => {
+          track.stop()
+          console.log('Stopped microphone track:', track.label)
+        })
+        microphoneStreamRef.current = null
+        setMicrophoneEnabled(false)
+        setAudioLevel(0)
+        setAudioPlaybackEnabled(false)
+      }
+      
+      // Clean up audio context
+      if (audioContextRef.current) {
+        await audioContextRef.current.close()
+        audioContextRef.current = null
+        analyserRef.current = null
+        gainNodeRef.current = null
+      }
+      
+      // Clear video element
+      if (videoRef.current) {
+        videoRef.current.srcObject = null
+      }
+      
+      console.log('Media streams cleanup completed')
     } catch (error) {
-      console.error("Error joining session:", error)
-      toast.error("Failed to join session. Please try again.")
-      setIsJoining(false)
+      console.error("Error cleaning up media streams:", error)
     }
+    
+    // Small delay to ensure cleanup completes and devices are released
+    setTimeout(() => {
+      onJoinVideoCall()
+    }, 200)
+  }, [onJoinVideoCall])
+
+  // Fixed polling logic - only poll when necessary and with stable dependencies
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null
+
+    // Only poll if we're in waiting or ready state
+    if (joinStatus === "waiting" || joinStatus === "ready") {
+      interval = setInterval(async () => {
+        try {
+          const response = await fetch(`/api/sessions/${sessionId}`)
+          if (response.ok) {
+            const data = await response.json()
+            const currentTime = new Date()
+            const sessionStartTime = new Date(data.session.startTime)
+            
+            if (data.session.status === "ongoing" || currentTime >= sessionStartTime) {
+              setIsSessionStarted(true)
+              setJoinStatus("ready")
+              setOtherUserStatus("joined")
+              // Automatically start video call when session time is reached
+              if (currentTime >= sessionStartTime && joinStatus === "waiting") {
+                setTimeout(() => onJoinVideoCall(), 500)
+              }
+            }
+          }
+        } catch (error) {
+          console.error("Error checking session status:", error)
+        }
+      }, 2000)
+    }
+
+    return () => {
+      if (interval) {
+        clearInterval(interval)
+      }
+    }
+  }, [sessionId, joinStatus, onJoinVideoCall])
+
+  const getInitials = (firstName: string, lastName: string) => {
+    return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase()
   }
 
-  // Auto-transition to video call when session time arrives (for users already in waiting room)
-  useEffect(() => {
-    if (hasJoinedSession) {
-      const checkSessionTime = () => {
-        if (canEnterVideoCall()) {
-          toast.success("🚀 Session is starting! Entering video call...")
-          setTimeout(() => {
-            window.location.reload()
-          }, 1500) // Give user 1.5 seconds to see the message
-        }
-      }
+  const formatSessionTime = () => {
+    const start = new Date(sessionData.startTime)
+    const end = new Date(sessionData.endTime)
+    return `${start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+  }
 
-      const interval = setInterval(checkSessionTime, 1000) // Check every second
-      return () => clearInterval(interval)
-    }
-  }, [hasJoinedSession, sessionData.scheduledDate])
+  // Type guard to check if timeToSession is TimeRemaining
+  const isTimeRemaining = (timer: any): timer is { isExpired: boolean; totalSeconds: number; days: number; hours: number; minutes: number; seconds: number } => {
+    return 'isExpired' in timer && 'totalSeconds' in timer
+  }
 
-  // Poll for other participant status (simplified - in real implementation, use websockets)
-  useEffect(() => {
-    const checkParticipantStatus = async () => {
-      try {
-        // This would be a real API call to check if other participant has joined
-        // For now, we'll simulate it based on session status
-        setOtherParticipantJoined(sessionData.status === "ongoing")
-      } catch (error) {
-        console.error("Error checking participant status:", error)
-      }
+  const renderJoinButton = () => {
+    if (isSessionStarted) {
+      return (
+        <Button 
+          onClick={handleStartVideoCall}
+          className="w-full bg-green-600 hover:bg-green-700 animate-pulse"
+          size="lg"
+        >
+          <VideoIcon className="h-5 w-5 mr-2" />
+          Start Video Call
+        </Button>
+      )
     }
 
-    const interval = setInterval(checkParticipantStatus, 5000)
-    return () => clearInterval(interval)
-  }, [sessionData.status])
+    if (!canJoin && isTimeRemaining(timeToSession)) {
+      return (
+        <Button disabled className="w-full">
+          <Clock className="h-4 w-4 mr-2" />
+          Session starts in {formatTimeRemaining(timeToSession, { compact: true })}
+        </Button>
+      )
+    }
+
+    return (
+      <Button disabled className="w-full">
+        <CheckCircle className="h-4 w-4 mr-2" />
+        Waiting for session to start...
+      </Button>
+    )
+  }
+
+  const getJoinStatusText = (status: JoinStatus) => {
+    switch (status) {
+      case "waiting": return "In waiting room"
+      case "ready": return "Ready for video call"
+      case "error": return "Connection error"
+      default: return "Unknown"
+    }
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 to-gray-800 flex items-center justify-center p-4">
-      <div className="w-full max-w-4xl grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
-        {/* Video Preview */}
-        <div className="lg:col-span-2">
-          <Card className="h-full bg-gray-800 border-gray-700">
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2 text-white">
-                <Video className="h-5 w-5" />
-                <span>Camera Preview</span>
-                <Badge variant={connectionStatus === "ready" ? "default" : connectionStatus === "error" ? "destructive" : "secondary"}>
-                  {connectionStatus === "ready" && <CheckCircle className="h-3 w-3 mr-1" />}
-                  {connectionStatus === "error" && <AlertCircle className="h-3 w-3 mr-1" />}
-                  {connectionStatus === "checking" && <Clock className="h-3 w-3 mr-1" />}
-                  {connectionStatus === "ready" ? "Ready" : connectionStatus === "error" ? "Error" : "Checking..."}
-                </Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="relative aspect-video bg-gray-900 rounded-lg overflow-hidden">
-                <video
-                  ref={localVideoRef}
-                  autoPlay
-                  muted
-                  playsInline
-                  className="w-full h-full object-cover"
-                />
-                
-                {!isVideoEnabled && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-gray-800">
-                    <div className="text-center text-white">
-                      <VideoOff className="h-12 w-12 mx-auto mb-2" />
-                      <p>Camera Off</p>
-                    </div>
-                  </div>
-                )}
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-slate-950 flex items-center justify-center p-4">
+      <Card className="w-full max-w-2xl bg-slate-900/95 border-slate-700/50 backdrop-blur-sm">
+        <CardHeader className="text-center space-y-6">
+          <div>
+            <h1 className="text-3xl font-bold text-white mb-2">Session Waiting Room</h1>
+            <p className="text-slate-400">Preparing your mentorship session</p>
+          </div>
 
-                {/* Controls overlay */}
-                <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex space-x-4">
-                  <Button
-                    variant={isAudioEnabled ? "secondary" : "destructive"}
-                    size="sm"
-                    onClick={toggleAudio}
-                    className="rounded-full w-12 h-12"
-                  >
-                    {isAudioEnabled ? <Mic className="h-5 w-5" /> : <MicOff className="h-5 w-5" />}
-                  </Button>
+          <SessionCountdown 
+            sessionDate={sessionData.startTime}
+            status={sessionData.status}
+            className="mx-auto"
+          />
+
+          {isSessionStarted && (
+            <Alert className="bg-green-900/20 border-green-600/30">
+              <CheckCircle className="h-4 w-4 text-green-400" />
+              <AlertDescription className="text-green-300">
+                Session is ready to start! Click the button below to join the video call.
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {errorMessage && (
+            <Alert className="bg-red-900/20 border-red-600/30">
+              <AlertCircle className="h-4 w-4 text-red-400" />
+              <AlertDescription className="text-red-300">
+                {errorMessage}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {isReconnection && previouslyJoinedAt && (
+            <Alert className="bg-blue-900/20 border-blue-600/30">
+              <AlertCircle className="h-4 w-4 text-blue-400" />
+              <AlertDescription className="text-blue-300">
+                Welcome back! You were previously in this session at {new Date(previouslyJoinedAt).toLocaleTimeString()}.
+              </AlertDescription>
+            </Alert>
+          )}
+        </CardHeader>
+
+        <CardContent className="space-y-6">
+          {/* Media Test Section */}
+          <div className="bg-slate-800/50 rounded-lg p-6 space-y-6">
+            <div>
+              <h3 className="text-lg font-medium text-white mb-4 flex items-center">
+                <VideoIcon className="h-5 w-5 mr-2" />
+                Test Your Camera & Microphone
+              </h3>
+              <p className="text-sm text-slate-400 mb-4">
+                Make sure your camera and microphone are working before the session starts.
+              </p>
+            </div>
+
+            {/* Camera Test */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  {cameraEnabled ? (
+                    <Camera className="h-4 w-4 text-green-400" />
+                  ) : (
+                    <CameraOff className="h-4 w-4 text-slate-400" />
+                  )}
+                  <span className="text-white">Camera</span>
+                </div>
+                <Button
+                  onClick={toggleCamera}
+                  variant={cameraEnabled ? "default" : "outline"}
+                  size="sm"
+                  className={cameraEnabled ? "bg-green-600 hover:bg-green-700" : ""}
+                >
+                  {cameraEnabled ? "Turn Off" : "Test Camera"}
+                </Button>
+              </div>
+              
+              {cameraEnabled && (
+                <div className="bg-black rounded-lg overflow-hidden">
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    muted
+                    playsInline
+                    className="w-full h-48 object-cover"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Microphone Test */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  {microphoneEnabled ? (
+                    <Mic className="h-4 w-4 text-green-400" />
+                  ) : (
+                    <MicOff className="h-4 w-4 text-slate-400" />
+                  )}
+                  <span className="text-white">Microphone</span>
+                  {microphoneEnabled && (
+                    <Volume2 className="h-4 w-4 text-blue-400" />
+                  )}
+                </div>
+                <Button
+                  onClick={toggleMicrophone}
+                  variant={microphoneEnabled ? "default" : "outline"}
+                  size="sm"
+                  className={microphoneEnabled ? "bg-green-600 hover:bg-green-700" : ""}
+                >
+                  {microphoneEnabled ? "Turn Off" : "Test Microphone"}
+                </Button>
+              </div>
+
+              {microphoneEnabled && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-slate-400">Speak to test your microphone</span>
+                    <span className="text-slate-400">Level: {Math.round(audioLevel)}%</span>
+                  </div>
+                  <div className="w-full bg-slate-700 rounded-full h-2">
+                    <div
+                      className="h-2 rounded-full transition-all duration-150"
+                      style={{
+                        width: `${audioLevel}%`,
+                        backgroundColor: audioLevel > 60 ? '#ef4444' : audioLevel > 30 ? '#f59e0b' : '#10b981'
+                      }}
+                    />
+                  </div>
                   
-                  <Button
-                    variant={isVideoEnabled ? "secondary" : "destructive"}
-                    size="sm"
-                    onClick={toggleVideo}
-                    className="rounded-full w-12 h-12"
-                  >
-                    {isVideoEnabled ? <Video className="h-5 w-5" /> : <VideoOff className="h-5 w-5" />}
-                  </Button>
+                  {/* Audio playback test button */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-slate-400">Test audio playback (use headphones)</span>
+                    <Button
+                      onClick={toggleAudioPlayback}
+                      variant={audioPlaybackEnabled ? "default" : "outline"}
+                      size="sm"
+                      className={audioPlaybackEnabled ? "bg-blue-600 hover:bg-blue-700" : ""}
+                    >
+                      {audioPlaybackEnabled ? "Stop Playback" : "Test Audio"}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {mediaError && (
+              <Alert className="bg-red-900/20 border-red-600/30">
+                <AlertCircle className="h-4 w-4 text-red-400" />
+                <AlertDescription className="text-red-300">
+                  {mediaError}
+                </AlertDescription>
+              </Alert>
+            )}
+          </div>
+
+          <Separator className="bg-slate-700" />
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-4">
+              <div className="flex items-center space-x-3">
+                <Badge variant="outline" className="text-blue-400 border-blue-400">
+                  <User className="h-3 w-3 mr-1" />
+                  You ({userRole})
+                </Badge>
+                <div className="flex items-center space-x-2">
+                  <div className="w-2 h-2 bg-green-500 rounded-full" />
+                  <span className="text-sm text-slate-300">
+                    Connected to waiting room
+                  </span>
                 </div>
               </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Session Info & Join Controls */}
-        <div className="space-y-6">
-          
-          {/* Session Status */}
-          <Card className="bg-gray-800 border-gray-700">
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center space-x-2 text-white">
-                {(() => {
-                  const statusInfo = getSessionStatusInfo()
-                  return (
-                    <>
-                      {statusInfo.icon === "clock" && <Clock className="h-5 w-5 text-blue-500" />}
-                      {statusInfo.icon === "check" && <CheckCircle className="h-5 w-5 text-green-500" />}
-                      {statusInfo.icon === "live" && <div className="h-3 w-3 bg-red-500 rounded-full animate-pulse" />}
-                      <span>{statusInfo.title}</span>
-                      <Badge variant={statusInfo.color === "blue" ? "default" : statusInfo.color === "green" ? "outline" : "secondary"} className={
-                        statusInfo.color === "blue" ? "bg-blue-100 text-blue-700" :
-                        statusInfo.color === "green" ? "bg-green-100 text-green-700 border-green-200" :
-                        statusInfo.color === "red" ? "bg-red-100 text-red-700" : ""
-                      }>
-                        {sessionData.status === "upcoming" ? "Ready" : 
-                         sessionData.status === "confirmed" ? "Confirmed" :
-                         sessionData.status === "ongoing" ? "Live" : "Ready"}
-                      </Badge>
-                    </>
-                  )
-                })()} 
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-gray-300 mb-4">
-                {getSessionStatusInfo().message}
-              </p>
-            </CardContent>
-          </Card>
-
-          {/* Session Details */}
-          <Card className="bg-gray-800 border-gray-700">
-            <CardHeader>
-              <CardTitle className="text-lg text-white">Session Details</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
+              
               <div className="flex items-center space-x-3">
                 <Avatar className="h-12 w-12">
-                  <AvatarImage src={sessionData.otherParticipant.profilePictureUrl} />
-                  <AvatarFallback>
-                    {sessionData.otherParticipant.firstName[0]}
-                    {sessionData.otherParticipant.lastName[0]}
+                  <AvatarImage src={otherParticipant.profilePictureUrl || ""} />
+                  <AvatarFallback className="bg-slate-700 text-slate-200">
+                    {getInitials(otherParticipant.firstName, otherParticipant.lastName)}
                   </AvatarFallback>
                 </Avatar>
                 <div>
-                  <p className="font-medium text-white">
-                    {sessionData.otherParticipant.firstName} {sessionData.otherParticipant.lastName}
-                  </p>
-                  <p className="text-sm text-gray-300">
-                    {sessionData.otherParticipant.title || `Your ${otherRole}`}
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex items-center space-x-2">
-                  <Clock className="h-4 w-4 text-gray-400" />
-                  <span className="text-sm text-gray-300">
-                    {new Date(sessionData.scheduledDate).toLocaleString()}
-                  </span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Users className="h-4 w-4 text-gray-400" />
-                  <span className="text-sm text-gray-300">{sessionData.durationMinutes} minutes</span>
-                </div>
-              </div>
-
-              {/* Prominent Session Countdown */}
-              <div className="mt-4 p-4 bg-gray-900/50 border border-gray-600/50 rounded-lg">
-                <SessionCountdown
-                  sessionDate={sessionData.scheduledDate}
-                  status={sessionData.status}
-                  showJoinButton={true}
-                  className="justify-center"
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Participant Status */}
-          <Card className="bg-gray-800 border-gray-700">
-            <CardHeader>
-              <CardTitle className="text-lg text-white">Participants</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-white">You</span>
-                <Badge variant={sessionData.isReconnection ? "secondary" : "default"} 
-                       className={sessionData.isReconnection ? "bg-orange-100 text-orange-700" : "bg-green-600"}>
-                  {sessionData.isReconnection ? (
-                    <>
-                      <AlertCircle className="h-3 w-3 mr-1" />
-                      Reconnecting
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle className="h-3 w-3 mr-1" />
-                      Ready
-                    </>
-                  )}
-                </Badge>
-              </div>
-              
-              {sessionData.isReconnection && sessionData.previouslyLeftAt && (
-                <div className="text-xs text-orange-600 bg-orange-50 p-2 rounded">
-                  Connection lost at {new Date(sessionData.previouslyLeftAt).toLocaleTimeString()}. 
-                  Click "Reconnect" to rejoin the session.
-                </div>
-              )}
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-white">
-                  {sessionData.otherParticipant.firstName}
-                </span>
-                <Badge variant={otherParticipantJoined ? "default" : "secondary"}>
-                  {otherParticipantJoined ? (
-                    <>
-                      <CheckCircle className="h-3 w-3 mr-1" />
-                      Joined
-                    </>
-                  ) : (
-                    <>
-                      <Clock className="h-3 w-3 mr-1" />
-                      Waiting
-                    </>
-                  )}
-                </Badge>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Join Button */}
-          <Card className="bg-gray-800 border-gray-700">
-            <CardContent className="pt-6">
-              <Button
-                onClick={handleJoinSession}
-                disabled={(!canJoinWaitingRoom() && !canEnterVideoCall()) || connectionStatus !== "ready" || isJoining || (hasJoinedSession && !canEnterVideoCall())}
-                className="w-full h-12 text-lg font-semibold"
-                size="lg"
-              >
-                {isJoining ? (
-                  <>
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                    Joining...
-                  </>
-                ) : hasJoinedSession ? (
-                  <>
-                    <Video className="h-5 w-5 mr-2" />
-                    Enter Room
-                  </>
-                ) : (
-                  <>
-                    <Video className="h-5 w-5 mr-2" />
-                    {sessionData.isReconnection ? "Reconnect to Session" : 
-                     canEnterVideoCall() ? "Join Video Call" :
-                     sessionData.status === "ongoing" ? "Join Ongoing Session" :
-                     sessionData.status === "upcoming" ? "Enter Waiting Room" : "Join Session"}
-                  </>
-                )}
-              </Button>
-              
-              {!canJoinWaitingRoom() && !hasJoinedSession && (
-                <p className="text-sm text-gray-400 text-center mt-2">
-                  {sessionData.status === "upcoming" 
-                    ? "Join window opens 30 minutes before the scheduled time"
-                    : "You can join 30 minutes before the scheduled time"}
-                </p>
-              )}
-              
-              {hasJoinedSession && !canEnterVideoCall() && (
-                <p className="text-sm text-green-600 text-center mt-2">
-                  ✅ You're in the waiting room! The session will start automatically when the countdown reaches zero.
-                </p>
-              )}
-              
-              {hasJoinedSession && canEnterVideoCall() && (
-                <p className="text-sm text-blue-400 text-center mt-2">
-                  🚀 Session time has arrived! Click "Enter Room" to join the video call.
-                </p>
-              )}
-              
-              {sessionData.status === "upcoming" && canJoinNow() && (
-                <div className="bg-blue-900/20 border border-blue-600/30 rounded-lg p-3 mt-2">
-                  <div className="flex items-center space-x-2 text-blue-400">
-                    <AlertCircle className="h-4 w-4" />
-                    <span className="text-sm font-medium">Session is ready!</span>
+                  <div className="font-medium text-white">
+                    {otherParticipant.firstName} {otherParticipant.lastName}
                   </div>
-                  <p className="text-xs text-blue-300 mt-1">
-                    You can now join the session. The video call will start at the scheduled time.
-                  </p>
+                  <div className="text-sm text-slate-400">{otherParticipant.title}</div>
+                  <div className="flex items-center space-x-2 mt-1">
+                    {otherUserStatus === "joined" && (
+                      <>
+                        <div className="w-2 h-2 bg-green-500 rounded-full" />
+                        <span className="text-xs text-green-400">Online</span>
+                      </>
+                    )}
+                    {otherUserStatus === "not_joined" && (
+                      <>
+                        <div className="w-2 h-2 bg-gray-500 rounded-full" />
+                        <span className="text-xs text-slate-400">Not joined yet</span>
+                      </>
+                    )}
+                    {otherUserStatus === "unknown" && (
+                      <>
+                        <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
+                        <span className="text-xs text-yellow-400">Checking status...</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3 text-sm">
+              <div className="flex justify-between">
+                <span className="text-slate-400">Session Time</span>
+                <span className="text-white">{formatSessionTime()}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Duration</span>
+                <span className="text-white">{sessionData.durationMinutes} minutes</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Status</span>
+                <Badge 
+                  variant={sessionData.status === "ongoing" ? "default" : "secondary"}
+                  className={
+                    sessionData.status === "ongoing" 
+                      ? "bg-green-600 text-white" 
+                      : "bg-slate-700 text-slate-200"
+                  }
+                >
+                  {sessionData.status}
+                </Badge>
+              </div>
+            </div>
+          </div>
+
+          <Separator className="bg-slate-700" />
+
+          <div className="space-y-4">
+            {renderJoinButton()}
+            
+            <div className="text-center space-y-2">
+              <p className="text-sm text-slate-400">
+                {isSessionStarted 
+                  ? "Your session is ready! Click above to join the video call."
+                  : "Use the media test above to prepare for your session."
+                }
+              </p>
+              {!isSessionStarted && (
+                <div className="flex items-center justify-center space-x-2">
+                  <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" />
+                  <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }} />
+                  <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
                 </div>
               )}
-            </CardContent>
-          </Card>
-
-          {/* Device Testing */}
-          <Card className="bg-gray-800 border-gray-700">
-            <CardHeader>
-              <CardTitle className="text-lg flex items-center gap-2 text-white">
-                <Settings className="h-5 w-5" />
-                Device Check
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <DeviceTester 
-                onTestComplete={(result) => {
-                  if (result.success) {
-                    setConnectionStatus("ready")
-                  } else {
-                    setConnectionStatus("error")
-                    if (result.error?.includes("device in use")) {
-                      toast.error("Camera/microphone in use. Try using OBS Virtual Camera for testing.")
-                    }
-                  }
-                }}
-              />
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }

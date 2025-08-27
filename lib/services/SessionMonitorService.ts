@@ -110,12 +110,29 @@ export class SessionMonitorService {
         .where(
           and(
             eq(bookingSessions.status, 'pending'),
-            lt(bookingSessions.expiresAt, now)
+            lt(bookingSessions.expiresAt, now),
+            // Prevent reprocessing already handled bookings
+            isNull(bookingSessions.refundProcessedAt)
           )
         )
 
       for (const booking of expiredBookings) {
         await db.transaction(async (tx) => {
+          // Double-check booking hasn't been processed by another instance
+          const [currentBooking] = await tx
+            .select({ 
+              status: bookingSessions.status, 
+              refundProcessedAt: bookingSessions.refundProcessedAt 
+            })
+            .from(bookingSessions)
+            .where(eq(bookingSessions.id, booking.id))
+            .limit(1)
+
+          if (currentBooking.status !== 'pending' || currentBooking.refundProcessedAt) {
+            console.log(`[SESSION_MONITOR] Booking ${booking.id} already processed, skipping`)
+            return
+          }
+
           // Update booking status
           await tx
             .update(bookingSessions)
@@ -150,24 +167,26 @@ export class SessionMonitorService {
           }
 
           // Send notifications
-          await tx.insert(notifications).values([
-            {
-              userId: booking.learner!.userId,
-              type: 'booking_expired',
-              title: 'Booking Expired',
-              message: `Your booking has expired as the mentor did not respond within 24 hours. You have been refunded ${booking.escrowCredits} credits.`,
-              relatedEntityType: 'session',
-              relatedEntityId: booking.id,
-            },
-            {
-              userId: booking.mentor!.userId,
-              type: 'booking_expired',
-              title: 'Booking Request Expired',
-              message: 'A booking request has expired due to no response. Please respond promptly to future booking requests.',
-              relatedEntityType: 'session',
-              relatedEntityId: booking.id,
-            }
-          ])
+          if (booking.learner && booking.mentor) {
+            await tx.insert(notifications).values([
+              {
+                userId: booking.learner.userId,
+                type: 'booking_expired',
+                title: 'Booking Expired',
+                message: `Your booking has expired as the mentor did not respond within 24 hours. You have been refunded ${booking.escrowCredits} credits.`,
+                relatedEntityType: 'session',
+                relatedEntityId: booking.id,
+              },
+              {
+                userId: booking.mentor.userId,
+                type: 'booking_expired',
+                title: 'Booking Request Expired',
+                message: 'A booking request has expired due to no response. Please respond promptly to future booking requests.',
+                relatedEntityType: 'session',
+                relatedEntityId: booking.id,
+              }
+            ])
+          }
         })
 
         this.stats.expiredBookings++
@@ -190,6 +209,7 @@ export class SessionMonitorService {
           mentorId: bookingSessions.mentorId,
           startTime: bookingSessions.startTime,
           escrowCredits: bookingSessions.escrowCredits,
+          refundProcessedAt: bookingSessions.refundProcessedAt,
           learner: {
             id: learners.id,
             userId: learners.userId,
@@ -206,12 +226,27 @@ export class SessionMonitorService {
         .where(
           and(
             eq(bookingSessions.status, 'pending'),
-            lt(bookingSessions.startTime, now) // Start time has passed
+            lt(bookingSessions.startTime, now),
+            isNull(bookingSessions.refundProcessedAt) // Prevent duplicate processing
           )
         )
 
       for (const booking of pendingAtStartTime) {
         await db.transaction(async (tx) => {
+          // Double-check booking hasn't been processed
+          const [currentBooking] = await tx
+            .select({ 
+              status: bookingSessions.status, 
+              refundProcessedAt: bookingSessions.refundProcessedAt 
+            })
+            .from(bookingSessions)
+            .where(eq(bookingSessions.id, booking.id))
+            .limit(1)
+
+          if (currentBooking.status !== 'pending' || currentBooking.refundProcessedAt) {
+            return
+          }
+
           // Update booking status to mentor_no_response
           await tx
             .update(bookingSessions)
@@ -246,24 +281,26 @@ export class SessionMonitorService {
           }
 
           // Send notifications
-          await tx.insert(notifications).values([
-            {
-              userId: booking.learner!.userId,
-              type: 'session_cancelled',
-              title: 'Session Cancelled - No Mentor Response',
-              message: `Your session was cancelled as the mentor did not respond by the start time. You have been refunded ${booking.escrowCredits} credits.`,
-              relatedEntityType: 'session',
-              relatedEntityId: booking.id,
-            },
-            {
-              userId: booking.mentor!.userId,
-              type: 'session_missed',
-              title: 'Session Missed - No Response',
-              message: 'You missed a session by not responding to the booking request before the start time. Please respond promptly to future requests.',
-              relatedEntityType: 'session',
-              relatedEntityId: booking.id,
-            }
-          ])
+          if (booking.learner && booking.mentor) {
+            await tx.insert(notifications).values([
+              {
+                userId: booking.learner.userId,
+                type: 'session_cancelled',
+                title: 'Session Cancelled - No Mentor Response',
+                message: `Your session was cancelled as the mentor did not respond by the start time. You have been refunded ${booking.escrowCredits} credits.`,
+                relatedEntityType: 'session',
+                relatedEntityId: booking.id,
+              },
+              {
+                userId: booking.mentor.userId,
+                type: 'session_missed',
+                title: 'Session Missed - No Response',
+                message: 'You missed a session by not responding to the booking request before the start time. Please respond promptly to future requests.',
+                relatedEntityType: 'session',
+                relatedEntityId: booking.id,
+              }
+            ])
+          }
         })
 
         this.stats.expiredBookings++
@@ -309,6 +346,7 @@ export class SessionMonitorService {
   private async detectNoShows(): Promise<void> {
     try {
       const now = new Date()
+      const fifteenMinutesAgo = new Date(now.getTime() - 15 * 60 * 1000) // 15 minutes grace period
       
       // Find sessions past their grace period (15 minutes after start)
       const potentialNoShows = await db
@@ -323,6 +361,8 @@ export class SessionMonitorService {
           mentorJoinedAt: bookingSessions.mentorJoinedAt,
           learnerLeftAt: bookingSessions.learnerLeftAt,
           mentorLeftAt: bookingSessions.mentorLeftAt,
+          noShowCheckedAt: bookingSessions.noShowCheckedAt,
+          status: bookingSessions.status,
           learner: {
             id: learners.id,
             userId: learners.userId,
@@ -339,8 +379,11 @@ export class SessionMonitorService {
         .leftJoin(mentors, eq(bookingSessions.mentorId, mentors.id))
         .where(
           and(
-            or(eq(bookingSessions.status, 'confirmed'), eq(bookingSessions.status, 'upcoming')),
-            lt(sql`${bookingSessions.startTime} + INTERVAL '15 minutes'`, now),
+            or(
+              eq(bookingSessions.status, 'confirmed'), 
+              eq(bookingSessions.status, 'upcoming')
+            ),
+            lt(bookingSessions.startTime, fifteenMinutesAgo),
             isNull(bookingSessions.noShowCheckedAt) // Only process once
           )
         )
@@ -369,26 +412,28 @@ export class SessionMonitorService {
     learnerLeftAt: Date | null
     mentorLeftAt: Date | null
   }): 'both_no_show' | 'mentor_no_show' | 'learner_no_show' | null {
-    // Check if users actually joined the session (not just briefly connected and left)
+    // Check if users actually joined the session meaningfully
     const learnerJoined = !!session.learnerJoinedAt
     const mentorJoined = !!session.mentorJoinedAt
     
     // Consider minimum connection time to avoid marking brief connections as "joined"
     const minConnectionTimeMs = 30 * 1000 // 30 seconds minimum connection
-    const learnerConnectedLongEnough = learnerJoined && (
+    
+    const learnerConnectedMeaningfully = learnerJoined && (
       !session.learnerLeftAt || 
       (session.learnerLeftAt.getTime() - session.learnerJoinedAt!.getTime()) >= minConnectionTimeMs
     )
-    const mentorConnectedLongEnough = mentorJoined && (
+    
+    const mentorConnectedMeaningfully = mentorJoined && (
       !session.mentorLeftAt || 
       (session.mentorLeftAt.getTime() - session.mentorJoinedAt!.getTime()) >= minConnectionTimeMs
     )
 
-    if (!learnerConnectedLongEnough && !mentorConnectedLongEnough) {
+    if (!learnerConnectedMeaningfully && !mentorConnectedMeaningfully) {
       return 'both_no_show'
-    } else if (learnerConnectedLongEnough && !mentorConnectedLongEnough) {
+    } else if (learnerConnectedMeaningfully && !mentorConnectedMeaningfully) {
       return 'mentor_no_show'
-    } else if (!learnerConnectedLongEnough && mentorConnectedLongEnough) {
+    } else if (!learnerConnectedMeaningfully && mentorConnectedMeaningfully) {
       return 'learner_no_show'
     }
     
@@ -408,6 +453,22 @@ export class SessionMonitorService {
       await db.transaction(async (tx) => {
         const now = new Date()
 
+        // Double-check session hasn't been processed already
+        const [currentSession] = await tx
+          .select({ 
+            status: bookingSessions.status,
+            noShowCheckedAt: bookingSessions.noShowCheckedAt
+          })
+          .from(bookingSessions)
+          .where(eq(bookingSessions.id, session.id))
+          .limit(1)
+
+        if (currentSession.status !== null && (currentSession.noShowCheckedAt || 
+            ['completed', 'cancelled', 'both_no_show', 'mentor_no_show', 'learner_no_show'].includes(currentSession.status))) {
+          console.log(`[SESSION_MONITOR] Session ${session.id} already processed, skipping no-show`)
+          return
+        }
+
         // Update session status
         await tx
           .update(bookingSessions)
@@ -421,76 +482,80 @@ export class SessionMonitorService {
         // Handle financial processing based on no-show type
         if (noShowType === 'both_no_show' || noShowType === 'mentor_no_show') {
           // Refund learner 100%
-          await tx
-            .update(learners)
-            .set({ 
-              creditsBalance: session.learner!.creditsBalance + session.escrowCredits 
-            })
-            .where(eq(learners.id, session.learnerId))
+          if (session.learner && session.escrowCredits > 0) {
+            await tx
+              .update(learners)
+              .set({ 
+                creditsBalance: session.learner.creditsBalance + session.escrowCredits 
+              })
+              .where(eq(learners.id, session.learnerId))
 
-          // Update session with refund info
-          await tx
-            .update(bookingSessions)
-            .set({
-              refundAmount: session.escrowCredits,
-              refundProcessedAt: now,
-            })
-            .where(eq(bookingSessions.id, session.id))
+            // Update session with refund info
+            await tx
+              .update(bookingSessions)
+              .set({
+                refundAmount: session.escrowCredits,
+                refundProcessedAt: now,
+              })
+              .where(eq(bookingSessions.id, session.id))
 
-          // Record refund transaction
-          await tx.insert(creditTransactions).values({
-            userId: session.learner!.userId,
-            type: 'session_refund',
-            direction: 'credit',
-            amount: session.escrowCredits,
-            balanceBefore: session.learner!.creditsBalance,
-            balanceAfter: session.learner!.creditsBalance + session.escrowCredits,
-            relatedSessionId: session.id,
-            description: `Refund for session #${session.id} due to ${noShowType}`,
-            metadata: { noShowType },
-          })
+            // Record refund transaction
+            await tx.insert(creditTransactions).values({
+              userId: session.learner.userId,
+              type: 'session_refund',
+              direction: 'credit',
+              amount: session.escrowCredits,
+              balanceBefore: session.learner.creditsBalance,
+              balanceAfter: session.learner.creditsBalance + session.escrowCredits,
+              relatedSessionId: session.id,
+              description: `Refund for session #${session.id} due to ${noShowType}`,
+              metadata: { noShowType },
+            })
+          }
 
         } else if (noShowType === 'learner_no_show') {
           // Pay mentor 100% as compensation for showing up
-          await tx
-            .update(mentors)
-            .set({ 
-              creditsBalance: session.mentor!.creditsBalance + session.totalCostCredits 
+          if (session.mentor && session.totalCostCredits > 0) {
+            await tx
+              .update(mentors)
+              .set({ 
+                creditsBalance: session.mentor.creditsBalance + session.totalCostCredits 
+              })
+              .where(eq(mentors.id, session.mentorId))
+
+            // Record mentor payout (100% due to learner no-show)
+            await tx.insert(mentorPayouts).values({
+              mentorId: session.mentorId,
+              sessionId: session.id,
+              earnedCredits: session.totalCostCredits,
+              platformFeeCredits: 0,
+              feePercentage: 0,
+              status: 'released',
+              releasedAt: now,
             })
-            .where(eq(mentors.id, session.mentorId))
 
-          // Record mentor payout (100% due to learner no-show)
-          await tx.insert(mentorPayouts).values({
-            mentorId: session.mentorId,
-            sessionId: session.id,
-            earnedCredits: session.totalCostCredits,
-            platformFeeCredits: 0,
-            feePercentage: 0,
-            status: 'released',
-            releasedAt: now,
-          })
-
-          // Record credit transaction
-          await tx.insert(creditTransactions).values({
-            userId: session.mentor!.userId,
-            type: 'session_payment',
-            direction: 'credit',
-            amount: session.totalCostCredits,
-            balanceBefore: session.mentor!.creditsBalance,
-            balanceAfter: session.mentor!.creditsBalance + session.totalCostCredits,
-            relatedSessionId: session.id,
-            description: `Compensation for session #${session.id} (learner no-show)`,
-            metadata: { noShowType },
-          })
+            // Record credit transaction
+            await tx.insert(creditTransactions).values({
+              userId: session.mentor.userId,
+              type: 'session_payment',
+              direction: 'credit',
+              amount: session.totalCostCredits,
+              balanceBefore: session.mentor.creditsBalance,
+              balanceAfter: session.mentor.creditsBalance + session.totalCostCredits,
+              relatedSessionId: session.id,
+              description: `Compensation for session #${session.id} (learner no-show)`,
+              metadata: { noShowType },
+            })
+          }
         }
 
         // Send appropriate notifications
         const notificationData = []
         
-        if (noShowType === 'both_no_show') {
+        if (noShowType === 'both_no_show' && session.learner && session.mentor) {
           notificationData.push(
             {
-              userId: session.learner!.userId,
+              userId: session.learner.userId,
               type: 'session_no_show',
               title: 'Session No-Show',
               message: `Your session was cancelled due to both parties not joining. You have been refunded ${session.escrowCredits} credits.`,
@@ -498,7 +563,7 @@ export class SessionMonitorService {
               relatedEntityId: session.id,
             },
             {
-              userId: session.mentor!.userId,
+              userId: session.mentor.userId,
               type: 'session_no_show',
               title: 'Session No-Show',
               message: 'The session was cancelled as neither party joined within the grace period.',
@@ -506,10 +571,10 @@ export class SessionMonitorService {
               relatedEntityId: session.id,
             }
           )
-        } else if (noShowType === 'mentor_no_show') {
+        } else if (noShowType === 'mentor_no_show' && session.learner && session.mentor) {
           notificationData.push(
             {
-              userId: session.learner!.userId,
+              userId: session.learner.userId,
               type: 'session_no_show',
               title: 'Mentor No-Show',
               message: `Your mentor did not join the session. You have been fully refunded ${session.escrowCredits} credits.`,
@@ -517,7 +582,7 @@ export class SessionMonitorService {
               relatedEntityId: session.id,
             },
             {
-              userId: session.mentor!.userId,
+              userId: session.mentor.userId,
               type: 'session_no_show',
               title: 'Session Missed',
               message: 'You missed your scheduled session. Please be punctual for future sessions.',
@@ -525,10 +590,10 @@ export class SessionMonitorService {
               relatedEntityId: session.id,
             }
           )
-        } else if (noShowType === 'learner_no_show') {
+        } else if (noShowType === 'learner_no_show' && session.learner && session.mentor) {
           notificationData.push(
             {
-              userId: session.learner!.userId,
+              userId: session.learner.userId,
               type: 'session_no_show',
               title: 'Session Missed',
               message: 'You missed your scheduled session and have been charged. Please join sessions on time.',
@@ -536,7 +601,7 @@ export class SessionMonitorService {
               relatedEntityId: session.id,
             },
             {
-              userId: session.mentor!.userId,
+              userId: session.mentor.userId,
               type: 'session_no_show',
               title: 'Session Compensation',
               message: `You have been compensated ${session.totalCostCredits} credits for the learner's no-show.`,
@@ -546,15 +611,19 @@ export class SessionMonitorService {
           )
         }
 
-        await tx.insert(notifications).values(notificationData)
+        if (notificationData.length > 0) {
+          await tx.insert(notifications).values(notificationData)
+        }
       })
 
       // Broadcast force disconnect to remove any participants still in the room
-      await broadcastForceDisconnect(
-        session.id,
-        `Session ended due to ${noShowType.replace('_', ' ')}`,
-        [session.learner!.userId, session.mentor!.userId]
-      )
+      if (session.learner && session.mentor) {
+        await broadcastForceDisconnect(
+          session.id,
+          `Session ended due to ${noShowType.replace('_', ' ')}`,
+          [session.learner.userId, session.mentor.userId]
+        )
+      }
 
       console.log(`[SESSION_MONITOR] Processed ${noShowType} for session ${session.id}`)
 
@@ -575,6 +644,7 @@ export class SessionMonitorService {
           mentorId: bookingSessions.mentorId,
           endTime: bookingSessions.endTime,
           totalCostCredits: bookingSessions.totalCostCredits,
+          status: bookingSessions.status,
           learner: {
             id: learners.id,
             userId: learners.userId,
@@ -597,6 +667,18 @@ export class SessionMonitorService {
 
       for (const session of sessionsToComplete) {
         await db.transaction(async (tx) => {
+          // Double-check session is still ongoing
+          const [currentSession] = await tx
+            .select({ status: bookingSessions.status })
+            .from(bookingSessions)
+            .where(eq(bookingSessions.id, session.id))
+            .limit(1)
+
+          if (currentSession.status !== 'ongoing') {
+            console.log(`[SESSION_MONITOR] Session ${session.id} no longer ongoing, skipping completion`)
+            return
+          }
+
           const completionTime = new Date()
 
           // Update session status
@@ -609,76 +691,82 @@ export class SessionMonitorService {
             .where(eq(bookingSessions.id, session.id))
 
           // Pay mentor (80%) and platform fee (20%)
-          const mentorEarnings = Math.floor(session.totalCostCredits * 0.8)
-          const platformFee = session.totalCostCredits - mentorEarnings
+          if (session.mentor && session.totalCostCredits > 0) {
+            const mentorEarnings = Math.floor(session.totalCostCredits * 0.8)
+            const platformFee = session.totalCostCredits - mentorEarnings
 
-          // Add credits to mentor balance
-          await tx
-            .update(mentors)
-            .set({ 
-              creditsBalance: session.mentor!.creditsBalance + mentorEarnings 
+            // Add credits to mentor balance
+            await tx
+              .update(mentors)
+              .set({ 
+                creditsBalance: session.mentor.creditsBalance + mentorEarnings 
+              })
+              .where(eq(mentors.id, session.mentorId))
+
+            // Record mentor payout
+            await tx.insert(mentorPayouts).values({
+              mentorId: session.mentorId,
+              sessionId: session.id,
+              earnedCredits: mentorEarnings,
+              platformFeeCredits: platformFee,
+              feePercentage: 20,
+              status: 'released',
+              releasedAt: completionTime,
             })
-            .where(eq(mentors.id, session.mentorId))
 
-          // Record mentor payout
-          await tx.insert(mentorPayouts).values({
-            mentorId: session.mentorId,
-            sessionId: session.id,
-            earnedCredits: mentorEarnings,
-            platformFeeCredits: platformFee,
-            feePercentage: 20,
-            status: 'released',
-            releasedAt: completionTime,
-          })
-
-          // Record credit transaction
-          await tx.insert(creditTransactions).values({
-            userId: session.mentor!.userId,
-            type: 'session_payment',
-            direction: 'credit',
-            amount: mentorEarnings,
-            balanceBefore: session.mentor!.creditsBalance,
-            balanceAfter: session.mentor!.creditsBalance + mentorEarnings,
-            relatedSessionId: session.id,
-            description: `Payment for completed session #${session.id}`,
-            metadata: { 
-              platformFee, 
-              originalAmount: session.totalCostCredits,
-              completedBy: 'system_timer'
-            },
-          })
+            // Record credit transaction
+            await tx.insert(creditTransactions).values({
+              userId: session.mentor.userId,
+              type: 'session_payment',
+              direction: 'credit',
+              amount: mentorEarnings,
+              balanceBefore: session.mentor.creditsBalance,
+              balanceAfter: session.mentor.creditsBalance + mentorEarnings,
+              relatedSessionId: session.id,
+              description: `Payment for completed session #${session.id}`,
+              metadata: { 
+                platformFee, 
+                originalAmount: session.totalCostCredits,
+                completedBy: 'system_timer'
+              },
+            })
+          }
 
           // Send notifications
-          await tx.insert(notifications).values([
-            {
-              userId: session.mentor!.userId,
-              type: 'session_completed',
-              title: 'Session Completed!',
-              message: `Your session has been completed. You earned ${mentorEarnings} credits.`,
-              relatedEntityType: 'session',
-              relatedEntityId: session.id,
-            },
-            {
-              userId: session.learner!.userId,
-              type: 'session_completed',
-              title: 'Session Completed!',
-              message: 'Your session has been completed. Please rate your mentor!',
-              relatedEntityType: 'session',
-              relatedEntityId: session.id,
-            }
-          ])
+          if (session.learner && session.mentor) {
+            await tx.insert(notifications).values([
+              {
+                userId: session.mentor.userId,
+                type: 'session_completed',
+                title: 'Session Completed!',
+                message: `Your session has been completed. You earned ${Math.floor(session.totalCostCredits * 0.8)} credits.`,
+                relatedEntityType: 'session',
+                relatedEntityId: session.id,
+              },
+              {
+                userId: session.learner.userId,
+                type: 'session_completed',
+                title: 'Session Completed!',
+                message: 'Your session has been completed. Please rate your mentor!',
+                relatedEntityType: 'session',
+                relatedEntityId: session.id,
+              }
+            ])
+          }
         })
 
         // Broadcast session termination
-        await broadcastSessionUpdate(
-          session.id,
-          'session_terminated',
-          { 
-            reason: 'Session time ended',
-            completedBy: 'system_timer'
-          },
-          [session.learner!.userId, session.mentor!.userId]
-        )
+        if (session.learner && session.mentor) {
+          await broadcastSessionUpdate(
+            session.id,
+            'session_terminated',
+            { 
+              reason: 'Session time ended',
+              completedBy: 'system_timer'
+            },
+            [session.learner.userId, session.mentor.userId]
+          )
+        }
 
         this.stats.sessionsCompleted++
         console.log(`[SESSION_MONITOR] Auto-completed session ${session.id}`)
@@ -693,24 +781,26 @@ export class SessionMonitorService {
       const now = new Date()
       const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000)
       
-      // Find sessions stuck in 'upcoming' status for more than 1 hour
+      // Find sessions stuck in 'upcoming' status for more than 1 hour past start time
       const stuckSessions = await db
         .select({
           id: bookingSessions.id,
           startTime: bookingSessions.startTime,
           endTime: bookingSessions.endTime,
+          status: bookingSessions.status,
+          noShowCheckedAt: bookingSessions.noShowCheckedAt,
         })
         .from(bookingSessions)
         .where(
           and(
             eq(bookingSessions.status, 'upcoming'),
-            lt(bookingSessions.startTime, oneHourAgo)
+            lt(bookingSessions.startTime, oneHourAgo),
+            isNull(bookingSessions.noShowCheckedAt) // Only handle if not already processed for no-show
           )
         )
 
       for (const session of stuckSessions) {
         // If session is past its end time, mark as no-show
-        // If still within session time, continue monitoring
         if (now > new Date(session.endTime!)) {
           await db
             .update(bookingSessions)

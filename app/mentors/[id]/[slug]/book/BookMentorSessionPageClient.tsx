@@ -105,8 +105,8 @@ export default function BookMentorSessionPageClient({ session }: Props) {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>()
   const [selectedSkillId, setSelectedSkillId] = useState<number | null>(null)
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<TimeSlot | null>(null)
-  const [durationHours, setDurationHours] = useState(0)
-  const [durationMinutes, setDurationMinutes] = useState(30)
+  const [durationHours, setDurationHours] = useState(1)
+  const [durationMinutes, setDurationMinutes] = useState(0)
   const [sessionNotes, setSessionNotes] = useState("")
   const [estimatedCost, setEstimatedCost] = useState<number | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -147,8 +147,6 @@ export default function BookMentorSessionPageClient({ session }: Props) {
 
   useEffect(() => {
     if (mentor) {
-      setSelectedDate(undefined)
-      setSelectedTimeSlot(null)
       if (mentor.skills && mentor.skills.length > 0 && !selectedSkillId) {
         setSelectedSkillId(mentor.skills[0].id)
       }
@@ -315,7 +313,7 @@ export default function BookMentorSessionPageClient({ session }: Props) {
 
   useEffect(() => {
     setSelectedTimeSlot(null)
-  }, [selectedDate, durationHours, durationMinutes])
+  }, [selectedDate])
 
   const computeMaxDurationMinutes = () => {
     if (!selectedTimeSlot || !mentor || !selectedDate) return 0
@@ -600,9 +598,7 @@ export default function BookMentorSessionPageClient({ session }: Props) {
                                 </SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value="0">0m</SelectItem>
-                                  <SelectItem value="15">15m</SelectItem>
                                   <SelectItem value="30">30m</SelectItem>
-                                  <SelectItem value="45">45m</SelectItem>
                                 </SelectContent>
                               </Select>
                             </div>

@@ -69,11 +69,11 @@ export function MentorSessionsClient({ sessions }: MentorSessionsClientProps) {
     return {
       all: sessions,
       pending: sessions.filter(session => session.status === 'pending'),
-      upcoming: sessions.filter(session => 
-        ['confirmed', 'upcoming'].includes(session.status) && 
-        session.startTime && 
-        isFuture(new Date(session.startTime))
-      ),
+      upcoming: sessions.filter(session => {
+        if (!['confirmed', 'upcoming'].includes(session.status)) return false
+        const dateToCheck = session.startTime || session.scheduledDate
+        return dateToCheck && isFuture(new Date(dateToCheck))
+      }),
       ongoing: sessions.filter(session => session.status === 'ongoing'),
       completed: sessions.filter(session => 
         ['completed', 'technical_issues'].includes(session.status)
@@ -282,9 +282,6 @@ export function MentorSessionsClient({ sessions }: MentorSessionsClientProps) {
               </p>
               <div className="flex items-center space-x-2 mt-1">
                 <Badge variant="outline">{session.skillName}</Badge>
-                <span className="text-sm text-gray-500">
-                  {session.skillRatePerHour} credits/hour
-                </span>
               </div>
             </div>
           </div>
@@ -308,24 +305,26 @@ export function MentorSessionsClient({ sessions }: MentorSessionsClientProps) {
             <Calendar className="w-4 h-4 text-gray-500" />
             <span>
               {session.startTime 
-                ? `Start: ${format(new Date(session.startTime), "MMM dd, yyyy 'at' h:mm a")}`
-                : format(new Date(session.scheduledDate), "MMM dd, yyyy")}
+                ? `Date: ${format(new Date(session.startTime), "MMM dd, yyyy")}`
+                : `Date: ${format(new Date(session.scheduledDate), "MMM dd, yyyy")}`}
             </span>
           </div>
           <div className="flex items-center space-x-2">
             <Clock className="w-4 h-4 text-gray-500" />
             <span>
-              {session.endTime 
-                ? `End: ${format(new Date(session.endTime), "h:mm a")}`
-                : `${session.durationMinutes} minutes`}
+              {session.startTime && session.endTime
+                ? `Time: ${format(new Date(session.startTime), "h:mm a")} - ${format(new Date(session.endTime), "h:mm a")}`
+                : session.startTime
+                ? `Start Time: ${format(new Date(session.startTime), "h:mm a")}`
+                : `Duration: ${session.durationMinutes} minutes`}
             </span>
           </div>
           <div className="flex items-center space-x-2">
             <CreditCard className="w-4 h-4 text-gray-500" />
-            <span>{session.totalCostCredits} credits</span>
+            <span>Total Cost: {session.totalCostCredits} credits</span>
             {session.refundAmount && (
               <Badge variant="secondary" className="ml-2">
-                Refunded: {session.refundAmount}
+                Refunded: {session.refundAmount} credits
               </Badge>
             )}
           </div>

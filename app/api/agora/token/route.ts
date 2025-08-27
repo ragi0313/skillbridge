@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
     })
 
     // Allow confirmed, upcoming, and ongoing sessions to generate tokens
-    if (!["confirmed", "upcoming", "ongoing"].includes(sessionData.status)) {
+    if (sessionData.status !== null && !["confirmed", "upcoming", "ongoing"].includes(sessionData.status)) {
       console.log(`[ERROR] Invalid session status for token generation: ${sessionData.status}`)
       return NextResponse.json({ error: `Session status '${sessionData.status}' is not ready for video call` }, { status: 400 })
     }

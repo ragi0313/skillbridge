@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
-import { db } from "@/db"
-import { bookingSessions, learners, mentors, users } from "@/db/schema"
-import { eq } from "drizzle-orm"
 import { getSession } from "@/lib/auth/getSession"
+import { sessionTerminationService } from "@/lib/services/SessionTerminationService"
 import { broadcastForceDisconnect } from "../../../sse/session-updates/route"
 
 export async function POST(
@@ -19,87 +17,19 @@ export async function POST(
     const { sessionId } = await params
     const sessionIdNum = parseInt(sessionId)
 
-    // Get session details
-    const booking = await db
-      .select({
-        id: bookingSessions.id,
-        learnerId: bookingSessions.learnerId,
-        mentorId: bookingSessions.mentorId,
-        status: bookingSessions.status,
-        totalCostCredits: bookingSessions.totalCostCredits,
-        escrowCredits: bookingSessions.escrowCredits,
-        learner: {
-          id: learners.id,
-          userId: learners.userId,
-          creditsBalance: learners.creditsBalance,
-        },
-        mentor: {
-          id: mentors.id,
-          userId: mentors.userId,
-        },
-      })
-      .from(bookingSessions)
-      .leftJoin(learners, eq(bookingSessions.learnerId, learners.id))
-      .leftJoin(mentors, eq(bookingSessions.mentorId, mentors.id))
-      .where(eq(bookingSessions.id, sessionIdNum))
-      .limit(1)
+    // Use the termination service to handle force disconnect
+    const result = await sessionTerminationService.forceDisconnectSession(sessionIdNum, reason)
 
-    if (!booking.length) {
-      return NextResponse.json({ error: "Session not found" }, { status: 404 })
-    }
-
-    const sessionData = booking[0]
-
-    // Only allow force disconnect for active sessions
-    if (!['confirmed', 'upcoming', 'ongoing'].includes(sessionData.status)) {
-      return NextResponse.json({ 
-        error: `Cannot force disconnect session with status: ${sessionData.status}` 
-      }, { status: 400 })
-    }
-
-    // Update session status and process refund
-    await db.transaction(async (tx) => {
-      const now = new Date()
-
-      // Cancel the session
-      await tx
-        .update(bookingSessions)
-        .set({
-          status: 'cancelled',
-          cancelledBy: 'admin',
-          cancellationReason: reason,
-          cancelledAt: now,
-          agoraCallEndedAt: now,
-          refundAmount: sessionData.escrowCredits,
-          refundProcessedAt: now,
-        })
-        .where(eq(bookingSessions.id, sessionIdNum))
-
-      // Refund learner
-      if (sessionData.learner && sessionData.escrowCredits > 0) {
-        await tx
-          .update(learners)
-          .set({ 
-            creditsBalance: sessionData.learner.creditsBalance + sessionData.escrowCredits 
-          })
-          .where(eq(learners.id, sessionData.learnerId))
-      }
-    })
-
-    // Broadcast force disconnect to both participants
-    await broadcastForceDisconnect(
-      sessionIdNum,
-      reason,
-      [sessionData.learner!.userId, sessionData.mentor!.userId]
-    )
-
-    console.log(`[ADMIN_FORCE_DISCONNECT] Session ${sessionIdNum} force disconnected by admin: ${reason}`)
+    // Broadcast force disconnect to participants
+    // Note: We would need user IDs to broadcast, this is handled in the service
+    console.log(`Force disconnect result:`, result)
 
     return NextResponse.json({
       success: true,
       message: "Session force disconnected successfully",
       sessionId: sessionIdNum,
-      reason
+      reason,
+      result
     })
 
   } catch (error) {

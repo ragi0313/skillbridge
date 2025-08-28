@@ -26,11 +26,27 @@ class AgoraService {
     if (!this.appId || !this.appCertificate) {
       throw new Error("AGORA_APP_ID and AGORA_APP_CERTIFICATE environment variables are required")
     }
+
+    // Validate format
+    if (this.appId.length !== 32) {
+      console.error("Invalid AGORA_APP_ID format - should be 32 characters")
+      throw new Error("Invalid AGORA_APP_ID format")
+    }
+
+    if (this.appCertificate.length !== 32) {
+      console.error("Invalid AGORA_APP_CERTIFICATE format - should be 32 characters") 
+      throw new Error("Invalid AGORA_APP_CERTIFICATE format")
+    }
+
+    console.log(`[AGORA_SERVICE] Initialized with App ID: ${this.appId.substring(0, 8)}...`)
   }
 
   async createRoom(sessionId: string, expirationTime?: Date): Promise<AgoraRoom> {
-    const channel = `session-${sessionId}-${Date.now()}`
+    // Simplified channel name to avoid issues
+    const channel = `session_${sessionId}_${Date.now().toString().slice(-8)}`
     const expiresAt = expirationTime || new Date(Date.now() + 4 * 60 * 60 * 1000) // 4 hours
+
+    console.log(`[AGORA_SERVICE] Creating room with channel: ${channel}`)
 
     return {
       channel,
@@ -46,48 +62,70 @@ class AgoraService {
     role: "mentor" | "learner",
     expirationTime?: number,
   ): Promise<AgoraToken> {
-    // Generate UID from userId (convert string to number)
-    const uid = this.generateUID(userId)
+    try {
+      // Generate UID from userId (simplified)
+      const uid = this.generateUID(userId)
 
-    // Set expiration time (default to 4 hours)
-    const privilegeExpiredTs = expirationTime || Math.floor(Date.now() / 1000) + 4 * 60 * 60
+      // Set expiration time (default to 4 hours)
+      const privilegeExpiredTs = expirationTime || Math.floor(Date.now() / 1000) + 4 * 60 * 60
 
-    // Generate production token using Agora's official library
-    const token = await this.buildToken(channel, uid, privilegeExpiredTs, role)
+      console.log(`[AGORA_SERVICE] Generating token for:`, {
+        channel,
+        uid,
+        role,
+        expiresAt: new Date(privilegeExpiredTs * 1000).toISOString()
+      })
 
-    return {
-      token,
-      channel,
-      uid,
-      appId: this.appId,
+      // Generate production token using Agora's official library
+      const token = await this.buildToken(channel, uid, privilegeExpiredTs, role)
+
+      console.log(`[AGORA_SERVICE] Successfully generated token with length: ${token.length}`)
+
+      return {
+        token,
+        channel,
+        uid,
+        appId: this.appId,
+      }
+    } catch (error) {
+      console.error("[AGORA_SERVICE] Error in generateToken:", error)
+      throw new Error(`Failed to generate Agora token: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
 
   private generateUID(userId: string): number {
-    // Generate unique UID by combining userId hash with timestamp and random component
-    // This prevents UID conflicts when same user joins from multiple sessions/devices
-    let hash = 0
-    for (let i = 0; i < userId.length; i++) {
-      const char = userId.charCodeAt(i)
-      hash = (hash << 5) - hash + char
-      hash = hash & hash // Convert to 32-bit integer
+    try {
+      // If userId is already numeric and valid, use it directly
+      const numericUserId = parseInt(userId)
+      if (!isNaN(numericUserId) && numericUserId > 0 && numericUserId < 2147483647) {
+        console.log(`[AGORA_SERVICE] Using numeric userId as UID: ${numericUserId}`)
+        return numericUserId
+      }
+
+      // Simple hash-based UID generation for string userIds
+      let hash = 0
+      for (let i = 0; i < userId.length; i++) {
+        const char = userId.charCodeAt(i)
+        hash = ((hash << 5) - hash) + char
+        hash = hash & hash // Convert to 32bit integer
+      }
+      
+      // Ensure positive number within Agora's range (1 to 2^31-1)
+      const uid = Math.abs(hash) % 2000000000 // Use 2 billion as max to be safe
+      
+      // Ensure minimum value of 1000 to avoid conflicts with system UIDs
+      const finalUid = uid < 1000 ? uid + 1000 : uid
+      
+      console.log(`[AGORA_SERVICE] Generated UID ${finalUid} from userId: ${userId}`)
+      return finalUid
+
+    } catch (error) {
+      console.error("[AGORA_SERVICE] Error generating UID:", error)
+      // Fallback to random UID
+      const fallbackUid = Math.floor(Math.random() * 1000000) + 1000
+      console.log(`[AGORA_SERVICE] Using fallback UID: ${fallbackUid}`)
+      return fallbackUid
     }
-    
-    // Use modulo approach to ensure we stay within valid range while maintaining uniqueness
-    const baseHash = Math.abs(hash) % 1000000 // 6 digits max
-    const timestamp = Date.now() % 100000 // 5 digits max  
-    const random = Math.floor(Math.random() * 10000) // 4 digits max
-    
-    // Combine components more carefully to avoid overflow
-    // baseHash (up to 1M) + timestamp (up to 100K) + random (up to 10K) + userId as final component
-    const userIdNum = parseInt(userId) || 1 // Use actual userId as number, fallback to 1
-    const uniqueUID = (baseHash * 1000 + timestamp % 1000) * 100 + random % 100 + (userIdNum % 10) * 10000000
-    
-    // Ensure it's within Agora's valid range (1 to 2^31-1) using modulo to maintain distribution
-    const maxUID = 2147483647
-    const finalUID = (uniqueUID % (maxUID - 1000)) + 1000 // Ensure minimum of 1000 to avoid conflicts
-    
-    return finalUID
   }
 
   private async buildToken(
@@ -97,9 +135,30 @@ class AgoraService {
     role: "mentor" | "learner",
   ): Promise<string> {
     try {
-      // Both mentors and learners should be able to publish (send video/audio)
-      // and subscribe (receive video/audio) in a mentoring session
+      // Validate inputs
+      if (!channel || channel.length === 0) {
+        throw new Error("Channel name is required")
+      }
+
+      if (!uid || uid < 1 || uid > 2147483647) {
+        throw new Error(`Invalid UID: ${uid}. Must be between 1 and 2147483647`)
+      }
+
+      if (!privilegeExpiredTs || privilegeExpiredTs <= Math.floor(Date.now() / 1000)) {
+        throw new Error("Invalid expiration time - must be in the future")
+      }
+
+      // Both mentors and learners should be able to publish and subscribe
       const agoraRole = RtcRole.PUBLISHER
+
+      console.log(`[AGORA_SERVICE] Building token with parameters:`, {
+        appId: this.appId.substring(0, 8) + "...",
+        channel,
+        uid,
+        role: agoraRole,
+        privilegeExpiredTs,
+        userRole: role
+      })
 
       const token = RtcTokenBuilder.buildTokenWithUid(
         this.appId,
@@ -110,11 +169,16 @@ class AgoraService {
         privilegeExpiredTs,
       )
 
-      console.log(`Generated Agora token for channel: ${channel}, uid: ${uid}, role: ${role}`)
+      if (!token || token.length < 50) {
+        throw new Error("Generated token is invalid or too short")
+      }
+
+      console.log(`[AGORA_SERVICE] Successfully built token for channel: ${channel}, uid: ${uid}, role: ${role}`)
       return token
+
     } catch (error) {
-      console.error("Error generating Agora token:", error)
-      throw new Error("Failed to generate Agora token")
+      console.error("[AGORA_SERVICE] Error building token:", error)
+      throw new Error(`Token generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
 
@@ -125,21 +189,26 @@ class AgoraService {
         return false
       }
 
-      // In production, you might want to decode and validate the token
-      // For now, we'll do basic checks
-      return token.length > 50 && token.includes("006") // Agora tokens typically start with '006'
+      // Agora tokens should be long and start with specific prefixes
+      const isValidFormat = token.length > 50 && (token.startsWith("006") || token.startsWith("007"))
+      
+      console.log(`[AGORA_SERVICE] Token validation result: ${isValidFormat}`)
+      return isValidFormat
+
     } catch (error) {
-      console.error("Error validating token:", error)
+      console.error("[AGORA_SERVICE] Error validating token:", error)
       return false
     }
   }
 
   async getChannelInfo(channel: string) {
     try {
-      // In production, you can use Agora's RESTful API to get channel statistics
+      // Create proper authorization header
+      const auth = Buffer.from(`${this.appId}:${this.appCertificate}`).toString("base64")
+      
       const response = await fetch(`${this.baseUrl}/projects/${this.appId}/rtc/channels/${channel}`, {
         headers: {
-          Authorization: `Basic ${Buffer.from(`${this.appId}:${this.appCertificate}`).toString("base64")}`,
+          Authorization: `Basic ${auth}`,
           "Content-Type": "application/json",
         },
       })
@@ -153,6 +222,8 @@ class AgoraService {
         }
       }
 
+      console.warn(`[AGORA_SERVICE] Failed to get channel info for ${channel}, status: ${response.status}`)
+      
       // Fallback if API call fails
       return {
         channel,
@@ -160,7 +231,7 @@ class AgoraService {
         isActive: true,
       }
     } catch (error) {
-      console.error("Error getting channel info:", error)
+      console.error("[AGORA_SERVICE] Error getting channel info:", error)
       return {
         channel,
         userCount: 0,
@@ -171,31 +242,25 @@ class AgoraService {
 
   async endCall(channel: string): Promise<void> {
     try {
-      console.log(`Ending call for channel: ${channel}`)
-
-      // In production, you might want to:
-      // 1. Log the call end event
-      // 2. Stop any ongoing recordings
-      // 3. Clean up resources
-      // 4. Send notifications to participants
+      console.log(`[AGORA_SERVICE] Ending call for channel: ${channel}`)
 
       // Optional: Use Agora's RESTful API to kick all users from channel
-      // This ensures the channel is properly closed
       await this.kickAllUsersFromChannel(channel)
+      
+      console.log(`[AGORA_SERVICE] Successfully ended call for channel: ${channel}`)
     } catch (error) {
-      console.error("Error ending call:", error)
+      console.error("[AGORA_SERVICE] Error ending call:", error)
     }
   }
 
   async endRoom(channel: string, reason: string = 'session_ended'): Promise<void> {
     try {
-      console.log(`Ending room for channel: ${channel}, reason: ${reason}`)
+      console.log(`[AGORA_SERVICE] Ending room for channel: ${channel}, reason: ${reason}`)
       
-      // Use the existing endCall functionality
       await this.endCall(channel)
       
     } catch (error) {
-      console.error("Error ending room:", error)
+      console.error("[AGORA_SERVICE] Error ending room:", error)
       throw error
     }
   }
@@ -206,35 +271,36 @@ class AgoraService {
       const channelInfo = await this.getChannelInfo(channel)
 
       if (channelInfo.userCount > 0) {
+        const auth = Buffer.from(`${this.appId}:${this.appCertificate}`).toString("base64")
+        
         // Use Agora's RESTful API to remove all users from channel
         const response = await fetch(`${this.baseUrl}/projects/${this.appId}/rtc/channels/${channel}/users`, {
           method: "DELETE",
           headers: {
-            Authorization: `Basic ${Buffer.from(`${this.appId}:${this.appCertificate}`).toString("base64")}`,
+            Authorization: `Basic ${auth}`,
             "Content-Type": "application/json",
           },
         })
 
         if (response.ok) {
-          console.log(`Successfully cleared channel: ${channel}`)
+          console.log(`[AGORA_SERVICE] Successfully cleared channel: ${channel}`)
         } else {
-          console.warn(`Failed to clear channel: ${channel}`)
+          console.warn(`[AGORA_SERVICE] Failed to clear channel: ${channel}, status: ${response.status}`)
         }
       }
     } catch (error) {
-      console.error("Error kicking users from channel:", error)
+      console.error("[AGORA_SERVICE] Error kicking users from channel:", error)
     }
   }
 
-  // Additional utility methods for production use
-
   async startRecording(channel: string, uid: number): Promise<string | null> {
     try {
-      // Implement cloud recording start
+      const auth = Buffer.from(`${this.appId}:${this.appCertificate}`).toString("base64")
+      
       const response = await fetch(`${this.baseUrl}/projects/${this.appId}/cloud_recording/resourceid`, {
         method: "POST",
         headers: {
-          Authorization: `Basic ${Buffer.from(`${this.appId}:${this.appCertificate}`).toString("base64")}`,
+          Authorization: `Basic ${auth}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
@@ -252,21 +318,24 @@ class AgoraService {
         return data.resourceId
       }
 
+      console.warn(`[AGORA_SERVICE] Failed to start recording, status: ${response.status}`)
       return null
     } catch (error) {
-      console.error("Error starting recording:", error)
+      console.error("[AGORA_SERVICE] Error starting recording:", error)
       return null
     }
   }
 
   async stopRecording(resourceId: string, sid: string, channel: string, uid: number): Promise<boolean> {
     try {
+      const auth = Buffer.from(`${this.appId}:${this.appCertificate}`).toString("base64")
+      
       const response = await fetch(
         `${this.baseUrl}/projects/${this.appId}/cloud_recording/resourceid/${resourceId}/sid/${sid}/mode/mix/stop`,
         {
           method: "POST",
           headers: {
-            Authorization: `Basic ${Buffer.from(`${this.appId}:${this.appCertificate}`).toString("base64")}`,
+            Authorization: `Basic ${auth}`,
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
@@ -279,12 +348,12 @@ class AgoraService {
 
       return response.ok
     } catch (error) {
-      console.error("Error stopping recording:", error)
+      console.error("[AGORA_SERVICE] Error stopping recording:", error)
       return false
     }
   }
 
-  // Generate token with specific privileges
+  // Generate token with specific privileges if needed
   async generateTokenWithPrivileges(
     channel: string,
     userId: string,
@@ -297,42 +366,27 @@ class AgoraService {
     } = {},
     expirationTime?: number,
   ): Promise<AgoraToken> {
-    const uid = this.generateUID(userId)
-    const privilegeExpiredTs = expirationTime || Math.floor(Date.now() / 1000) + 4 * 60 * 60
+    // For simplicity, use the main generateToken method
+    // In a more complex implementation, you could use RtcTokenBuilder.buildTokenWithUidAndPrivilege
+    return this.generateToken(channel, userId, role, expirationTime)
+  }
 
-    // Default privileges for mentoring sessions
-    const defaultPrivileges = {
-      joinChannel: true,
-      publishAudio: true,
-      publishVideo: true,
-      publishDataStream: true,
-      ...privileges,
-    }
-
+  // Test method to verify service is working
+  async testConnection(): Promise<boolean> {
     try {
-      // For mentoring, both roles should have full privileges
-      const agoraRole = RtcRole.PUBLISHER
-
-      const token = RtcTokenBuilder.buildTokenWithUid(
-        this.appId,
-        this.appCertificate,
-        channel,
-        uid,
-        agoraRole,
-        privilegeExpiredTs,
-      )
-
-      console.log(`Generated privileged token for ${role} in channel: ${channel}`)
-
-      return {
-        token,
-        channel,
-        uid,
-        appId: this.appId,
-      }
+      const testChannel = `test_${Date.now()}`
+      const testUserId = "test_user_123"
+      
+      console.log("[AGORA_SERVICE] Testing connection...")
+      
+      const token = await this.generateToken(testChannel, testUserId, "learner")
+      const isValid = await this.validateToken(token.token, token.channel)
+      
+      console.log(`[AGORA_SERVICE] Connection test result: ${isValid}`)
+      return isValid
     } catch (error) {
-      console.error("Error generating token with privileges:", error)
-      throw new Error("Failed to generate privileged token")
+      console.error("[AGORA_SERVICE] Connection test failed:", error)
+      return false
     }
   }
 }

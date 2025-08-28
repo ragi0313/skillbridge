@@ -1,7 +1,8 @@
 import { db } from "@/db"
 import { bookingSessions, learners, mentors, creditTransactions, mentorPayouts, notifications } from "@/db/schema"
-import { eq, and, or, lt, isNull, sql } from "drizzle-orm"
+import { eq, and, or, lt, isNull, gt } from "drizzle-orm"
 import { broadcastSessionUpdate, broadcastForceDisconnect } from "@/app/api/sse/session-updates/route"
+import { sessionCompletionService } from './SessionCompletionService'
 
 export class SessionMonitorService {
   private static instance: SessionMonitorService
@@ -72,6 +73,7 @@ export class SessionMonitorService {
       await this.processExpiredBookings()
       await this.processPendingAtStartTime()
       await this.updateToUpcomingStatus()
+      await this.updateConfirmedToOngoing()
       await this.detectNoShows()
       await this.completeSessionsAtEndTime()
       await this.handleStuckSessions()
@@ -343,12 +345,59 @@ export class SessionMonitorService {
     }
   }
 
+  private async updateConfirmedToOngoing(): Promise<void> {
+    try {
+      const now = new Date()
+      
+      // Find confirmed or upcoming sessions that should be marked as ongoing 
+      // (both users have joined and session time has arrived)
+      const sessionsToUpdate = await db
+        .select({
+          id: bookingSessions.id,
+          startTime: bookingSessions.startTime,
+          learnerJoinedAt: bookingSessions.learnerJoinedAt,
+          mentorJoinedAt: bookingSessions.mentorJoinedAt,
+          status: bookingSessions.status,
+        })
+        .from(bookingSessions)
+        .where(
+          and(
+            or(
+              eq(bookingSessions.status, 'confirmed'),
+              eq(bookingSessions.status, 'upcoming')
+            ),
+            lt(bookingSessions.startTime, now)
+          )
+        )
+
+      for (const session of sessionsToUpdate) {
+        const bothUsersJoined = session.learnerJoinedAt !== null && session.mentorJoinedAt !== null
+        
+        if (bothUsersJoined) {
+          // Both users have joined and session time has arrived - mark as ongoing
+          await db
+            .update(bookingSessions)
+            .set({ 
+              status: 'ongoing',
+              agoraCallStartedAt: now
+            })
+            .where(eq(bookingSessions.id, session.id))
+
+          console.log(`[SESSION_MONITOR] Updated session ${session.id} to ongoing status (both users joined)`)
+        }
+      }
+    } catch (error) {
+      console.error('[SESSION_MONITOR] Error updating confirmed sessions to ongoing:', error)
+    }
+  }
+
   private async detectNoShows(): Promise<void> {
     try {
       const now = new Date()
       const fifteenMinutesAgo = new Date(now.getTime() - 15 * 60 * 1000) // 15 minutes grace period
+      const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000) // Don't check sessions older than 2 hours
       
-      // Find sessions past their grace period (15 minutes after start)
+      // OPTIMIZED: Find sessions past their grace period with time range filtering
       const potentialNoShows = await db
         .select({
           id: bookingSessions.id,
@@ -381,15 +430,36 @@ export class SessionMonitorService {
           and(
             or(
               eq(bookingSessions.status, 'confirmed'), 
-              eq(bookingSessions.status, 'upcoming')
+              eq(bookingSessions.status, 'upcoming'),
+              eq(bookingSessions.status, 'ongoing') // Include ongoing sessions for no-show check
             ),
             lt(bookingSessions.startTime, fifteenMinutesAgo),
+            gt(bookingSessions.startTime, twoHoursAgo), // OPTIMIZATION: Don't check very old sessions
             isNull(bookingSessions.noShowCheckedAt) // Only process once
           )
         )
 
       for (const session of potentialNoShows) {
-        const noShowType = this.determineNoShowType(session)
+        // Skip if session is ongoing and users are still active
+        if (session.status === 'ongoing') {
+          const learnerStillInSession = session.learnerJoinedAt && !session.learnerLeftAt
+          const mentorStillInSession = session.mentorJoinedAt && !session.mentorLeftAt
+          
+          // If either user is still in the session, don't mark as no-show yet
+          if (learnerStillInSession || mentorStillInSession) {
+            console.log(`[SESSION_MONITOR] Skipping no-show check for ongoing session ${session.id} - users still active`)
+            continue
+          }
+        }
+
+        const noShowType = this.determineNoShowType({
+          learnerJoinedAt: session.learnerJoinedAt,
+          mentorJoinedAt: session.mentorJoinedAt,
+          learnerLeftAt: session.learnerLeftAt,
+          mentorLeftAt: session.mentorLeftAt,
+          startTime: session.startTime
+        })
+        
         if (noShowType) {
           await this.processNoShow(session, noShowType)
           this.stats.noShowsDetected++
@@ -411,33 +481,64 @@ export class SessionMonitorService {
     mentorJoinedAt: Date | null
     learnerLeftAt: Date | null
     mentorLeftAt: Date | null
+    startTime: Date
   }): 'both_no_show' | 'mentor_no_show' | 'learner_no_show' | null {
     // Check if users actually joined the session meaningfully
     const learnerJoined = !!session.learnerJoinedAt
     const mentorJoined = !!session.mentorJoinedAt
     
-    // Consider minimum connection time to avoid marking brief connections as "joined"
+    // Minimum connection time to avoid marking brief connections as "joined"
     const minConnectionTimeMs = 30 * 1000 // 30 seconds minimum connection
+    const now = new Date()
     
-    const learnerConnectedMeaningfully = learnerJoined && (
-      !session.learnerLeftAt || 
-      (session.learnerLeftAt.getTime() - session.learnerJoinedAt!.getTime()) >= minConnectionTimeMs
-    )
+    // Calculate actual connection duration for learner
+    let learnerConnectionTime = 0
+    if (learnerJoined) {
+      const endTime = session.learnerLeftAt || now
+      learnerConnectionTime = endTime.getTime() - session.learnerJoinedAt!.getTime()
+    }
     
-    const mentorConnectedMeaningfully = mentorJoined && (
-      !session.mentorLeftAt || 
-      (session.mentorLeftAt.getTime() - session.mentorJoinedAt!.getTime()) >= minConnectionTimeMs
-    )
+    // Calculate actual connection duration for mentor
+    let mentorConnectionTime = 0
+    if (mentorJoined) {
+      const endTime = session.mentorLeftAt || now
+      mentorConnectionTime = endTime.getTime() - session.mentorJoinedAt!.getTime()
+    }
+    
+    // Determine if connections were meaningful
+    const learnerConnectedMeaningfully = learnerJoined && learnerConnectionTime >= minConnectionTimeMs
+    const mentorConnectedMeaningfully = mentorJoined && mentorConnectionTime >= minConnectionTimeMs
+    
+    // Additional check: if someone joined significantly after session start (>5 min late)
+    // and connected for less than 2 minutes, consider it not meaningful
+    const sessionStartTime = session.startTime.getTime()
+    const maxLateJoinMs = 5 * 60 * 1000 // 5 minutes
+    const minConnectionForLateJoinMs = 2 * 60 * 1000 // 2 minutes
+    
+    let learnerTooLateAndShort = false
+    let mentorTooLateAndShort = false
+    
+    if (learnerJoined && session.learnerJoinedAt!.getTime() > (sessionStartTime + maxLateJoinMs)) {
+      learnerTooLateAndShort = learnerConnectionTime < minConnectionForLateJoinMs
+    }
+    
+    if (mentorJoined && session.mentorJoinedAt!.getTime() > (sessionStartTime + maxLateJoinMs)) {
+      mentorTooLateAndShort = mentorConnectionTime < minConnectionForLateJoinMs
+    }
+    
+    // Override meaningful connection if they were too late and didn't stay long
+    const learnerActuallyConnected = learnerConnectedMeaningfully && !learnerTooLateAndShort
+    const mentorActuallyConnected = mentorConnectedMeaningfully && !mentorTooLateAndShort
 
-    if (!learnerConnectedMeaningfully && !mentorConnectedMeaningfully) {
+    if (!learnerActuallyConnected && !mentorActuallyConnected) {
       return 'both_no_show'
-    } else if (learnerConnectedMeaningfully && !mentorConnectedMeaningfully) {
+    } else if (learnerActuallyConnected && !mentorActuallyConnected) {
       return 'mentor_no_show'
-    } else if (!learnerConnectedMeaningfully && mentorConnectedMeaningfully) {
+    } else if (!learnerActuallyConnected && mentorActuallyConnected) {
       return 'learner_no_show'
     }
     
-    return null // Both joined and connected for sufficient time
+    return null // Both joined and connected meaningfully
   }
 
   private async processNoShow(session: {
@@ -636,14 +737,21 @@ export class SessionMonitorService {
     try {
       const now = new Date()
       
-      // Find ongoing sessions that have reached their end time
+      // Find ongoing sessions that have reached their ACTUAL end time
       const sessionsToComplete = await db
         .select({
           id: bookingSessions.id,
           learnerId: bookingSessions.learnerId,
           mentorId: bookingSessions.mentorId,
           endTime: bookingSessions.endTime,
+          startTime: bookingSessions.startTime, // Add this for validation
           totalCostCredits: bookingSessions.totalCostCredits,
+          learnerJoinedAt: bookingSessions.learnerJoinedAt,
+          mentorJoinedAt: bookingSessions.mentorJoinedAt,
+          learnerLeftAt: bookingSessions.learnerLeftAt,
+          mentorLeftAt: bookingSessions.mentorLeftAt,
+          learnerConnectionDurationMs: bookingSessions.learnerConnectionDurationMs,
+          mentorConnectionDurationMs: bookingSessions.mentorConnectionDurationMs,
           status: bookingSessions.status,
           learner: {
             id: learners.id,
@@ -661,120 +769,57 @@ export class SessionMonitorService {
         .where(
           and(
             eq(bookingSessions.status, 'ongoing'),
-            lt(bookingSessions.endTime, now)
+            lt(bookingSessions.endTime, now) // Only sessions that have ACTUALLY ended
           )
         )
 
+      console.log(`[SESSION_MONITOR] Found ${sessionsToComplete.length} sessions that have reached their end time`)
+
       for (const session of sessionsToComplete) {
-        await db.transaction(async (tx) => {
-          // Double-check session is still ongoing
-          const [currentSession] = await tx
-            .select({ status: bookingSessions.status })
-            .from(bookingSessions)
-            .where(eq(bookingSessions.id, session.id))
-            .limit(1)
-
-          if (currentSession.status !== 'ongoing') {
-            console.log(`[SESSION_MONITOR] Session ${session.id} no longer ongoing, skipping completion`)
-            return
-          }
-
-          const completionTime = new Date()
-
-          // Update session status
-          await tx
-            .update(bookingSessions)
-            .set({
-              status: 'completed',
-              agoraCallEndedAt: completionTime,
-            })
-            .where(eq(bookingSessions.id, session.id))
-
-          // Pay mentor (80%) and platform fee (20%)
-          if (session.mentor && session.totalCostCredits > 0) {
-            const mentorEarnings = Math.floor(session.totalCostCredits * 0.8)
-            const platformFee = session.totalCostCredits - mentorEarnings
-
-            // Add credits to mentor balance
-            await tx
-              .update(mentors)
-              .set({ 
-                creditsBalance: session.mentor.creditsBalance + mentorEarnings 
-              })
-              .where(eq(mentors.id, session.mentorId))
-
-            // Record mentor payout
-            await tx.insert(mentorPayouts).values({
-              mentorId: session.mentorId,
-              sessionId: session.id,
-              earnedCredits: mentorEarnings,
-              platformFeeCredits: platformFee,
-              feePercentage: 20,
-              status: 'released',
-              releasedAt: completionTime,
-            })
-
-            // Record credit transaction
-            await tx.insert(creditTransactions).values({
-              userId: session.mentor.userId,
-              type: 'session_payment',
-              direction: 'credit',
-              amount: mentorEarnings,
-              balanceBefore: session.mentor.creditsBalance,
-              balanceAfter: session.mentor.creditsBalance + mentorEarnings,
-              relatedSessionId: session.id,
-              description: `Payment for completed session #${session.id}`,
-              metadata: { 
-                platformFee, 
-                originalAmount: session.totalCostCredits,
-                completedBy: 'system_timer'
-              },
-            })
-          }
-
-          // Send notifications
-          if (session.learner && session.mentor) {
-            await tx.insert(notifications).values([
-              {
-                userId: session.mentor.userId,
-                type: 'session_completed',
-                title: 'Session Completed!',
-                message: `Your session has been completed. You earned ${Math.floor(session.totalCostCredits * 0.8)} credits.`,
-                relatedEntityType: 'session',
-                relatedEntityId: session.id,
-              },
-              {
-                userId: session.learner.userId,
-                type: 'session_completed',
-                title: 'Session Completed!',
-                message: 'Your session has been completed. Please rate your mentor!',
-                relatedEntityType: 'session',
-                relatedEntityId: session.id,
-              }
-            ])
-          }
-        })
-
-        // Broadcast session termination
-        if (session.learner && session.mentor) {
-          await broadcastSessionUpdate(
-            session.id,
-            'session_terminated',
-            { 
-              reason: 'Session time ended',
-              completedBy: 'system_timer'
-            },
-            [session.learner.userId, session.mentor.userId]
-          )
+        // CRITICAL: Double-check that the session has actually reached its end time
+        const sessionEndTime = new Date(session.endTime!)
+        if (now < sessionEndTime) {
+          console.log(`[SESSION_MONITOR] Skipping session ${session.id} - end time not reached yet (${sessionEndTime.toISOString()} vs ${now.toISOString()})`)
+          continue
         }
 
-        this.stats.sessionsCompleted++
-        console.log(`[SESSION_MONITOR] Auto-completed session ${session.id}`)
+        try {
+          // Use unified completion service instead of duplicate logic
+          const completionResult = await sessionCompletionService.completeSession({
+            sessionId: session.id,
+            reason: 'time_expired',
+            completedBy: 'system_timer'
+          })
+
+          if (completionResult.success && !completionResult.alreadyCompleted) {
+            console.log(`[SESSION_MONITOR] Auto-completed session ${session.id} at scheduled end time`)
+            this.stats.sessionsCompleted++
+
+            // Broadcast session termination
+            if (session.learner && session.mentor) {
+              await broadcastSessionUpdate(
+                session.id,
+                'session_terminated',
+                { 
+                  reason: 'Scheduled session time ended',
+                  completedBy: 'system_timer',
+                  completedAt: new Date().toISOString()
+                },
+                [session.learner.userId, session.mentor.userId]
+              )
+            }
+          }
+        } catch (error) {
+          console.error(`[SESSION_MONITOR] Error auto-completing session ${session.id}:`, error)
+        }
+
+        // No additional logic needed - completion service handles everything
       }
     } catch (error) {
       console.error('[SESSION_MONITOR] Error completing sessions at end time:', error)
     }
   }
+  
 
   private async handleStuckSessions(): Promise<void> {
     try {

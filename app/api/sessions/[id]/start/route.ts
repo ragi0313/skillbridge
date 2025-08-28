@@ -23,53 +23,68 @@ export async function POST(
     }
 
     const result = await db.transaction(async (tx) => {
-      // Get session and verify user authorization
-      const sessionQuery = await tx
+      // Get session with row-level locking using Drizzle's proper syntax
+      const sessionRecords = await tx
         .select({
-          session: bookingSessions,
-          learner: learners,
-          mentor: mentors,
+          // Session fields
+          id: bookingSessions.id,
+          status: bookingSessions.status,
+          startTime: bookingSessions.startTime,
+          endTime: bookingSessions.endTime,
+          learnerJoinedAt: bookingSessions.learnerJoinedAt,
+          mentorJoinedAt: bookingSessions.mentorJoinedAt,
+          learnerLeftAt: bookingSessions.learnerLeftAt,
+          mentorLeftAt: bookingSessions.mentorLeftAt,
+          agoraChannelName: bookingSessions.agoraChannelName,
+          agoraCallStartedAt: bookingSessions.agoraCallStartedAt,
+          // User IDs for authorization
+          learnerUserId: learners.userId,
+          mentorUserId: mentors.userId,
         })
         .from(bookingSessions)
         .leftJoin(learners, eq(bookingSessions.learnerId, learners.id))
         .leftJoin(mentors, eq(bookingSessions.mentorId, mentors.id))
         .where(eq(bookingSessions.id, sessionId))
+        .for('update') // FOR UPDATE lock
         .limit(1)
 
-      if (sessionQuery.length === 0) {
+      if (sessionRecords.length === 0) {
         throw new Error('Session not found')
       }
 
-      const { session: sessionData, learner, mentor } = sessionQuery[0]
-      const userId = session.id
+      const sessionRecord = sessionRecords[0]
       
       // Check if user is authorized
-      const isAuthorized = learner?.userId === userId || mentor?.userId === userId
+      const userId = session.id
+      const isAuthorized = sessionRecord.learnerUserId === userId || sessionRecord.mentorUserId === userId
       
       if (!isAuthorized) {
         throw new Error('Unauthorized')
       }
 
-      // Check if session can be started
-      if (sessionData.status === 'ongoing') {
+      // Check if session is already ongoing
+      if (sessionRecord.status === 'ongoing') {
+        console.log(`[SESSION_START] Session ${sessionId} already ongoing`)
         return { 
           success: true, 
           message: 'Session already ongoing',
-          agoraChannelName: sessionData.agoraChannelName,
+          agoraChannelName: sessionRecord.agoraChannelName,
           alreadyOngoing: true
         }
       }
 
-      if (sessionData.status !== null && !['confirmed', 'upcoming'].includes(sessionData.status)) {
-        throw new Error(`Session cannot be started (status: ${sessionData.status})`)
+      // Check if session can be started - only allow confirmed/upcoming
+      if (sessionRecord.status !== null && !['confirmed', 'upcoming'].includes(sessionRecord.status)) {
+        console.log(`[SESSION_START] Cannot start session ${sessionId} with status: ${sessionRecord.status}`)
+        throw new Error(`Session cannot be started (status: ${sessionRecord.status})`)
       }
 
       const now = new Date()
-      const sessionStart = new Date(sessionData.startTime)
+      const sessionStart = new Date(sessionRecord.startTime)
       
-      // Only allow starting if we're within reasonable time of session start (30 min before to 15 min after)
-      const earliestStart = new Date(sessionStart.getTime() - 30 * 60 * 1000)
-      const latestStart = new Date(sessionStart.getTime() + 15 * 60 * 1000)
+      // Only allow starting if we're within reasonable time of session start
+      const earliestStart = new Date(sessionStart.getTime() - 30 * 60 * 1000) // 30 min before
+      const latestStart = new Date(sessionStart.getTime() + 15 * 60 * 1000)   // 15 min after
       
       if (now < earliestStart) {
         throw new Error('Session cannot be started yet. Please wait until 30 minutes before the scheduled time.')
@@ -80,19 +95,36 @@ export async function POST(
       }
 
       // Create Agora channel if not exists
-      let agoraChannelName = sessionData.agoraChannelName
+      let agoraChannelName = sessionRecord.agoraChannelName
       let channelCreated = false
       
       if (!agoraChannelName) {
-        const agoraRoom = await agoraService.createRoom(sessionId.toString(), new Date(sessionData.endTime))
-        agoraChannelName = agoraRoom.channel
-        channelCreated = true
+        try {
+          console.log(`[SESSION_START] Creating Agora room for session ${sessionId}`)
+          const agoraRoom = await agoraService.createRoom(sessionId.toString(), new Date(sessionRecord.endTime))
+          agoraChannelName = agoraRoom.channel
+          channelCreated = true
+        } catch (error) {
+          console.error('[SESSION_START] Error creating Agora room:', error)
+          throw new Error('Failed to create video room. Please try again.')
+        }
       }
 
-      // Update session to ongoing
+      // Check current join status properly - both users must be joined AND not left
+      const learnerCurrentlyInSession = sessionRecord.learnerJoinedAt !== null && sessionRecord.learnerLeftAt === null
+      const mentorCurrentlyInSession = sessionRecord.mentorJoinedAt !== null && sessionRecord.mentorLeftAt === null
+      const bothUsersJoined = learnerCurrentlyInSession && mentorCurrentlyInSession
+      
+      console.log(`[SESSION_START] Session ${sessionId} status:`)
+      console.log(`  - Current status: ${sessionRecord.status}`)
+      console.log(`  - Learner in session: ${learnerCurrentlyInSession}`)
+      console.log(`  - Mentor in session: ${mentorCurrentlyInSession}`)
+      console.log(`  - Both users joined: ${bothUsersJoined}`)
+      console.log(`  - Session time reached: ${now >= sessionStart}`)
+      console.log(`  - Call already started: ${!!sessionRecord.agoraCallStartedAt}`)
+      
+      // Prepare update data
       const updateData: any = {
-        status: 'ongoing',
-        agoraCallStartedAt: now,
         agoraChannelName: agoraChannelName,
       }
       
@@ -100,26 +132,81 @@ export async function POST(
         updateData.agoraChannelCreatedAt = now
       }
 
+      // Only set to ongoing if both users are actually in session AND it's session time
+      if (bothUsersJoined && now >= sessionStart && !sessionRecord.agoraCallStartedAt) {
+        // Both users have joined and are still in session - start the call
+        updateData.status = 'ongoing'
+        updateData.agoraCallStartedAt = now
+        console.log(`[SESSION_START] Both users active and time reached, setting status to 'ongoing' for session ${sessionId}`)
+      } else {
+        // Either not both users or not time yet - keep as upcoming but create channel
+        updateData.status = 'upcoming'
+        console.log(`[SESSION_START] Session prepared but waiting for conditions: bothUsers=${bothUsersJoined}, timeReached=${now >= sessionStart}, notStarted=${!sessionRecord.agoraCallStartedAt}`)
+      }
+
       await tx
         .update(bookingSessions)
         .set(updateData)
         .where(eq(bookingSessions.id, sessionId))
 
+      const sessionStarted = bothUsersJoined && now >= sessionStart && !sessionRecord.agoraCallStartedAt
+
       return {
         success: true,
         agoraChannelName,
-        message: 'Session started successfully',
-        alreadyOngoing: false
+        message: sessionStarted 
+          ? 'Session started successfully' 
+          : 'Session prepared and ready to start when both users join',
+        alreadyOngoing: false,
+        bothUsersJoined,
+        sessionStarted,
+        waitingForUsers: !bothUsersJoined,
+        timeReady: now >= sessionStart,
+        details: {
+          learnerInSession: learnerCurrentlyInSession,
+          mentorInSession: mentorCurrentlyInSession,
+          sessionTime: sessionStart.toISOString(),
+          currentTime: now.toISOString()
+        }
       }
+    })
+
+    console.log(`[SESSION_START] Result for session ${sessionId}:`, {
+      success: result.success,
+      sessionStarted: result.sessionStarted,
+      waitingForUsers: result.waitingForUsers
     })
 
     return NextResponse.json(result)
 
   } catch (error) {
-    console.error('Error starting session:', error)
+    console.error('[SESSION_START] Error starting session:', error)
     
-
+    // Provide more specific error messages
+    if (error instanceof Error) {
+      if (error.message === 'Session not found') {
+        return NextResponse.json({ error: 'Session not found' }, { status: 404 })
+      }
+      if (error.message === 'Unauthorized') {
+        return NextResponse.json({ error: 'Not authorized to start this session' }, { status: 403 })
+      }
+      if (error.message.includes('cannot be started yet')) {
+        return NextResponse.json({ error: error.message }, { status: 400 })
+      }
+      if (error.message.includes('start window has passed')) {
+        return NextResponse.json({ error: error.message }, { status: 400 })
+      }
+      if (error.message.includes('cannot be started')) {
+        return NextResponse.json({ error: error.message }, { status: 400 })
+      }
+      if (error.message.includes('Failed to create video room')) {
+        return NextResponse.json({ error: error.message }, { status: 500 })
+      }
+    }
     
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+    return NextResponse.json({ 
+      error: 'Failed to start session. Please try again.',
+      details: process.env.NODE_ENV === 'development' ? error?.toString() : undefined 
+    }, { status: 500 })
   }
 }

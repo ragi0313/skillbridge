@@ -36,6 +36,8 @@ export async function GET() {
         agoraCallEndedAt: bookingSessions.agoraCallEndedAt,
         learnerJoinedAt: bookingSessions.learnerJoinedAt,
         mentorJoinedAt: bookingSessions.mentorJoinedAt,
+        learnerLeftAt: bookingSessions.learnerLeftAt,
+        mentorLeftAt: bookingSessions.mentorLeftAt,
         refundAmount: bookingSessions.refundAmount,
         rejectionReason: bookingSessions.rejectionReason,
         cancellationReason: bookingSessions.cancellationReason,

@@ -36,6 +36,8 @@ interface Session {
   agoraCallEndedAt: string | null
   learnerJoinedAt: string | null
   mentorJoinedAt: string | null
+  learnerLeftAt: string | null
+  mentorLeftAt: string | null
   refundAmount: number | null
   rejectionReason: string | null
   cancellationReason: string | null
@@ -119,9 +121,36 @@ export function LearnerSessionsClient({ sessions }: LearnerSessionsClientProps) 
     const endTime = new Date(session.endTime!)
     const joinWindow = new Date(startTime.getTime() - 30 * 60 * 1000) // 30 minutes before
     
+    // Check if this session is already open in another tab
+    const activeSessionKey = `activeSession_${session.id}`
+    const isActiveInAnotherTab = localStorage.getItem(activeSessionKey) === 'true'
+    
+    // Can join if session is in valid status, within time window, user hasn't left, and not already active
     return ['confirmed', 'upcoming', 'ongoing'].includes(session.status) &&
            now >= joinWindow && 
-           now <= endTime
+           now <= endTime &&
+           !session.learnerLeftAt && // User hasn't left the session
+           !isActiveInAnotherTab // Not already active in another tab
+  }
+
+  const canReconnectSession = (session: Session) => {
+    if (!session.startTime) return false
+    
+    const now = new Date()
+    const startTime = new Date(session.startTime)
+    const endTime = new Date(session.endTime!)
+    
+    // Check if this session is already open in another tab
+    const activeSessionKey = `activeSession_${session.id}`
+    const isActiveInAnotherTab = localStorage.getItem(activeSessionKey) === 'true'
+    
+    // Can reconnect if session is ongoing, user has joined before but left, session hasn't ended, and not already active
+    return session.status === 'ongoing' &&
+           session.learnerJoinedAt && // User has joined before
+           session.learnerLeftAt && // User has left
+           now >= startTime && 
+           now <= endTime &&
+           !isActiveInAnotherTab // Not already active in another tab
   }
 
   const handleJoinSession = (sessionId: number) => {
@@ -314,6 +343,16 @@ export function LearnerSessionsClient({ sessions }: LearnerSessionsClientProps) 
             >
               <Video className="w-4 h-4 mr-2" />
               Join Session
+            </Button>
+          )}
+          
+          {canReconnectSession(session) && (
+            <Button 
+              onClick={() => handleJoinSession(session.id)}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              <Video className="w-4 h-4 mr-2" />
+              Reconnect
             </Button>
           )}
           

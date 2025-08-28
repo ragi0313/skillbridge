@@ -21,82 +21,125 @@ export async function POST(
       return NextResponse.json({ error: 'Invalid session ID' }, { status: 400 })
     }
 
-    // Get session and verify user authorization
-    const sessionQuery = await db
-      .select({
-        session: bookingSessions,
-        learner: learners,
-        mentor: mentors,
-      })
-      .from(bookingSessions)
-      .leftJoin(learners, eq(bookingSessions.learnerId, learners.id))
-      .leftJoin(mentors, eq(bookingSessions.mentorId, mentors.id))
-      .where(eq(bookingSessions.id, sessionId))
-      .limit(1)
-
-    if (sessionQuery.length === 0) {
-      return NextResponse.json({ error: 'Session not found' }, { status: 404 })
-    }
-
-    const { session: sessionData, learner, mentor } = sessionQuery[0]
-    const userId = session.id
+    // Get the reason for leaving (to distinguish between genuine leave vs page refresh)
+    const body = await request.json().catch(() => ({}))
     
-    // Check if user is authorized
-    const isLearner = learner?.userId === userId
-    const isMentor = mentor?.userId === userId
-    
-    if (!isLearner && !isMentor) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
-    }
+    // SECURITY: Validate and sanitize input
+    const validReasons = ['user_action', 'page_refresh', 'beforeunload', 'navigation', 'connection_lost', 'system']
+    const reason = validReasons.includes(body.reason) ? body.reason : 'user_action'
+    const isPageRefresh = Boolean(body.isPageRefresh)
 
-    const now = new Date()
+    console.log(`[LEAVE_API] User ${session.id} leaving session ${sessionId}, reason: ${reason}, isPageRefresh: ${isPageRefresh}`)
+
+    let leaveResult = { 
+      wasInSession: false, 
+      connectionDurationSeconds: 0, 
+      wasAlreadyLeft: false,
+      bothUsersNowLeft: false,
+      skipLeaveForRefresh: false
+    }
 
     // Update leave timestamp and connection duration with atomic transaction
     await db.transaction(async (tx) => {
-      const [currentSession] = await tx
+      // Get session and verify user authorization
+      const sessionQuery = await tx
         .select({
-          id: bookingSessions.id,
-          learnerJoinedAt: bookingSessions.learnerJoinedAt,
-          mentorJoinedAt: bookingSessions.mentorJoinedAt,
-          learnerLeftAt: bookingSessions.learnerLeftAt,
-          mentorLeftAt: bookingSessions.mentorLeftAt,
-          learnerConnectionDurationMs: bookingSessions.learnerConnectionDurationMs,
-          mentorConnectionDurationMs: bookingSessions.mentorConnectionDurationMs,
+          session: bookingSessions,
+          learner: learners,
+          mentor: mentors,
         })
         .from(bookingSessions)
+        .leftJoin(learners, eq(bookingSessions.learnerId, learners.id))
+        .leftJoin(mentors, eq(bookingSessions.mentorId, mentors.id))
         .where(eq(bookingSessions.id, sessionId))
         .limit(1)
 
-      if (!currentSession) {
-        throw new Error('Session not found in transaction')
+      if (sessionQuery.length === 0) {
+        throw new Error('Session not found')
       }
 
+      const { session: sessionData, learner, mentor } = sessionQuery[0]
+      const userId = session.id
+      
+      // Check if user is authorized
+      const isLearner = learner?.userId === userId
+      const isMentor = mentor?.userId === userId
+      
+      if (!isLearner && !isMentor) {
+        throw new Error('Unauthorized')
+      }
+
+      // CRITICAL FIX: Don't update leave timestamp for page refreshes
+      // This prevents the session from being marked as "both users left" prematurely
+      if (isPageRefresh || reason === 'page_refresh' || reason === 'beforeunload' || reason === 'navigation') {
+        console.log(`[LEAVE_API] Skipping leave timestamp update for session ${sessionId} due to: ${reason}`)
+        leaveResult.skipLeaveForRefresh = true
+        return
+      }
+
+      // Check if session is already in terminal state
+      if (sessionData.status !== null && ['completed', 'cancelled', 'both_no_show', 'mentor_no_show', 'learner_no_show', 'technical_issues'].includes(sessionData.status)) {
+        console.log(`[LEAVE_API] Session ${sessionId} is already in terminal state: ${sessionData.status}`)
+        return
+      }
+
+      const now = new Date()
       const updateData: any = {}
 
-      if (isLearner) {
-        // Calculate learner connection duration
-        const joinTime = currentSession.learnerJoinedAt
-        if (joinTime && !currentSession.learnerLeftAt) {
-          const connectionDurationMs = now.getTime() - joinTime.getTime()
-          updateData.learnerLeftAt = now
-          updateData.learnerConnectionDurationMs = Math.max(
-            connectionDurationMs, 
-            currentSession.learnerConnectionDurationMs || 0
-          )
-        }
-      } else if (isMentor) {
-        // Calculate mentor connection duration
-        const joinTime = currentSession.mentorJoinedAt
-        if (joinTime && !currentSession.mentorLeftAt) {
-          const connectionDurationMs = now.getTime() - joinTime.getTime()
-          updateData.mentorLeftAt = now
-          updateData.mentorConnectionDurationMs = Math.max(
-            connectionDurationMs, 
-            currentSession.mentorConnectionDurationMs || 0
-          )
-        }
+      // Get current join/leave timestamps
+      const userJoinedAt = isLearner ? sessionData.learnerJoinedAt : sessionData.mentorJoinedAt
+      const userLeftAt = isLearner ? sessionData.learnerLeftAt : sessionData.mentorLeftAt
+      const otherUserJoinedAt = isLearner ? sessionData.mentorJoinedAt : sessionData.learnerJoinedAt
+      const otherUserLeftAt = isLearner ? sessionData.mentorLeftAt : sessionData.learnerLeftAt
+      const currentConnectionDuration = isLearner ? sessionData.learnerConnectionDurationMs : sessionData.mentorConnectionDurationMs
+
+      // Check if user was never in session
+      if (!userJoinedAt) {
+        leaveResult.wasInSession = false
+        console.log(`[LEAVE_API] User was never in session ${sessionId}`)
+        return // No update needed
       }
 
+      // Check if user already left
+      if (userLeftAt) {
+        leaveResult.wasAlreadyLeft = true
+        leaveResult.wasInSession = true
+        // Calculate previous connection duration for response
+        leaveResult.connectionDurationSeconds = Math.floor((userLeftAt.getTime() - userJoinedAt.getTime()) / 1000)
+        console.log(`[LEAVE_API] User had already left session ${sessionId}`)
+        return // No update needed
+      }
+
+      // User is currently in session - calculate connection duration and mark as left
+      const connectionDurationMs = now.getTime() - userJoinedAt.getTime()
+      leaveResult.wasInSession = true
+      leaveResult.connectionDurationSeconds = Math.floor(connectionDurationMs / 1000)
+
+      // Update leave timestamp and connection duration
+      if (isLearner) {
+        updateData.learnerLeftAt = now
+        updateData.learnerConnectionDurationMs = Math.max(
+          connectionDurationMs, 
+          currentConnectionDuration || 0
+        )
+      } else {
+        updateData.mentorLeftAt = now
+        updateData.mentorConnectionDurationMs = Math.max(
+          connectionDurationMs, 
+          currentConnectionDuration || 0
+        )
+      }
+
+      // Check if both users have now left the ongoing session
+      const otherUserStillInSession = otherUserJoinedAt && !otherUserLeftAt
+      leaveResult.bothUsersNowLeft = !otherUserStillInSession && sessionData.status === 'ongoing'
+
+      // CRITICAL FIX: Don't auto-complete sessions when users leave
+      // Let the SessionMonitorService handle completion based on more sophisticated logic
+      // Only set left timestamp, don't change session status
+      console.log(`[LEAVE_API] User ${userId} leaving session ${sessionId}, connection duration: ${leaveResult.connectionDurationSeconds}s, bothUsersLeft: ${leaveResult.bothUsersNowLeft}`)
+
+      // Apply updates
       if (Object.keys(updateData).length > 0) {
         await tx
           .update(bookingSessions)
@@ -105,9 +148,26 @@ export async function POST(
       }
     })
 
+    // Determine response message
+    let message = 'Successfully left session'
+    if (leaveResult.skipLeaveForRefresh) {
+      message = 'Page refresh detected - session state preserved'
+    } else if (!leaveResult.wasInSession) {
+      message = 'User was not in session'
+    } else if (leaveResult.wasAlreadyLeft) {
+      message = 'User had already left session'
+    } else if (leaveResult.bothUsersNowLeft) {
+      message = 'Successfully left session - both users have now left'
+    }
+
     return NextResponse.json({ 
       success: true,
-      message: 'Successfully left session'
+      message,
+      wasInSession: leaveResult.wasInSession,
+      wasAlreadyLeft: leaveResult.wasAlreadyLeft,
+      connectionDurationSeconds: leaveResult.connectionDurationSeconds,
+      bothUsersNowLeft: leaveResult.bothUsersNowLeft,
+      skipLeaveForRefresh: leaveResult.skipLeaveForRefresh
     })
 
   } catch (error) {

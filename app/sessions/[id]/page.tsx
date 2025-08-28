@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { WaitingRoom } from "@/components/session/WaitingRoom"
 import { VideoCallRoom } from "@/components/session/VideoCallRoom"
@@ -18,10 +18,6 @@ interface SessionData {
   status: string
   durationMinutes: number
   agoraChannelName?: string | null
-}
-
-interface UserRole {
-  role: "learner" | "mentor"
 }
 
 interface OtherParticipant {
@@ -55,8 +51,14 @@ export default function SessionPage() {
   const [previouslyJoinedAt, setPreviouslyJoinedAt] = useState<string | null>(null)
   const [showRatingModal, setShowRatingModal] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [hasJoinedSession, setHasJoinedSession] = useState(false)
 
-  // Load initial session data - fixed dependencies
+  // Refs for proper cleanup management
+  const hasCalledLeaveRef = useRef(false)
+  const isUnmountingRef = useRef(false)
+  const lastKnownStatusRef = useRef<string | null>(null)
+
+  // Load initial session data
   const loadSessionData = useCallback(async () => {
     if (!sessionId) return
 
@@ -83,41 +85,21 @@ export default function SessionPage() {
       setOtherParticipant(data.otherParticipant)
       setIsReconnection(data.isReconnection || false)
       setPreviouslyJoinedAt(data.previouslyJoinedAt)
+      lastKnownStatusRef.current = data.session.status
 
-      // Determine initial phase based on session status and timing
+      // Determine initial phase based on session status
       const now = new Date()
       const sessionStartTime = new Date(data.session.startTime)
       
-      if (["completed", "cancelled"].includes(data.session.status)) {
+      // Check for terminal session states first
+      if (["completed", "cancelled", "both_no_show", "mentor_no_show", "learner_no_show", "technical_issues"].includes(data.session.status)) {
+        console.log("[SESSION_PAGE] Session is in terminal state:", data.session.status)
         setSessionPhase("ended")
-      } else if (data.session.status === "ongoing" && now >= sessionStartTime) {
-        // Session is ongoing and start time is met - go directly to video call
-        setSessionPhase("video_call")
-        // Load Agora token immediately
-        loadAgoraToken().then(agoraData => {
-          if (agoraData) {
-            setAgoraConfig(agoraData)
-          }
-        }).catch(error => {
-          console.error("Error loading Agora token:", error)
-          setSessionPhase("waiting_room")
-        })
-      } else if ((data.session.status === "ongoing" || ["confirmed", "upcoming"].includes(data.session.status)) && now >= sessionStartTime) {
-        // Session time has been met but status might not be updated yet - go to video call
-        setSessionPhase("video_call")
-        // Load Agora token immediately
-        loadAgoraToken().then(agoraData => {
-          if (agoraData) {
-            setAgoraConfig(agoraData)
-          }
-        }).catch(error => {
-          console.error("Error loading Agora token:", error)
-          setSessionPhase("waiting_room")
-        })
-      } else {
-        // Session time hasn't been met yet - go to waiting room
-        setSessionPhase("waiting_room")
+        return
       }
+
+      // For active sessions, always go to waiting room first
+      setSessionPhase("waiting_room")
 
     } catch (error) {
       console.error("Error loading session:", error)
@@ -126,9 +108,36 @@ export default function SessionPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [sessionId]) // Fixed: include sessionId
+  }, [sessionId])
 
-  // Load Agora token for video call - fixed dependencies
+  // Join session in backend - with better error handling
+  const joinSessionBackend = useCallback(async (): Promise<boolean> => {
+    if (!sessionId || hasJoinedSession) return hasJoinedSession
+
+    try {
+      console.log("[SESSION_PAGE] Joining session in backend...")
+      const response = await fetch(`/api/sessions/${sessionId}/join`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to join session')
+      }
+
+      const data = await response.json()
+      setHasJoinedSession(true)
+      console.log("[SESSION_PAGE] Successfully joined session:", data.message)
+      return true
+    } catch (error) {
+      console.error("[SESSION_PAGE] Error joining session:", error)
+      setError(error instanceof Error ? error.message : "Failed to join session")
+      return false
+    }
+  }, [sessionId, hasJoinedSession])
+
+  // Load Agora token for video call
   const loadAgoraToken = useCallback(async () => {
     if (!sessionId) return null
 
@@ -157,49 +166,80 @@ export default function SessionPage() {
       console.error("Error getting Agora token:", error)
       throw error
     }
-  }, [sessionId]) // Fixed: include sessionId
+  }, [sessionId])
 
-  // Handle joining video call
+  // Handle joining video call from waiting room
   const handleJoinVideoCall = useCallback(async () => {
     setIsLoading(true)
     setError("")
 
     try {
-      const agoraData = await loadAgoraToken()
+      // Ensure user has joined the session
+      if (!hasJoinedSession) {
+        const joinSuccess = await joinSessionBackend()
+        if (!joinSuccess) {
+          throw new Error("Failed to join session")
+        }
+      }
+
+      // Get Agora token with retry logic
+      let agoraData = null
+      let tokenAttempts = 0
+      const maxTokenAttempts = 3
+      
+      while (tokenAttempts < maxTokenAttempts && !agoraData) {
+        try {
+          agoraData = await loadAgoraToken()
+          break
+        } catch (tokenError) {
+          tokenAttempts++
+          console.warn(`[SESSION_PAGE] Agora token attempt ${tokenAttempts} failed:`, tokenError)
+          
+          if (tokenAttempts < maxTokenAttempts) {
+            // Wait before retrying
+            await new Promise(resolve => setTimeout(resolve, 1000 * tokenAttempts))
+          }
+        }
+      }
+      
       if (!agoraData) {
-        throw new Error("Failed to get video call configuration")
+        throw new Error("Unable to get video call configuration after multiple attempts. Please check your connection and try again.")
       }
 
       setAgoraConfig(agoraData)
       setSessionPhase("video_call")
     } catch (error) {
       console.error("Error joining video call:", error)
-      setError(error instanceof Error ? error.message : "Failed to join video call")
+      const errorMessage = error instanceof Error ? error.message : "Failed to join video call"
+      setError(`Video Call Error: ${errorMessage}`)
+      
+      // Don't change phase on error - stay in waiting room so user can retry
     } finally {
       setIsLoading(false)
     }
-  }, [loadAgoraToken])
+  }, [hasJoinedSession, joinSessionBackend, loadAgoraToken])
 
-  // Handle ending call - fixed dependencies
-  const handleEndCall = useCallback(async () => {
-    try {
-      await fetch(`/api/sessions/${sessionId}/end`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      })
-    } catch (error) {
-      console.error("Error ending session:", error)
-    }
-
+  // Handle leaving call - CRITICAL: Don't auto-complete session
+  const handleLeaveCall = useCallback(async () => {
+    console.log("[SESSION_PAGE] User leaving call - going to ended state")
+    
+    // Just go to ended state - VideoCallRoom handles the leave API call
     setSessionPhase("ended")
-    setShowRatingModal(true)
-  }, [sessionId]) // Fixed: include sessionId
+    
+    // Show rating modal only for learners
+    if (userRole === "learner") {
+      setShowRatingModal(true)
+    }
+  }, [userRole])
 
-  // Handle connection errors
+  // Handle connection errors from video call
   const handleConnectionError = useCallback((errorMessage: string) => {
+    console.error("[SESSION_PAGE] Connection error:", errorMessage)
     setError(errorMessage)
+    
+    // For connection errors, go back to waiting room instead of ending session
+    setSessionPhase("waiting_room")
+    setAgoraConfig(null) // Reset Agora config so user can retry
   }, [])
 
   // Handle rating submission
@@ -220,15 +260,89 @@ export default function SessionPage() {
   // Handle retry
   const handleRetry = useCallback(() => {
     setSessionPhase("loading")
+    setHasJoinedSession(false)
+    setError("")
+    setAgoraConfig(null)
+    hasCalledLeaveRef.current = false
     loadSessionData()
   }, [loadSessionData])
 
-  // Load session data on mount - only run once
+  // Proper cleanup function
+  const performCleanup = useCallback(async (reason: string) => {
+    if (hasCalledLeaveRef.current || isUnmountingRef.current) {
+      return
+    }
+
+    console.log(`[SESSION_PAGE] Performing cleanup: ${reason}`)
+    
+    // Only call leave if we actually joined and session isn't already terminal
+    if (hasJoinedSession && lastKnownStatusRef.current && 
+        !["completed", "cancelled", "both_no_show", "mentor_no_show", "learner_no_show", "technical_issues"].includes(lastKnownStatusRef.current)) {
+      
+      hasCalledLeaveRef.current = true
+      
+      try {
+        // Use navigator.sendBeacon for more reliable cleanup on page unload
+        if (reason === "beforeunload" && navigator.sendBeacon) {
+          const blob = new Blob([JSON.stringify({})], { type: 'application/json' })
+          navigator.sendBeacon(`/api/sessions/${sessionId}/leave`, blob)
+        } else {
+          await fetch(`/api/sessions/${sessionId}/leave`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+          })
+        }
+        console.log("[SESSION_PAGE] Successfully called leave API in cleanup")
+      } catch (error) {
+        console.error("[SESSION_PAGE] Error in cleanup leave call:", error)
+      }
+    }
+  }, [sessionId, hasJoinedSession])
+
+  // Load session data on mount
   useEffect(() => {
     loadSessionData()
   }, [loadSessionData])
 
-  // Rest of component remains the same...
+  // Handle browser events for cleanup with proper dependencies
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!isUnmountingRef.current) {
+        performCleanup("beforeunload")
+      }
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.hidden && hasJoinedSession && sessionPhase === "video_call") {
+        // User switched tabs/minimized during video call
+        console.log("[SESSION_PAGE] Page hidden during video call")
+      }
+    }
+
+    // Add event listeners
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    // Cleanup function
+    return () => {
+      try {
+        window.removeEventListener('beforeunload', handleBeforeUnload)
+        document.removeEventListener('visibilitychange', handleVisibilityChange)
+      } catch (error) {
+        // Ignore errors during cleanup - window might be unavailable
+        console.warn("[SESSION_PAGE] Error removing event listeners:", error)
+      }
+    }
+  }, []) // Remove dependencies to prevent re-adding listeners
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      isUnmountingRef.current = true
+      performCleanup("component_unmount")
+    }
+  }, [performCleanup])
+
   if (sessionPhase === "loading" || isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-slate-950 flex items-center justify-center">
@@ -288,9 +402,9 @@ export default function SessionPage() {
             <div className="w-16 h-16 bg-green-600/20 rounded-full flex items-center justify-center mx-auto mb-4">
               <div className="w-8 h-8 bg-green-500 rounded-full" />
             </div>
-            <h2 className="text-xl font-semibold text-white mb-2">Session Completed</h2>
+            <h2 className="text-xl font-semibold text-white mb-2">Session Left</h2>
             <p className="text-slate-400 mb-6">
-              Your mentorship session has ended. Thank you for participating!
+              You have left the mentorship session. Thank you for participating!
             </p>
             <Button onClick={handleBackToDashboard} className="w-full">
               <Home className="h-4 w-4 mr-2" />
@@ -321,6 +435,8 @@ export default function SessionPage() {
           onJoinVideoCall={handleJoinVideoCall}
           isReconnection={isReconnection}
           previouslyJoinedAt={previouslyJoinedAt}
+          hasJoinedSession={hasJoinedSession}
+          onJoinSession={joinSessionBackend}
         />
 
         {error && (
@@ -329,6 +445,14 @@ export default function SessionPage() {
               <AlertTriangle className="h-4 w-4 text-red-400" />
               <AlertDescription className="text-red-300">
                 {error}
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="ml-2 h-6 text-xs"
+                  onClick={() => setError("")}
+                >
+                  Dismiss
+                </Button>
               </AlertDescription>
             </Alert>
           </div>
@@ -346,8 +470,9 @@ export default function SessionPage() {
         userRole={userRole!}
         otherParticipant={otherParticipant}
         agoraConfig={agoraConfig}
-        onEndCall={handleEndCall}
+        onLeaveCall={handleLeaveCall}
         onConnectionError={handleConnectionError}
+        hasJoinedSession={hasJoinedSession}
       />
     )
   }

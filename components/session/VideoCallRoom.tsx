@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
-import { Card, CardHeader, CardContent } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -20,7 +20,8 @@ import {
   Maximize2,
   Minimize2,
   Volume2,
-  VolumeX
+  VolumeX,
+  RefreshCw
 } from "lucide-react"
 import { useRealTimeTimer } from "@/lib/hooks/useRealTimeTimer"
 
@@ -47,8 +48,9 @@ interface VideoCallRoomProps {
     token: string
     uid: number
   }
-  onEndCall: () => void
+  onLeaveCall: (reason?: string) => void
   onConnectionError: (error: string) => void
+  hasJoinedSession?: boolean
 }
 
 type ConnectionState = "connecting" | "connected" | "reconnecting" | "disconnected" | "failed"
@@ -60,8 +62,9 @@ export function VideoCallRoom({
   userRole,
   otherParticipant,
   agoraConfig,
-  onEndCall,
-  onConnectionError
+  onLeaveCall,
+  onConnectionError,
+  hasJoinedSession = false
 }: VideoCallRoomProps) {
   const [connectionState, setConnectionState] = useState<ConnectionState>("connecting")
   const [isVideoEnabled, setIsVideoEnabled] = useState(true)
@@ -73,6 +76,8 @@ export function VideoCallRoom({
   const [participants, setParticipants] = useState<number>(1)
   const [isCallEnding, setIsCallEnding] = useState(false)
   const [connectionRetryCount, setConnectionRetryCount] = useState(0)
+  const [mediaError, setMediaError] = useState<string>("")
+  const [isRetryingMedia, setIsRetryingMedia] = useState(false)
   const [networkStats, setNetworkStats] = useState({
     rtt: 0,
     uplinkLoss: 0,
@@ -89,9 +94,118 @@ export function VideoCallRoom({
   const trackingIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const hasJoinedChannelRef = useRef<boolean>(false)
   const currentRemoteUsersRef = useRef<Set<string>>(new Set())
+  const hasCalledLeaveRef = useRef<boolean>(false)
+  const lastPingTimeRef = useRef<number>(Date.now())
 
   const sessionStart = new Date(sessionData.startTime)
   const sessionEnd = new Date(sessionData.endTime)
+
+  // Enhanced ping function with better error handling and cleanup
+  const pingSession = useCallback(async () => {
+    // Don't ping if component is unmounting or call is ending
+    if (isCleaningUpRef.current || isCallEnding) {
+      return
+    }
+    
+    try {
+      const response = await fetch(`/api/sessions/${sessionId}/ping`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      })
+
+      if (!response.ok) {
+        console.warn("[VIDEO_CALL] Session ping failed with status:", response.status)
+      } else {
+        const data = await response.json()
+        lastPingTimeRef.current = Date.now()
+        console.log("[VIDEO_CALL] Session ping successful:", data.timestamp)
+      }
+    } catch (error) {
+      console.warn("[VIDEO_CALL] Session ping failed:", error)
+    }
+  }, [sessionId, isCallEnding])
+
+  // Retry media creation with fallback options
+  const retryMediaCreation = useCallback(async (AgoraRTC: any, client: any) => {
+    setIsRetryingMedia(true)
+    setMediaError("")
+
+    const mediaConfigs = [
+      // Try with all features first
+      {
+        audio: { AEC: true, ANS: true, AGC: true },
+        video: { encoderConfig: "720p_1", optimizationMode: "motion" },
+        description: "high quality"
+      },
+      // Fallback to medium quality
+      {
+        audio: { AEC: true, ANS: false, AGC: true },
+        video: { encoderConfig: "480p_1", optimizationMode: "motion" },
+        description: "medium quality"
+      },
+      // Fallback to basic quality
+      {
+        audio: { AEC: false, ANS: false, AGC: false },
+        video: { encoderConfig: "240p_1", optimizationMode: "motion" },
+        description: "basic quality"
+      },
+      // Audio only
+      {
+        audio: true,
+        video: null,
+        description: "audio only"
+      }
+    ]
+
+    for (let i = 0; i < mediaConfigs.length; i++) {
+      const config = mediaConfigs[i]
+      try {
+        console.log(`[VIDEO_CALL] Attempting media creation with ${config.description}`)
+        
+        if (config.video) {
+          const [audioTrack, videoTrack] = await AgoraRTC.createMicrophoneAndCameraTracks(
+            config.audio,
+            config.video
+          )
+          localTracksRef.current = { audioTrack, videoTrack }
+          
+          if (localVideoRef.current && videoTrack) {
+            videoTrack.play(localVideoRef.current)
+            console.log("[VIDEO_CALL] Local video track playing")
+          }
+          
+          await client.publish([audioTrack, videoTrack])
+          console.log(`[VIDEO_CALL] Media tracks published successfully with ${config.description}`)
+          setIsRetryingMedia(false)
+          return true
+        } else {
+          // Audio only
+          const audioTrack = await AgoraRTC.createMicrophoneTrack(config.audio)
+          localTracksRef.current = { audioTrack }
+          setIsVideoEnabled(false) // Disable video UI
+          
+          await client.publish([audioTrack])
+          console.log("[VIDEO_CALL] Audio-only track published successfully")
+          setMediaError("Camera not available - audio only mode")
+          setIsRetryingMedia(false)
+          return true
+        }
+      } catch (error) {
+        console.error(`[VIDEO_CALL] Media creation failed with ${config.description}:`, error)
+        if (i === mediaConfigs.length - 1) {
+          // Last attempt failed
+          setMediaError("Could not access camera or microphone. You can still receive audio/video from others.")
+          setIsRetryingMedia(false)
+          return false
+        }
+        // Continue to next config
+        continue
+      }
+    }
+    
+    setIsRetryingMedia(false)
+    return false
+  }, [])
 
   // Comprehensive cleanup function
   const performCleanup = useCallback(async (reason: string = "component_cleanup") => {
@@ -104,6 +218,32 @@ export function VideoCallRoom({
     console.log(`[VIDEO_CALL] Starting cleanup: ${reason}`)
 
     try {
+      // CRITICAL FIX: Don't call leave API on page refresh
+      const navigationEntries = performance.getEntriesByType("navigation") as PerformanceNavigationTiming[]
+      const isPageRefresh = reason === "beforeunload" || 
+                       reason === "page_refresh" ||
+                       navigationEntries[0]?.type === "reload" ||
+                       reason.includes("refresh")
+      
+      if (hasJoinedSession && !hasCalledLeaveRef.current && !isPageRefresh) {
+        hasCalledLeaveRef.current = true
+        try {
+          await fetch(`/api/sessions/${sessionId}/leave`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+              reason,
+              isPageRefresh: false
+            })
+          })
+          console.log("[VIDEO_CALL] Successfully called leave API during cleanup")
+        } catch (error) {
+          console.error("[VIDEO_CALL] Error calling leave API during cleanup:", error)
+        }
+      } else if (isPageRefresh) {
+        console.log("[VIDEO_CALL] Skipping leave API call due to page refresh")
+      }
+
       // Clear any pending timers
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current)
@@ -168,52 +308,48 @@ export function VideoCallRoom({
     } finally {
       isCleaningUpRef.current = false
     }
-  }, [])
+  }, [sessionId, hasJoinedSession])
 
-  // Handle call end with proper session tracking
-  const handleEndCall = useCallback(async () => {
+  // Handle leaving the call
+  const handleLeaveCall = useCallback(async (reason: string = "user_action") => {
     if (isCallEnding) return
     
     setIsCallEnding(true)
-    console.log("[VIDEO_CALL] Ending call...")
+    console.log("[VIDEO_CALL] Leaving call with reason:", reason)
 
-    try {
-      // Call the session leave API first
-      await fetch(`/api/sessions/${sessionId}/leave`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-      })
-      console.log("[VIDEO_CALL] Successfully left session via API")
-    } catch (error) {
-      console.error("[VIDEO_CALL] Error calling leave API:", error)
-      // Continue with cleanup even if API call fails
-    }
-
-    try {
-      // End the session via API
-      await fetch(`/api/sessions/${sessionId}/end`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason: 'completed' })
-      })
-      console.log("[VIDEO_CALL] Session ended via API")
-    } catch (error) {
-      console.error("[VIDEO_CALL] Error ending session via API:", error)
-      // Continue anyway
+    // Call the leave API before cleanup (unless it's a page refresh)
+    const isPageRefresh = reason === "page_refresh" || reason === "beforeunload"
+    
+    if (hasJoinedSession && !hasCalledLeaveRef.current && !isPageRefresh) {
+      hasCalledLeaveRef.current = true
+      try {
+        await fetch(`/api/sessions/${sessionId}/leave`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            reason,
+            isPageRefresh: false
+          })
+        })
+        console.log("[VIDEO_CALL] Successfully left session via API")
+      } catch (error) {
+        console.error("[VIDEO_CALL] Error calling leave API:", error)
+        // Continue with cleanup even if API call fails
+      }
     }
 
     // Perform cleanup
-    await performCleanup("call_ended")
+    await performCleanup(reason)
     
     // Call the parent callback
-    onEndCall()
-  }, [sessionId, onEndCall, performCleanup, isCallEnding])
+    onLeaveCall(reason)
+  }, [sessionId, hasJoinedSession, performCleanup, onLeaveCall, isCallEnding])
 
   // Session timer with proper cleanup
   const sessionTimer = useRealTimeTimer({
     startTime: sessionStart,
     endTime: sessionEnd,
-    onTimeExpired: handleEndCall
+    onTimeExpired: () => handleLeaveCall("session_ended")
   })
 
   // Connection retry logic
@@ -259,21 +395,23 @@ export function VideoCallRoom({
           localTracksRef.current.videoTrack
         ])
         console.log("[VIDEO_CALL] Republished local tracks")
+      } else if (localTracksRef.current.audioTrack) {
+        await agoraClientRef.current.publish([localTracksRef.current.audioTrack])
+        console.log("[VIDEO_CALL] Republished audio track only")
       }
 
       setConnectionState("connected")
-      setConnectionRetryCount(0) // Reset on successful reconnection
+      setConnectionRetryCount(0)
     } catch (error) {
       console.error("[VIDEO_CALL] Reconnection failed:", error)
       
-      // Schedule another retry
       reconnectTimeoutRef.current = setTimeout(() => {
         attemptReconnection()
       }, 5000)
     }
   }, [agoraConfig, connectionRetryCount, onConnectionError, isCallEnding])
 
-  // Initialize Agora with better error handling
+  // Initialize Agora
   useEffect(() => {
     const initializeAgora = async () => {
       if (isInitializingRef.current || isCleaningUpRef.current || agoraClientRef.current) {
@@ -286,15 +424,19 @@ export function VideoCallRoom({
       try {
         console.log("[VIDEO_CALL] Initializing Agora SDK...")
         const AgoraRTC = await import("agora-rtc-sdk-ng")
+        
+        AgoraRTC.default.enableLogUpload()
+        AgoraRTC.default.setLogLevel(2)
+        
         const client = AgoraRTC.default.createClient({ 
           mode: "rtc", 
           codec: "vp8",
-          role: "host" // Ensure both users can publish
+          role: "host"
         })
         
         agoraClientRef.current = client
 
-        // Set up comprehensive event listeners
+        // Event listeners
         client.on("user-published", async (user: any, mediaType: "video" | "audio") => {
           try {
             console.log(`[VIDEO_CALL] User published ${mediaType}:`, user.uid)
@@ -312,7 +454,6 @@ export function VideoCallRoom({
               user.audioTrack.play()
             }
             
-            // Track remote users
             currentRemoteUsersRef.current.add(user.uid.toString())
             setParticipants(currentRemoteUsersRef.current.size + 1)
           } catch (error) {
@@ -342,7 +483,6 @@ export function VideoCallRoom({
           currentRemoteUsersRef.current.delete(user.uid.toString())
           setParticipants(currentRemoteUsersRef.current.size + 1)
           
-          // If this was the only remote user, reset remote states
           if (currentRemoteUsersRef.current.size === 0) {
             setIsRemoteVideoVisible(false)
             setIsRemoteAudioEnabled(false)
@@ -362,9 +502,26 @@ export function VideoCallRoom({
         })
 
         client.on("exception", (evt: any) => {
-          console.error("[VIDEO_CALL] Agora exception:", evt)
-          if (evt.code === "WEBSOCKET_DISCONNECTED" && !isCallEnding) {
-            attemptReconnection()
+          console.error("[VIDEO_CALL] Agora exception:", evt || "Unknown exception")
+          
+          if (evt && evt.code) {
+            switch (evt.code) {
+              case "WEBSOCKET_DISCONNECTED":
+                if (!isCallEnding) {
+                  console.log("[VIDEO_CALL] WebSocket disconnected, attempting reconnection")
+                  attemptReconnection()
+                }
+                break
+              case "NETWORK_ERROR":
+                console.log("[VIDEO_CALL] Network error detected")
+                setCallQuality("poor")
+                break
+              case "INVALID_OPERATION":
+                console.log("[VIDEO_CALL] Invalid operation, ignoring")
+                break
+              default:
+                console.log(`[VIDEO_CALL] Unhandled exception code: ${evt.code}`)
+            }
           }
         })
 
@@ -392,7 +549,7 @@ export function VideoCallRoom({
             
             if (error.code === "UID_CONFLICT" && joinAttempts < maxJoinAttempts) {
               console.log("[VIDEO_CALL] UID conflict, retrying with random UID")
-              agoraConfig.uid = 0 // Use random UID
+              agoraConfig.uid = 0
               continue
             }
             
@@ -400,7 +557,6 @@ export function VideoCallRoom({
               throw new Error(`Failed to join after ${maxJoinAttempts} attempts: ${error.message}`)
             }
             
-            // Wait before retrying
             await new Promise(resolve => setTimeout(resolve, 1000))
           }
         }
@@ -409,38 +565,17 @@ export function VideoCallRoom({
           throw new Error("Failed to join channel after all attempts")
         }
 
-        // Create and publish local tracks with error handling
+        // Create and publish local tracks with comprehensive error handling
         try {
-          console.log("[VIDEO_CALL] Creating local tracks...")
-          const [audioTrack, videoTrack] = await AgoraRTC.default.createMicrophoneAndCameraTracks(
-            {
-              // Audio constraints - use Agora's audio processing
-              AEC: true, // Acoustic Echo Cancellation
-              ANS: true, // Automatic Noise Suppression
-              AGC: true, // Automatic Gain Control
-            },
-            {
-              // Video constraints
-              encoderConfig: "720p_1",
-              optimizationMode: "motion"
-            }
-          )
-          
-          localTracksRef.current = { audioTrack, videoTrack }
-
-          // Play local video
-          if (localVideoRef.current) {
-            videoTrack.play(localVideoRef.current)
-            console.log("[VIDEO_CALL] Local video track playing")
+          const mediaSuccess = await retryMediaCreation(AgoraRTC.default, client)
+          if (!mediaSuccess) {
+            console.warn("[VIDEO_CALL] Failed to create media tracks, continuing without local media")
+            setMediaError("Camera/microphone access failed. You can still receive audio/video from others.")
           }
-
-          // Publish tracks
-          await client.publish([audioTrack, videoTrack])
-          console.log("[VIDEO_CALL] Local tracks published successfully")
         } catch (mediaError) {
-          console.error("[VIDEO_CALL] Error creating/publishing local tracks:", mediaError)
+          console.error("[VIDEO_CALL] Error in media creation:", mediaError)
+          setMediaError("Media initialization failed. You can still participate in receive-only mode.")
           // Continue without local media - user can still receive remote streams
-          onConnectionError("Could not access camera/microphone. You can still receive audio/video from others.")
         }
 
         // Monitor network quality
@@ -462,18 +597,25 @@ export function VideoCallRoom({
         setConnectionState("connected")
         console.log("[VIDEO_CALL] Agora initialization completed successfully")
 
-        // Start session tracking
-        trackingIntervalRef.current = setInterval(async () => {
-          try {
-            // Ping the session to maintain tracking
-            await fetch(`/api/sessions/${sessionId}/ping`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' }
-            })
-          } catch (error) {
-            console.error("[VIDEO_CALL] Session ping failed:", error)
+        // Start session tracking with proper cleanup handling
+        const startPing = () => {
+          // Clear any existing interval first
+          if (trackingIntervalRef.current) {
+            clearInterval(trackingIntervalRef.current)
+            trackingIntervalRef.current = null
           }
-        }, 30000) // Ping every 30 seconds
+          
+          // Only start if not cleaning up
+          if (!isCleaningUpRef.current && !isCallEnding) {
+            trackingIntervalRef.current = setInterval(() => {
+              if (!isCleaningUpRef.current && !isCallEnding) {
+                pingSession()
+              }
+            }, 30000)
+          }
+        }
+        
+        startPing()
 
       } catch (error) {
         console.error("[VIDEO_CALL] Failed to initialize Agora:", error)
@@ -486,10 +628,8 @@ export function VideoCallRoom({
 
     initializeAgora()
 
-    // Handle browser events
     const handleBeforeUnload = () => {
       if (hasJoinedChannelRef.current && agoraClientRef.current) {
-        // Synchronous cleanup for page unload
         try {
           if (localTracksRef.current.audioTrack) {
             localTracksRef.current.audioTrack.stop()
@@ -508,24 +648,21 @@ export function VideoCallRoom({
 
     const handleVisibilityChange = () => {
       if (document.hidden) {
-        console.log("[VIDEO_CALL] Page hidden - reducing video quality")
-        // Could implement video quality reduction here
+        console.log("[VIDEO_CALL] Page hidden")
       } else {
-        console.log("[VIDEO_CALL] Page visible - restoring video quality")
-        // Could restore video quality here
+        console.log("[VIDEO_CALL] Page visible")
       }
     }
 
     window.addEventListener('beforeunload', handleBeforeUnload)
     document.addEventListener('visibilitychange', handleVisibilityChange)
 
-    // Cleanup on unmount
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
       performCleanup("component_unmount")
     }
-  }, [agoraConfig, sessionId, onConnectionError, attemptReconnection, performCleanup, isCallEnding])
+  }, [agoraConfig, sessionId, onConnectionError, attemptReconnection, performCleanup, isCallEnding, pingSession, retryMediaCreation])
 
   // Media control functions
   const toggleVideo = useCallback(async () => {
@@ -537,6 +674,31 @@ export function VideoCallRoom({
         console.log(`[VIDEO_CALL] Video ${newState ? 'enabled' : 'disabled'}`)
       } catch (error) {
         console.error("[VIDEO_CALL] Error toggling video:", error)
+      }
+    } else if (!localTracksRef.current.videoTrack && !isCallEnding) {
+      // Try to recreate video track
+      try {
+        const AgoraRTC = await import("agora-rtc-sdk-ng")
+        const videoTrack = await AgoraRTC.default.createCameraVideoTrack({
+          encoderConfig: "480p_1",
+          optimizationMode: "motion"
+        })
+        
+        localTracksRef.current.videoTrack = videoTrack
+        if (localVideoRef.current) {
+          videoTrack.play(localVideoRef.current)
+        }
+        
+        if (agoraClientRef.current) {
+          await agoraClientRef.current.publish([videoTrack])
+        }
+        
+        setIsVideoEnabled(true)
+        setMediaError("")
+        console.log("[VIDEO_CALL] Video track recreated and enabled")
+      } catch (error) {
+        console.error("[VIDEO_CALL] Error recreating video track:", error)
+        setMediaError("Failed to enable camera")
       }
     }
   }, [isVideoEnabled, isCallEnding])
@@ -568,7 +730,17 @@ export function VideoCallRoom({
     }
   }, [])
 
-  // Listen for fullscreen changes
+  const handleRetryMedia = useCallback(async () => {
+    if (isRetryingMedia || !agoraClientRef.current) return
+    
+    try {
+      const AgoraRTC = await import("agora-rtc-sdk-ng")
+      await retryMediaCreation(AgoraRTC.default, agoraClientRef.current)
+    } catch (error) {
+      console.error("[VIDEO_CALL] Error retrying media:", error)
+    }
+  }, [isRetryingMedia, retryMediaCreation])
+
   useEffect(() => {
     const handleFullscreenChange = () => {
       setIsFullscreen(!!document.fullscreenElement)
@@ -727,7 +899,6 @@ export function VideoCallRoom({
               </div>
             )}
             
-            {/* Remote Audio Indicator */}
             <div className="absolute bottom-4 left-4">
               {isRemoteAudioEnabled ? (
                 <Volume2 className="h-5 w-5 text-green-400" />
@@ -740,16 +911,38 @@ export function VideoCallRoom({
           {/* Local Video */}
           <div className="relative bg-slate-800 rounded-lg overflow-hidden">
             <div ref={localVideoRef} className="w-full h-full min-h-[300px]" />
-            {!isVideoEnabled && (
+            {(!isVideoEnabled || !localTracksRef.current.videoTrack) && (
               <div className="absolute inset-0 flex items-center justify-center bg-slate-800">
                 <div className="text-center">
                   <VideoOff className="h-12 w-12 text-slate-400 mx-auto mb-2" />
-                  <p className="text-slate-400">Your video is disabled</p>
+                  <p className="text-slate-400">
+                    {!localTracksRef.current.videoTrack ? "Camera not available" : "Your video is disabled"}
+                  </p>
+                  {mediaError && !localTracksRef.current.videoTrack && (
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="mt-2"
+                      onClick={handleRetryMedia}
+                      disabled={isRetryingMedia}
+                    >
+                      {isRetryingMedia ? (
+                        <>
+                          <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin mr-2" />
+                          Retrying...
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="h-3 w-3 mr-2" />
+                          Retry Camera
+                        </>
+                      )}
+                    </Button>
+                  )}
                 </div>
               </div>
             )}
             
-            {/* Local Video Label */}
             <div className="absolute bottom-4 right-4">
               <Badge variant="outline" className="text-blue-400 border-blue-400">
                 You ({userRole})
@@ -763,13 +956,13 @@ export function VideoCallRoom({
       <div className="bg-slate-900/95 border-t border-slate-700/50 p-4">
         <div className="flex items-center justify-center space-x-4">
           <Button
-            variant={isVideoEnabled ? "default" : "destructive"}
+            variant={isVideoEnabled && localTracksRef.current.videoTrack ? "default" : "destructive"}
             size="lg"
             onClick={toggleVideo}
             className="rounded-full w-12 h-12 p-0"
-            disabled={isCallEnding}
+            disabled={isCallEnding || isRetryingMedia}
           >
-            {isVideoEnabled ? (
+            {isVideoEnabled && localTracksRef.current.videoTrack ? (
               <Video className="h-5 w-5" />
             ) : (
               <VideoOff className="h-5 w-5" />
@@ -818,16 +1011,15 @@ export function VideoCallRoom({
           <Button
             variant="destructive"
             size="lg"
-            onClick={handleEndCall}
+            onClick={() => handleLeaveCall("user_action")}
             className="rounded-full px-8"
             disabled={isCallEnding}
           >
             <Phone className="h-5 w-5 mr-2 rotate-[135deg]" />
-            {isCallEnding ? "Ending..." : "End Call"}
+            {isCallEnding ? "Leaving..." : "Leave Call"}
           </Button>
         </div>
 
-        {/* Network Stats */}
         {networkStats.rtt > 0 && (
           <div className="flex items-center justify-center space-x-6 mt-3 text-xs text-slate-400">
             <span>RTT: {networkStats.rtt}ms</span>
@@ -836,6 +1028,18 @@ export function VideoCallRoom({
           </div>
         )}
       </div>
+
+      {/* Media Error Alert */}
+      {mediaError && (
+        <div className="absolute top-20 left-1/2 transform -translate-x-1/2">
+          <Alert className="bg-orange-900/20 border-orange-600/30 max-w-md">
+            <AlertTriangle className="h-4 w-4 text-orange-400" />
+            <AlertDescription className="text-orange-300">
+              {mediaError}
+            </AlertDescription>
+          </Alert>
+        </div>
+      )}
 
       {/* Low Time Warning */}
       {getTimeRemaining() <= 300 && getTimeRemaining() > 0 && (

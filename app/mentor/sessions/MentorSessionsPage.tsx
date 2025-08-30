@@ -64,7 +64,7 @@ export function MentorSessionsPage() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <Card className="w-full max-w-md p-6 text-center">
-          <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+          <div className="animate-spin w-8 h-8 rounded-full mx-auto mb-4"></div>
           <p className="text-gray-600">Loading your sessions...</p>
         </Card>
       </div>

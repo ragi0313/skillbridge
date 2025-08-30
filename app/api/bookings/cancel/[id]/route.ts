@@ -81,15 +81,22 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       let refundAmount = 0
       let refundType = "none"
 
-      if (hoursUntilSession >= 24) {
-        refundAmount = booking.escrowCredits // Full refund
+      if (cancelledBy === "mentor") {
+        // Mentor cancellations always get full refund regardless of timing
+        refundAmount = booking.escrowCredits
         refundType = "full"
-      } else if (hoursUntilSession >= 2) {
-        refundAmount = Math.floor(booking.escrowCredits * 0.5) // 50% refund
-        refundType = "partial"
       } else {
-        refundAmount = 0 // No refund
-        refundType = "none"
+        // Learner cancellations follow the timing-based policy
+        if (hoursUntilSession >= 24) {
+          refundAmount = booking.escrowCredits // Full refund
+          refundType = "full"
+        } else if (hoursUntilSession >= 2) {
+          refundAmount = Math.floor(booking.escrowCredits * 0.5) // 50% refund
+          refundType = "partial"
+        } else {
+          refundAmount = 0 // No refund
+          refundType = "none"
+        }
       }
 
       // Update booking status to cancelled

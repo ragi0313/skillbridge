@@ -1,4 +1,4 @@
-import { RtcTokenBuilder, RtcRole } from "agora-access-token"
+import { RtcTokenBuilder, RtcRole } from "agora-token"
 
 interface AgoraToken {
   token: string
@@ -29,12 +29,12 @@ class AgoraService {
 
     // Validate format
     if (this.appId.length !== 32) {
-      console.error("Invalid AGORA_APP_ID format - should be 32 characters")
+      console.error(`Invalid AGORA_APP_ID format - expected 32 chars, got ${this.appId.length}`)
       throw new Error("Invalid AGORA_APP_ID format")
     }
 
     if (this.appCertificate.length !== 32) {
-      console.error("Invalid AGORA_APP_CERTIFICATE format - should be 32 characters") 
+      console.error(`Invalid AGORA_APP_CERTIFICATE format - expected 32 chars, got ${this.appCertificate.length}`) 
       throw new Error("Invalid AGORA_APP_CERTIFICATE format")
     }
 
@@ -42,8 +42,9 @@ class AgoraService {
   }
 
   async createRoom(sessionId: string, expirationTime?: Date): Promise<AgoraRoom> {
-    // Simplified channel name to avoid issues
-    const channel = `session_${sessionId}_${Date.now().toString().slice(-8)}`
+    // Simplified channel name to avoid issues - shorter and simpler
+    const timestamp = Date.now().toString(36) // Base36 for shorter string
+    const channel = `s${sessionId}_${timestamp}`
     const expiresAt = expirationTime || new Date(Date.now() + 4 * 60 * 60 * 1000) // 4 hours
 
     console.log(`[AGORA_SERVICE] Creating room with channel: ${channel}`)
@@ -63,23 +64,54 @@ class AgoraService {
     expirationTime?: number,
   ): Promise<AgoraToken> {
     try {
-      // Generate UID from userId (simplified)
+      // Validate channel name
+      if (!channel || channel.length === 0) {
+        throw new Error("Channel name is required")
+      }
+      
+      if (channel.length > 64) {
+        throw new Error(`Channel name too long: ${channel.length} chars (max 64)`)
+      }
+
+      // Generate UID from userId
       const uid = this.generateUID(userId)
+      
+      if (!uid || uid < 1 || uid > 2147483647) {
+        throw new Error(`Invalid UID generated: ${uid}`)
+      }
 
       // Set expiration time (default to 4 hours)
-      const privilegeExpiredTs = expirationTime || Math.floor(Date.now() / 1000) + 4 * 60 * 60
+      const currentTimestamp = Math.floor(Date.now() / 1000)
+      const privilegeExpiredTs = expirationTime || (currentTimestamp + 4 * 60 * 60)
+      
+      // Ensure expiration is in the future
+      if (privilegeExpiredTs <= currentTimestamp) {
+        throw new Error(`Invalid expiration time: ${privilegeExpiredTs} <= ${currentTimestamp}`)
+      }
 
       console.log(`[AGORA_SERVICE] Generating token for:`, {
         channel,
         uid,
         role,
-        expiresAt: new Date(privilegeExpiredTs * 1000).toISOString()
+        currentTime: new Date(currentTimestamp * 1000).toISOString(),
+        expiresAt: new Date(privilegeExpiredTs * 1000).toISOString(),
+        secondsUntilExpiry: privilegeExpiredTs - currentTimestamp
       })
 
       // Generate production token using Agora's official library
       const token = await this.buildToken(channel, uid, privilegeExpiredTs, role)
 
-      console.log(`[AGORA_SERVICE] Successfully generated token with length: ${token.length}`)
+      // Validate the generated token
+      if (!token || token.length < 50) {
+        throw new Error(`Invalid token generated: length=${token?.length || 0}`)
+      }
+
+      console.log(`[AGORA_SERVICE] Successfully generated token:`, {
+        tokenLength: token.length,
+        tokenPrefix: token.substring(0, 10) + "...",
+        uid,
+        channel
+      })
 
       return {
         token,
@@ -103,21 +135,19 @@ class AgoraService {
       }
 
       // Simple hash-based UID generation for string userIds
-      let hash = 0
+      let hash = 5381 // djb2 algorithm seed
       for (let i = 0; i < userId.length; i++) {
         const char = userId.charCodeAt(i)
-        hash = ((hash << 5) - hash) + char
-        hash = hash & hash // Convert to 32bit integer
+        hash = ((hash << 5) + hash) + char // hash * 33 + char
+        hash = hash & 0x7FFFFFFF // Keep positive 31-bit integer
       }
       
-      // Ensure positive number within Agora's range (1 to 2^31-1)
-      const uid = Math.abs(hash) % 2000000000 // Use 2 billion as max to be safe
+      // Ensure within Agora's range (1 to 2^31-1)
+      // Use modulo to keep in safe range
+      const uid = (hash % 2000000000) + 1000 // Range: 1000 to 2000001000
       
-      // Ensure minimum value of 1000 to avoid conflicts with system UIDs
-      const finalUid = uid < 1000 ? uid + 1000 : uid
-      
-      console.log(`[AGORA_SERVICE] Generated UID ${finalUid} from userId: ${userId}`)
-      return finalUid
+      console.log(`[AGORA_SERVICE] Generated UID ${uid} from userId: ${userId}`)
+      return uid
 
     } catch (error) {
       console.error("[AGORA_SERVICE] Error generating UID:", error)
@@ -139,13 +169,18 @@ class AgoraService {
       if (!channel || channel.length === 0) {
         throw new Error("Channel name is required")
       }
+      
+      if (channel.length > 64) {
+        throw new Error(`Channel name too long: ${channel.length} chars`)
+      }
 
       if (!uid || uid < 1 || uid > 2147483647) {
         throw new Error(`Invalid UID: ${uid}. Must be between 1 and 2147483647`)
       }
 
-      if (!privilegeExpiredTs || privilegeExpiredTs <= Math.floor(Date.now() / 1000)) {
-        throw new Error("Invalid expiration time - must be in the future")
+      const currentTimestamp = Math.floor(Date.now() / 1000)
+      if (!privilegeExpiredTs || privilegeExpiredTs <= currentTimestamp) {
+        throw new Error(`Invalid expiration time: ${privilegeExpiredTs} must be > ${currentTimestamp}`)
       }
 
       // Both mentors and learners should be able to publish and subscribe
@@ -153,32 +188,52 @@ class AgoraService {
 
       console.log(`[AGORA_SERVICE] Building token with parameters:`, {
         appId: this.appId.substring(0, 8) + "...",
+        appCertLength: this.appCertificate.length,
         channel,
         uid,
-        role: agoraRole,
+        role: agoraRole === RtcRole.PUBLISHER ? "PUBLISHER" : "SUBSCRIBER",
         privilegeExpiredTs,
-        userRole: role
+        userRole: role,
+        secondsUntilExpiry: privilegeExpiredTs - currentTimestamp
       })
 
+      // Build token with validated parameters
+      // In the new agora-token package, we need both tokenExpire and privilegeExpire
       const token = RtcTokenBuilder.buildTokenWithUid(
         this.appId,
         this.appCertificate,
         channel,
         uid,
         agoraRole,
-        privilegeExpiredTs,
+        privilegeExpiredTs, // tokenExpire
+        privilegeExpiredTs, // privilegeExpire (same as tokenExpire for simplicity)
       )
 
       if (!token || token.length < 50) {
-        throw new Error("Generated token is invalid or too short")
+        throw new Error(`Generated token is invalid: length=${token?.length || 0}`)
       }
 
-      console.log(`[AGORA_SERVICE] Successfully built token for channel: ${channel}, uid: ${uid}, role: ${role}`)
+      // Verify token starts with expected prefix
+      if (!token.startsWith("006") && !token.startsWith("007")) {
+        throw new Error(`Token has unexpected prefix: ${token.substring(0, 3)}`)
+      }
+
+      console.log(`[AGORA_SERVICE] Successfully built token:`, {
+        channel,
+        uid,
+        role,
+        tokenLength: token.length,
+        tokenPrefix: token.substring(0, 10) + "..."
+      })
+      
       return token
 
     } catch (error) {
       console.error("[AGORA_SERVICE] Error building token:", error)
-      throw new Error(`Token generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      if (error instanceof Error) {
+        throw error // Re-throw with original message
+      }
+      throw new Error(`Token generation failed: ${error}`)
     }
   }
 
@@ -186,13 +241,19 @@ class AgoraService {
     try {
       // Basic validation - check if token contains expected components
       if (!token || !channel) {
+        console.log("[AGORA_SERVICE] Token validation failed: missing token or channel")
         return false
       }
 
       // Agora tokens should be long and start with specific prefixes
       const isValidFormat = token.length > 50 && (token.startsWith("006") || token.startsWith("007"))
       
-      console.log(`[AGORA_SERVICE] Token validation result: ${isValidFormat}`)
+      console.log(`[AGORA_SERVICE] Token validation result: ${isValidFormat}`, {
+        tokenLength: token.length,
+        tokenPrefix: token.substring(0, 3),
+        channel
+      })
+      
       return isValidFormat
 
     } catch (error) {

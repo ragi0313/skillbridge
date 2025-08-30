@@ -62,6 +62,7 @@ interface TimeSlot {
   startTime: string
   endTime: string
   available: boolean
+  conflictReason?: string
 }
 
 // Helper function to convert time string to minutes since midnight
@@ -92,9 +93,11 @@ const minutesToTime12Hour = (minutes: number): string => {
   return `${displayHours}:${mins.toString().padStart(2, "0")} ${period}`
 }
 
-// Helper function to check if two time ranges overlap
-const timeRangesOverlap = (start1: number, end1: number, start2: number, end2: number): boolean => {
-  return start1 < end2 && start2 < end1
+// Enhanced helper function to check if two time ranges overlap or are adjacent
+const timeRangesConflict = (start1: number, end1: number, start2: number, end2: number): boolean => {
+  // Sessions conflict if they overlap OR if one starts exactly when another ends
+  // This prevents back-to-back scheduling issues
+  return (start1 < end2 && start2 < end1) || start1 === end2 || end1 === start2
 }
 
 export default function BookMentorSessionPageClient({ session }: Props) {
@@ -183,7 +186,7 @@ export default function BookMentorSessionPageClient({ session }: Props) {
     return mentor.blockedDates.some(blocked => blocked.date === dateStr)
   }, [mentor?.blockedDates])
 
-  // Helper function to check if a time slot has enough continuous availability for a given duration
+  // Enhanced helper function to check if a time slot has conflicts
   const checkSlotAvailability = useCallback((
     startMinutes: number, 
     requestedDuration: number, 
@@ -191,12 +194,15 @@ export default function BookMentorSessionPageClient({ session }: Props) {
     bookedSessionsForDay: BookedSession[],
     mentorTz: string,
     selectedDateStr: string
-  ): boolean => {
+  ): { available: boolean; conflictReason?: string } => {
     const slotEndMinutes = startMinutes + requestedDuration
     
     // Check if slot extends beyond availability window
     if (slotEndMinutes > availabilityEndMinutes) {
-      return false
+      return { 
+        available: false, 
+        conflictReason: 'Extends beyond availability window' 
+      }
     }
     
     // Check for conflicts with booked sessions
@@ -205,16 +211,34 @@ export default function BookMentorSessionPageClient({ session }: Props) {
       const bookedStartMinutes = bookedStart.getHours() * 60 + bookedStart.getMinutes()
       const bookedEndMinutes = bookedStartMinutes + bookedSession.durationMinutes
       
-      // If the requested slot overlaps with any part of a booked session, it's not available
-      if (timeRangesOverlap(startMinutes, slotEndMinutes, bookedStartMinutes, bookedEndMinutes)) {
-        return false
+      // Enhanced conflict detection including edge cases
+      if (timeRangesConflict(startMinutes, slotEndMinutes, bookedStartMinutes, bookedEndMinutes)) {
+        const existingSessionTime = `${minutesToTime12Hour(bookedStartMinutes)} - ${minutesToTime12Hour(bookedEndMinutes)}`
+        
+        // Determine specific conflict type
+        if (startMinutes === bookedEndMinutes) {
+          return { 
+            available: false, 
+            conflictReason: `Cannot start when another session ends (${minutesToTime12Hour(bookedEndMinutes)})` 
+          }
+        } else if (slotEndMinutes === bookedStartMinutes) {
+          return { 
+            available: false, 
+            conflictReason: `Cannot end when another session starts (${minutesToTime12Hour(bookedStartMinutes)})` 
+          }
+        } else {
+          return { 
+            available: false, 
+            conflictReason: `Overlaps with existing session (${existingSessionTime})` 
+          }
+        }
       }
     }
     
-    return true
+    return { available: true }
   }, [])
 
-  // Dynamic TIME SLOT LOGIC that recalculates based on selected duration
+  // Enhanced TIME SLOT LOGIC with detailed conflict detection
   const availableTimeSlotsForSelectedDay = useMemo(() => {
     if (!mentor || !selectedDate) return []
     
@@ -277,16 +301,18 @@ export default function BookMentorSessionPageClient({ session }: Props) {
         slotDate.setHours(Math.floor(currentMinutes / 60), currentMinutes % 60, 0, 0)
 
         let isAvailable = true
+        let conflictReason: string | undefined
 
         // Block if slot is in the past (mentor's timezone)
         if (isToday && slotDate < now) {
           isAvailable = false
+          conflictReason = 'Time slot is in the past'
           console.log("Debug - Slot in past:", minutesToTime12Hour(currentMinutes))
         }
 
         // Use our comprehensive availability check
         if (isAvailable) {
-          isAvailable = checkSlotAvailability(
+          const availabilityCheck = checkSlotAvailability(
             currentMinutes,
             requestedDurationMinutes,
             endMinutes,
@@ -294,6 +320,8 @@ export default function BookMentorSessionPageClient({ session }: Props) {
             mentorTz,
             selectedDateStr
           )
+          isAvailable = availabilityCheck.available
+          conflictReason = availabilityCheck.conflictReason
         }
 
         // Calculate end time for display
@@ -303,6 +331,7 @@ export default function BookMentorSessionPageClient({ session }: Props) {
           startTime: minutesToTime12Hour(currentMinutes),
           endTime: minutesToTime12Hour(displayEndMinutes),
           available: isAvailable,
+          conflictReason,
         })
       }
     })
@@ -347,6 +376,7 @@ export default function BookMentorSessionPageClient({ session }: Props) {
       const nextBookedSession = bookedSessionsAfter[0]
       const nextSessionStart = toZonedTime(new Date(nextBookedSession.scheduledDate), mentorTz)
       const nextSessionStartMinutes = nextSessionStart.getHours() * 60 + nextSessionStart.getMinutes()
+      // Subtract a small buffer to prevent adjacent bookings
       return Math.min(nextSessionStartMinutes - slotStartMinutes, availabilityEndMinutes - slotStartMinutes)
     }
     return availabilityEndMinutes - slotStartMinutes
@@ -393,6 +423,12 @@ export default function BookMentorSessionPageClient({ session }: Props) {
     // Check if date is blocked before proceeding
     if (isDateBlocked(selectedDate)) {
       toast.error("Selected date is blocked and not available for booking.")
+      return
+    }
+    
+    // Check if selected time slot is still available
+    if (!selectedTimeSlot.available) {
+      toast.error("Selected time slot is no longer available.")
       return
     }
     
@@ -549,25 +585,29 @@ export default function BookMentorSessionPageClient({ session }: Props) {
                             <button
                               key={`${slot.startTime}-${index}`}
                               className={cn(
-                                "p-3 rounded-lg border text-left transition-all",
+                                "p-3 rounded-lg border text-left transition-all relative",
                                 !slot.available
-                                  ? "border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed"
+                                  ? "border-gray-200 bg-red-50 text-gray-400 cursor-not-allowed"
                                   : selectedTimeSlot?.startTime === slot.startTime
                                     ? "border-teal-600 bg-teal-50 text-teal-800"
                                     : "border-gray-200 bg-white hover:border-teal-300",
                               )}
                               onClick={() => slot.available && setSelectedTimeSlot(slot)}
                               disabled={!slot.available}
+                              title={slot.conflictReason || (slot.available ? "Available" : "Unavailable")}
                             >
                               <div className="font-medium">
                                 {slot.startTime} – {slot.endTime}
                               </div>
+                              {slot.available && selectedTimeSlot?.startTime === slot.startTime && (
+                                <CheckCircle className="w-4 h-4 text-teal-600 absolute top-3 right-3" />
+                              )}
                             </button>
                           ))}
                         </div>
                       )}
 
-                      {selectedTimeSlot && !isDateBlocked(selectedDate) && (
+                      {selectedTimeSlot && selectedTimeSlot.available && !isDateBlocked(selectedDate) && (
                         <>
                           <div className="flex justify-between mt-4">
                             <span className="text-gray-600">Duration</span>
@@ -661,7 +701,7 @@ export default function BookMentorSessionPageClient({ session }: Props) {
 
                   {/* Skill Selection Grid */}
                   <div className="mb-6">
-                    <Label className="text-sm font-medium mb-3 block">Select Skill Area</Label>
+                    <Label className="text-sm font-medium mb-3 block">Select</Label>
                     <div className="grid gap-2">
                       {mentor.skills.map((skill) => (
                         <button

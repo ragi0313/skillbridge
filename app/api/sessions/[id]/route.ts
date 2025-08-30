@@ -111,6 +111,17 @@ export async function GET(
 
     // Determine user role and other participant
     const userRole = isLearner ? 'learner' : 'mentor'
+    const currentUser = isLearner 
+      ? {
+          firstName: sessionData.learnerUser?.firstName || '',
+          lastName: sessionData.learnerUser?.lastName || '',
+          profilePictureUrl: sessionData.learner?.profilePictureUrl,
+        }
+      : {
+          firstName: mentorData?.mentorUser?.firstName || '',
+          lastName: mentorData?.mentorUser?.lastName || '',
+          profilePictureUrl: mentorData?.mentor?.profilePictureUrl,
+        }
     const otherParticipant = isLearner 
       ? {
           firstName: mentorData?.mentorUser?.firstName || '',
@@ -181,6 +192,7 @@ export async function GET(
       
       // User information
       userRole,
+      currentUser,
       otherParticipant,
       
       // Connection state

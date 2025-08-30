@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Textarea } from "@/components/ui/textarea"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { 
   Calendar, 
   Clock, 
@@ -49,6 +51,11 @@ interface Session {
   mentorProfessionalTitle: string | null
   skillName: string | null
   skillRatePerHour: number | null
+  // Review information
+  reviewId: number | null
+  reviewRating: number | null
+  reviewText: string | null
+  reviewCreatedAt: string | null
 }
 
 interface LearnerSessionsClientProps {
@@ -59,6 +66,9 @@ export function LearnerSessionsClient({ sessions }: LearnerSessionsClientProps) 
   const [selectedTab, setSelectedTab] = useState("all")
   const [ratingModalOpen, setRatingModalOpen] = useState(false)
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(null)
+  const [cancelModalOpen, setCancelModalOpen] = useState(false)
+  const [cancelSessionId, setCancelSessionId] = useState<number | null>(null)
+  const [cancellationReason, setCancellationReason] = useState("")
 
   // Categorize sessions
   const categorizedSessions = useMemo(() => {
@@ -158,10 +168,23 @@ export function LearnerSessionsClient({ sessions }: LearnerSessionsClientProps) 
     window.open(`/sessions/${sessionId}`, '_blank', 'noopener,noreferrer')
   }
 
-  const handleCancelSession = async (sessionId: number) => {
+  const handleCancelSession = (sessionId: number) => {
+    setCancelSessionId(sessionId)
+    setCancellationReason("")
+    setCancelModalOpen(true)
+  }
+
+  const submitCancellation = async () => {
+    if (!cancelSessionId || !cancellationReason.trim()) {
+      toast.error('Please provide a cancellation reason')
+      return
+    }
+
     try {
-      const response = await fetch(`/api/bookings/cancel/${sessionId}`, {
-        method: 'POST'
+      const response = await fetch(`/api/bookings/cancel/${cancelSessionId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: cancellationReason })
       })
 
       if (!response.ok) {
@@ -169,6 +192,7 @@ export function LearnerSessionsClient({ sessions }: LearnerSessionsClientProps) 
       }
 
       toast.success('Session cancelled successfully')
+      setCancelModalOpen(false)
       // Refresh page to show updated status
       window.location.reload()
     } catch (error) {
@@ -289,7 +313,7 @@ export function LearnerSessionsClient({ sessions }: LearnerSessionsClientProps) 
           <div className="flex items-center space-x-2">
             <CreditCard className="w-4 h-4 text-gray-500" />
             <span>Total Cost: {session.totalCostCredits} credits</span>
-            {session.refundAmount && (
+            {session.refundAmount !== 0 && session.refundAmount != null && (
               <Badge variant="secondary" className="ml-2">
                 Refunded: {session.refundAmount} credits
               </Badge>
@@ -376,16 +400,40 @@ export function LearnerSessionsClient({ sessions }: LearnerSessionsClientProps) 
           )}
 
           {session.status === 'completed' && (
-            <Button 
-              variant="outline"
-              onClick={() => {
-                setSelectedSessionId(session.id)
-                setRatingModalOpen(true)
-              }}
-            >
-              <Star className="w-4 h-4 mr-2" />
-              Rate Mentor
-            </Button>
+            session.reviewId ? (
+              // Already reviewed - show review complete with stars
+              <div className="flex items-center space-x-2 py-2">
+                <CheckCircle2 className="w-4 h-4 text-green-600" />
+                <span className="text-sm font-medium text-green-800">Review Complete</span>
+                <div className="flex items-center ml-2">
+                  {Array.from({ length: 5 }, (_, i) => (
+                    <Star
+                      key={i}
+                      className={`w-3 h-3 ${
+                        i < (session.reviewRating || 0)
+                          ? "fill-yellow-400 text-yellow-400"
+                          : "text-gray-300"
+                      }`}
+                    />
+                  ))}
+                  <span className="text-xs text-green-700 ml-1">
+                    ({session.reviewRating}/5)
+                  </span>
+                </div>
+              </div>
+            ) : (
+              // Not reviewed yet - show rate mentor button
+              <Button 
+                variant="outline"
+                onClick={() => {
+                  setSelectedSessionId(session.id)
+                  setRatingModalOpen(true)
+                }}
+              >
+                <Star className="w-4 h-4 mr-2" />
+                Rate Mentor
+              </Button>
+            )
           )}
 
           {session.status === 'pending' && (
@@ -479,6 +527,50 @@ export function LearnerSessionsClient({ sessions }: LearnerSessionsClientProps) 
           }}
         />
       )}
+
+      {/* Cancellation Modal */}
+      <Dialog open={cancelModalOpen} onOpenChange={setCancelModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cancel Session</DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Please provide a reason for cancelling this session. This will help us improve our service and will be shared with the mentor.
+            </p>
+
+            <div>
+              <label className="text-sm font-medium mb-2 block">
+                Cancellation Reason *
+              </label>
+              <Textarea
+                value={cancellationReason}
+                onChange={(e) => setCancellationReason(e.target.value)}
+                placeholder="Please explain why you need to cancel this session..."
+                rows={4}
+                required
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setCancelModalOpen(false)}
+            >
+              Keep Session
+            </Button>
+            <Button 
+              onClick={submitCancellation}
+              variant="destructive"
+              disabled={!cancellationReason.trim()}
+            >
+              Cancel Session
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

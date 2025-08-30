@@ -1,6 +1,6 @@
 import { db } from '@/db'
 import { bookingSessions, learners, mentors, creditTransactions, mentorPayouts, notifications } from '@/db/schema'
-import { eq, sql } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 
 export interface SessionCompletionOptions {
   sessionId: number
@@ -24,28 +24,47 @@ class SessionCompletionService {
   private readonly MENTOR_FEE_PERCENTAGE = 0.8 // 80% to mentor, 20% platform fee
 
   async completeSession(options: SessionCompletionOptions): Promise<SessionCompletionResult> {
-    const { sessionId, reason, completedBy, userId } = options
+    const { sessionId, reason, completedBy } = options
 
     return await db.transaction(async (tx) => {
       // Get session with row lock to prevent concurrent completion
-      const [sessionRecord] = await tx.execute(
-        sql`SELECT bs.*, 
-            l.id as learner_id, l.user_id as learner_user_id, l.credits_balance as learner_credits,
-            m.id as mentor_id, m.user_id as mentor_user_id, m.credits_balance as mentor_credits
-            FROM booking_sessions bs
-            LEFT JOIN learners l ON bs.learner_id = l.id 
-            LEFT JOIN mentors m ON bs.mentor_id = m.id
-            WHERE bs.id = ${sessionId}
-            FOR UPDATE`
-      )
+      const sessionData = await tx
+        .select()
+        .from(bookingSessions)
+        .where(eq(bookingSessions.id, sessionId))
+        .for('update')
+        .limit(1)
 
-      if (!sessionRecord) {
+      if (sessionData.length === 0) {
         throw new Error('Session not found')
+      }
+
+      const session = sessionData[0]
+
+      // Get learner and mentor data separately
+      const [learner, mentor] = await Promise.all([
+        tx.select().from(learners).where(eq(learners.id, session.learnerId)).limit(1),
+        tx.select().from(mentors).where(eq(mentors.id, session.mentorId)).limit(1)
+      ])
+
+      if (!learner.length || !mentor.length) {
+        throw new Error('Learner or mentor not found')
+      }
+
+      // Combine the data for compatibility
+      const sessionRecord = {
+        ...session,
+        learner_id: learner[0].id,
+        learner_user_id: learner[0].userId,
+        learner_credits: learner[0].creditsBalance,
+        mentor_id: mentor[0].id,
+        mentor_user_id: mentor[0].userId,
+        mentor_credits: mentor[0].creditsBalance
       }
 
       // Check if session is already completed
       const terminalStatuses = ['completed', 'cancelled', 'both_no_show', 'mentor_no_show', 'learner_no_show', 'technical_issues']
-      if (terminalStatuses.includes(sessionRecord.status)) {
+      if (sessionRecord.status !== null && terminalStatuses.includes(sessionRecord.status)) {
         return {
           success: true,
           status: sessionRecord.status,
@@ -62,14 +81,14 @@ class SessionCompletionService {
 
       // Calculate actual connection durations
       const learnerDuration = this.calculateConnectionDuration(
-        sessionRecord.learner_joined_at,
-        sessionRecord.learner_left_at,
+        sessionRecord.learnerJoinedAt,
+        sessionRecord.learnerLeftAt,
         completionTime
       )
 
       const mentorDuration = this.calculateConnectionDuration(
-        sessionRecord.mentor_joined_at,
-        sessionRecord.mentor_left_at,
+        sessionRecord.mentorJoinedAt,
+        sessionRecord.mentorLeftAt,
         completionTime
       )
 
@@ -83,8 +102,8 @@ class SessionCompletionService {
       const updateData = {
         status: finalStatus,
         agoraCallEndedAt: completionTime,
-        learnerConnectionDurationMs: Math.max(learnerDuration, sessionRecord.learner_connection_duration_ms || 0),
-        mentorConnectionDurationMs: Math.max(mentorDuration, sessionRecord.mentor_connection_duration_ms || 0),
+        learnerConnectionDurationMs: Math.max(learnerDuration, sessionRecord.learnerConnectionDurationMs || 0),
+        mentorConnectionDurationMs: Math.max(mentorDuration, sessionRecord.mentorConnectionDurationMs || 0),
       }
 
       await tx
@@ -96,9 +115,9 @@ class SessionCompletionService {
       const notificationData = []
 
       // Process mentor payment
-      if (shouldProcessPayment && sessionRecord.total_cost_credits > 0) {
-        mentorEarnings = Math.floor(sessionRecord.total_cost_credits * this.MENTOR_FEE_PERCENTAGE)
-        const platformFee = sessionRecord.total_cost_credits - mentorEarnings
+      if (shouldProcessPayment && sessionRecord.totalCostCredits > 0) {
+        mentorEarnings = Math.floor(sessionRecord.totalCostCredits * this.MENTOR_FEE_PERCENTAGE)
+        const platformFee = sessionRecord.totalCostCredits - mentorEarnings
 
         // Add credits to mentor balance
         await tx
@@ -131,7 +150,7 @@ class SessionCompletionService {
           description: `Payment for ${finalStatus} session ${sessionId} (${Math.round(Math.min(learnerDuration, mentorDuration) / 60000)} minutes)`,
           metadata: { 
             platformFee, 
-            originalAmount: sessionRecord.total_cost_credits,
+            originalAmount: sessionRecord.totalCostCredits,
             completedBy,
             learnerDurationMs: learnerDuration,
             mentorDurationMs: mentorDuration,
@@ -150,18 +169,18 @@ class SessionCompletionService {
       }
 
       // Process refund
-      if (shouldRefundLearner && sessionRecord.escrow_credits > 0) {
+      if (shouldRefundLearner && sessionRecord.escrowCredits > 0) {
         await tx
           .update(learners)
           .set({
-            creditsBalance: sessionRecord.learner_credits + sessionRecord.escrow_credits
+            creditsBalance: sessionRecord.learner_credits + sessionRecord.escrowCredits
           })
           .where(eq(learners.id, sessionRecord.learner_id))
 
         await tx
           .update(bookingSessions)
           .set({
-            refundAmount: sessionRecord.escrow_credits,
+            refundAmount: sessionRecord.escrowCredits,
             refundProcessedAt: now,
           })
           .where(eq(bookingSessions.id, sessionId))
@@ -170,9 +189,9 @@ class SessionCompletionService {
           userId: sessionRecord.learner_user_id,
           type: 'session_refund',
           direction: 'credit',
-          amount: sessionRecord.escrow_credits,
+          amount: sessionRecord.escrowCredits,
           balanceBefore: sessionRecord.learner_credits,
-          balanceAfter: sessionRecord.learner_credits + sessionRecord.escrow_credits,
+          balanceAfter: sessionRecord.learner_credits + sessionRecord.escrowCredits,
           relatedSessionId: sessionId,
           description: `Refund for session ${sessionId}: ${refundReason}`,
           metadata: { 
@@ -187,7 +206,7 @@ class SessionCompletionService {
           userId: sessionRecord.learner_user_id,
           type: 'session_refunded',
           title: 'Session Refunded',
-          message: `You have been refunded ${sessionRecord.escrow_credits} credits. Reason: ${refundReason}`,
+          message: `You have been refunded ${sessionRecord.escrowCredits} credits. Reason: ${refundReason}`,
           relatedEntityType: 'session',
           relatedEntityId: sessionId,
         })

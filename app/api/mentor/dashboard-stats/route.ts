@@ -49,7 +49,7 @@ export async function GET() {
     }
 
     // Initialize default values
-    let stats = {
+    const stats = {
       totalSessions: 0,
       monthlySessions: 0,
       totalEarnings: 0,

@@ -31,7 +31,7 @@ export async function POST(
 
     console.log(`[LEAVE_API] User ${session.id} leaving session ${sessionId}, reason: ${reason}, isPageRefresh: ${isPageRefresh}`)
 
-    let leaveResult = { 
+    const leaveResult = { 
       wasInSession: false, 
       connectionDurationSeconds: 0, 
       wasAlreadyLeft: false,

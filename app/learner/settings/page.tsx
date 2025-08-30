@@ -3,6 +3,7 @@ import { db } from "@/db"
 import { users, learners } from "@/db/schema"
 import { eq } from "drizzle-orm"
 import { LearnerSettingsForm } from "@/components/settings/LearnerSettingsForm"
+import { LearnerHeader } from "@/components/learner/Header"
 import { redirect } from "next/navigation"
 
 export default async function LearnerSettingsPage() {
@@ -44,8 +45,15 @@ export default async function LearnerSettingsPage() {
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center p-4 md:p-8 lg:p-12 bg-gray-50">
-      <LearnerSettingsForm initialData={initialData} />
-    </main>
+    <div className="min-h-screen bg-gray-50">
+      <LearnerHeader />
+      <main className="container mx-auto px-4 py-8 max-w-5xl">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Settings</h1>
+          <p className="text-gray-600">Manage your personal information and learning preferences.</p>
+        </div>
+        <LearnerSettingsForm initialData={initialData} />
+      </main>
+    </div>
   )
 }

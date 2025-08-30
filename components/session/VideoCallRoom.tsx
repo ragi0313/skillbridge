@@ -1,3 +1,5 @@
+// @refresh reset
+
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
@@ -13,16 +15,23 @@ import {
   Mic, 
   MicOff, 
   Phone,
-  Settings,
   Users,
   Clock,
   AlertTriangle,
-  Maximize2,
-  Minimize2,
   Volume2,
   VolumeX,
-  RefreshCw
+  RefreshCw,
+  Monitor,
+  MessageSquare,
+  Send,
+  Download,
+  X,
+  FileText,
+  Image as ImageIcon,
+  Upload
 } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { useRealTimeTimer } from "@/lib/hooks/useRealTimeTimer"
 
 interface VideoCallRoomProps {
@@ -36,6 +45,11 @@ interface VideoCallRoomProps {
     durationMinutes: number
   }
   userRole: "learner" | "mentor"
+  currentUser: {
+    firstName: string
+    lastName: string
+    profilePictureUrl?: string | null
+  }
   otherParticipant: {
     firstName: string
     lastName: string
@@ -56,10 +70,30 @@ interface VideoCallRoomProps {
 type ConnectionState = "connecting" | "connected" | "reconnecting" | "disconnected" | "failed"
 type CallQuality = "excellent" | "good" | "fair" | "poor" | "unknown"
 
+interface ChatMessage {
+  id: string
+  message: string
+  messageType: "text" | "file"
+  timestamp: number
+  senderName: string
+  senderRole: "learner" | "mentor"
+  senderId: string
+  attachment?: ChatAttachment
+}
+
+interface ChatAttachment {
+  fileName: string
+  fileSize: number
+  fileType: string
+  fileData: string // Base64 encoded file data
+  thumbnailData?: string // Base64 encoded thumbnail
+}
+
 export function VideoCallRoom({
   sessionId,
   sessionData,
   userRole,
+  currentUser,
   otherParticipant,
   agoraConfig,
   onLeaveCall,
@@ -72,7 +106,6 @@ export function VideoCallRoom({
   const [isRemoteVideoVisible, setIsRemoteVideoVisible] = useState(false)
   const [isRemoteAudioEnabled, setIsRemoteAudioEnabled] = useState(false)
   const [callQuality, setCallQuality] = useState<CallQuality>("unknown")
-  const [isFullscreen, setIsFullscreen] = useState(false)
   const [participants, setParticipants] = useState<number>(1)
   const [isCallEnding, setIsCallEnding] = useState(false)
   const [connectionRetryCount, setConnectionRetryCount] = useState(0)
@@ -84,10 +117,26 @@ export function VideoCallRoom({
     downlinkLoss: 0
   })
 
+  // Screen sharing states
+  const [isScreenSharing, setIsScreenSharing] = useState(false)
+  const [isRemoteScreenSharing, setIsRemoteScreenSharing] = useState(false)
+
+  // Chat states
+  const [showSidebar, setShowSidebar] = useState(false)
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
+  const [newMessage, setNewMessage] = useState("")
+  const [unreadCount, setUnreadCount] = useState(0)
+
+  // File sharing states
+  const [isUploading, setIsUploading] = useState(false)
+
   const localVideoRef = useRef<HTMLDivElement>(null)
   const remoteVideoRef = useRef<HTMLDivElement>(null)
+  const screenShareRef = useRef<HTMLDivElement>(null)
   const agoraClientRef = useRef<any>(null)
-  const localTracksRef = useRef<{ videoTrack?: any; audioTrack?: any }>({})
+  const rtmClientRef = useRef<any>(null)
+  const rtmChannelRef = useRef<any>(null)
+  const localTracksRef = useRef<{ videoTrack?: any; audioTrack?: any; screenTrack?: any }>({})
   const isInitializingRef = useRef<boolean>(false)
   const isCleaningUpRef = useRef<boolean>(false)
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -96,6 +145,8 @@ export function VideoCallRoom({
   const currentRemoteUsersRef = useRef<Set<string>>(new Set())
   const hasCalledLeaveRef = useRef<boolean>(false)
   const lastPingTimeRef = useRef<number>(Date.now())
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const chatEndRef = useRef<HTMLDivElement>(null)
 
   const sessionStart = new Date(sessionData.startTime)
   const sessionEnd = new Date(sessionData.endTime)
@@ -124,6 +175,60 @@ export function VideoCallRoom({
       console.warn("[VIDEO_CALL] Session ping failed:", error)
     }
   }, [sessionId, isCallEnding])
+
+  // Enhanced media cleanup with better error handling
+  const cleanupLocalTracks = useCallback(async () => {
+    console.log("[VIDEO_CALL] Starting local tracks cleanup")
+    
+    try {
+      // Stop and close video track
+      if (localTracksRef.current.videoTrack) {
+        try {
+          localTracksRef.current.videoTrack.stop()
+          localTracksRef.current.videoTrack.close()
+          console.log("[VIDEO_CALL] Video track cleaned up")
+        } catch (error) {
+          console.error("[VIDEO_CALL] Error cleaning video track:", error)
+        }
+        localTracksRef.current.videoTrack = undefined
+      }
+
+      // Stop and close audio track
+      if (localTracksRef.current.audioTrack) {
+        try {
+          localTracksRef.current.audioTrack.stop()
+          localTracksRef.current.audioTrack.close()
+          console.log("[VIDEO_CALL] Audio track cleaned up")
+        } catch (error) {
+          console.error("[VIDEO_CALL] Error cleaning audio track:", error)
+        }
+        localTracksRef.current.audioTrack = undefined
+      }
+
+      // Stop and close screen track
+      if (localTracksRef.current.screenTrack) {
+        try {
+          localTracksRef.current.screenTrack.stop()
+          localTracksRef.current.screenTrack.close()
+          console.log("[VIDEO_CALL] Screen track cleaned up")
+        } catch (error) {
+          console.error("[VIDEO_CALL] Error cleaning screen track:", error)
+        }
+        localTracksRef.current.screenTrack = undefined
+      }
+
+      // Clear video elements
+      if (localVideoRef.current) {
+        localVideoRef.current.innerHTML = ""
+      }
+      if (remoteVideoRef.current) {
+        remoteVideoRef.current.innerHTML = ""
+      }
+
+    } catch (error) {
+      console.error("[VIDEO_CALL] Error in cleanupLocalTracks:", error)
+    }
+  }, [])
 
   // Retry media creation with fallback options
   const retryMediaCreation = useCallback(async (AgoraRTC: any, client: any) => {
@@ -156,6 +261,9 @@ export function VideoCallRoom({
         description: "audio only"
       }
     ]
+
+    // Clean up existing tracks first
+    await cleanupLocalTracks()
 
     for (let i = 0; i < mediaConfigs.length; i++) {
       const config = mediaConfigs[i]
@@ -205,7 +313,7 @@ export function VideoCallRoom({
     
     setIsRetryingMedia(false)
     return false
-  }, [])
+  }, [cleanupLocalTracks])
 
   // Comprehensive cleanup function
   const performCleanup = useCallback(async (reason: string = "component_cleanup") => {
@@ -218,97 +326,64 @@ export function VideoCallRoom({
     console.log(`[VIDEO_CALL] Starting cleanup: ${reason}`)
 
     try {
-      // CRITICAL FIX: Don't call leave API on page refresh
-      const navigationEntries = performance.getEntriesByType("navigation") as PerformanceNavigationTiming[]
-      const isPageRefresh = reason === "beforeunload" || 
-                       reason === "page_refresh" ||
-                       navigationEntries[0]?.type === "reload" ||
-                       reason.includes("refresh")
-      
-      if (hasJoinedSession && !hasCalledLeaveRef.current && !isPageRefresh) {
-        hasCalledLeaveRef.current = true
-        try {
-          await fetch(`/api/sessions/${sessionId}/leave`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-              reason,
-              isPageRefresh: false
-            })
-          })
-          console.log("[VIDEO_CALL] Successfully called leave API during cleanup")
-        } catch (error) {
-          console.error("[VIDEO_CALL] Error calling leave API during cleanup:", error)
-        }
-      } else if (isPageRefresh) {
-        console.log("[VIDEO_CALL] Skipping leave API call due to page refresh")
-      }
-
-      // Clear any pending timers
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current)
-        reconnectTimeoutRef.current = null
-      }
-      
+      // Clear intervals first
       if (trackingIntervalRef.current) {
         clearInterval(trackingIntervalRef.current)
         trackingIntervalRef.current = null
       }
-
-      // Stop and close local tracks
-      if (localTracksRef.current.audioTrack) {
-        try {
-          localTracksRef.current.audioTrack.stop()
-          localTracksRef.current.audioTrack.close()
-          console.log("[VIDEO_CALL] Audio track stopped")
-        } catch (error) {
-          console.error("[VIDEO_CALL] Error stopping audio track:", error)
-        }
+      
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current)
+        reconnectTimeoutRef.current = null
       }
 
-      if (localTracksRef.current.videoTrack) {
-        try {
-          localTracksRef.current.videoTrack.stop()
-          localTracksRef.current.videoTrack.close()
-          console.log("[VIDEO_CALL] Video track stopped")
-        } catch (error) {
-          console.error("[VIDEO_CALL] Error stopping video track:", error)
-        }
-      }
+      // Clean up local tracks
+      await cleanupLocalTracks()
 
-      // Leave Agora channel
+      // Clean up RTM
+      if (rtmChannelRef.current) {
+        try {
+          await rtmChannelRef.current.leave()
+          console.log("[VIDEO_CALL] Left RTM channel during cleanup")
+        } catch (error) {
+          console.error("[VIDEO_CALL] Error leaving RTM channel:", error)
+        }
+        rtmChannelRef.current = null
+      }
+      
+      if (rtmClientRef.current) {
+        try {
+          await rtmClientRef.current.logout()
+          console.log("[VIDEO_CALL] Logged out of RTM during cleanup")
+        } catch (error) {
+          console.error("[VIDEO_CALL] Error logging out of RTM:", error)
+        }
+        rtmClientRef.current = null
+      }
+      
+      // Clean up Agora client
       if (agoraClientRef.current && hasJoinedChannelRef.current) {
         try {
-          if (agoraClientRef.current.connectionState !== "DISCONNECTED") {
-            await agoraClientRef.current.leave()
-            console.log("[VIDEO_CALL] Left Agora channel")
-          }
+          await agoraClientRef.current.leave()
+          console.log("[VIDEO_CALL] Left Agora channel during cleanup")
+          hasJoinedChannelRef.current = false
+          
+          // Wait a moment for cleanup to propagate
+          await new Promise(resolve => setTimeout(resolve, 1000))
         } catch (error) {
           console.error("[VIDEO_CALL] Error leaving channel:", error)
         }
       }
 
-      // Clear video elements
-      if (localVideoRef.current) {
-        localVideoRef.current.innerHTML = ""
-      }
-      if (remoteVideoRef.current) {
-        remoteVideoRef.current.innerHTML = ""
-      }
-
-      // Reset refs and state
-      localTracksRef.current = {}
+      // Clear client references
       agoraClientRef.current = null
-      hasJoinedChannelRef.current = false
-      currentRemoteUsersRef.current.clear()
-
-      console.log("[VIDEO_CALL] Cleanup completed successfully")
+      
     } catch (error) {
       console.error("[VIDEO_CALL] Error during cleanup:", error)
     } finally {
       isCleaningUpRef.current = false
     }
-  }, [sessionId, hasJoinedSession])
+  }, [cleanupLocalTracks])
 
   // Handle leaving the call
   const handleLeaveCall = useCallback(async (reason: string = "user_action") => {
@@ -389,15 +464,20 @@ export function VideoCallRoom({
       console.log(`[VIDEO_CALL] Reconnected with UID: ${actualUid}`)
 
       // Republish local tracks if they exist
-      if (localTracksRef.current.audioTrack && localTracksRef.current.videoTrack) {
-        await agoraClientRef.current.publish([
-          localTracksRef.current.audioTrack,
-          localTracksRef.current.videoTrack
-        ])
+      const tracksToPublish = []
+      if (localTracksRef.current.audioTrack) {
+        tracksToPublish.push(localTracksRef.current.audioTrack)
+      }
+      if (localTracksRef.current.videoTrack) {
+        tracksToPublish.push(localTracksRef.current.videoTrack)
+      }
+      if (localTracksRef.current.screenTrack) {
+        tracksToPublish.push(localTracksRef.current.screenTrack)
+      }
+
+      if (tracksToPublish.length > 0) {
+        await agoraClientRef.current.publish(tracksToPublish)
         console.log("[VIDEO_CALL] Republished local tracks")
-      } else if (localTracksRef.current.audioTrack) {
-        await agoraClientRef.current.publish([localTracksRef.current.audioTrack])
-        console.log("[VIDEO_CALL] Republished audio track only")
       }
 
       setConnectionState("connected")
@@ -415,14 +495,28 @@ export function VideoCallRoom({
   useEffect(() => {
     const initializeAgora = async () => {
       if (isInitializingRef.current || isCleaningUpRef.current || agoraClientRef.current) {
-        console.log("[VIDEO_CALL] Agora initialization already in progress")
+        console.log("[VIDEO_CALL] Agora initialization already in progress or completed")
         return
+      }
+      
+      const isReconnection = sessionStorage.getItem(`agora_connected_${sessionId}`) === 'true'
+      if (isReconnection) {
+        console.log("[VIDEO_CALL] Detected reconnection scenario")
+        // Clear the flag and add extra delay
+        sessionStorage.removeItem(`agora_connected_${sessionId}`)
+        await new Promise(resolve => setTimeout(resolve, 2000))
       }
       
       isInitializingRef.current = true
       
       try {
         console.log("[VIDEO_CALL] Initializing Agora SDK...")
+        
+        // Validate config before proceeding
+        if (!agoraConfig.appId || !agoraConfig.channel || !agoraConfig.token || !agoraConfig.uid) {
+          throw new Error("Invalid Agora configuration - missing required fields")
+        }
+
         const AgoraRTC = await import("agora-rtc-sdk-ng")
         
         AgoraRTC.default.enableLogUpload()
@@ -435,7 +529,7 @@ export function VideoCallRoom({
         })
         
         agoraClientRef.current = client
-
+        
         // Event listeners
         client.on("user-published", async (user: any, mediaType: "video" | "audio") => {
           try {
@@ -443,10 +537,20 @@ export function VideoCallRoom({
             await client.subscribe(user, mediaType)
             
             if (mediaType === "video" && user.videoTrack) {
+              // Check if this is screen sharing based on video track characteristics
+              const isScreenShare = user.videoTrack._trackMediaType === 'screentrack' || 
+                                   user.videoTrack.isScreenTrack || 
+                                   (user.videoTrack.getMediaStreamTrack && 
+                                    user.videoTrack.getMediaStreamTrack().getSettings().displaySurface)
+              
               setIsRemoteVideoVisible(true)
+              setIsRemoteScreenSharing(isScreenShare)
+              
               if (remoteVideoRef.current) {
                 user.videoTrack.play(remoteVideoRef.current)
               }
+              
+              console.log(`[VIDEO_CALL] Remote ${isScreenShare ? 'screen share' : 'camera'} started`)
             }
             
             if (mediaType === "audio" && user.audioTrack) {
@@ -466,6 +570,8 @@ export function VideoCallRoom({
           
           if (mediaType === "video") {
             setIsRemoteVideoVisible(false)
+            setIsRemoteScreenSharing(false)
+            console.log("[VIDEO_CALL] Remote video/screen share stopped")
           }
           if (mediaType === "audio") {
             setIsRemoteAudioEnabled(false)
@@ -491,7 +597,7 @@ export function VideoCallRoom({
 
         client.on("connection-state-changed", (currentState: string, revState: string, reason?: string) => {
           console.log(`[VIDEO_CALL] Connection state changed: ${revState} -> ${currentState}, reason: ${reason}`)
-          setConnectionState(currentState as ConnectionState)
+          setConnectionState(currentState.toLowerCase() as ConnectionState)
           
           if (currentState === "DISCONNECTED" && !isCallEnding && !isCleaningUpRef.current) {
             console.log("[VIDEO_CALL] Unexpected disconnection, attempting reconnection")
@@ -502,7 +608,13 @@ export function VideoCallRoom({
         })
 
         client.on("exception", (evt: any) => {
-          console.error("[VIDEO_CALL] Agora exception:", evt || "Unknown exception")
+          // Filter out non-critical stats exceptions
+          if (!evt || Object.keys(evt).length === 0) {
+            console.log("[VIDEO_CALL] Non-critical Agora stats exception (ignored)")
+            return
+          }
+          
+          console.error("[VIDEO_CALL] Agora exception:", evt)
           
           if (evt && evt.code) {
             switch (evt.code) {
@@ -542,22 +654,35 @@ export function VideoCallRoom({
             
             hasJoinedChannelRef.current = true
             console.log(`[VIDEO_CALL] Successfully joined channel with UID: ${actualUid}`)
+            sessionStorage.setItem(`agora_connected_${sessionId}`, 'true')
             break
           } catch (error: any) {
             joinAttempts++
             console.error(`[VIDEO_CALL] Join attempt ${joinAttempts} failed:`, error)
             
-            if (error.code === "UID_CONFLICT" && joinAttempts < maxJoinAttempts) {
-              console.log("[VIDEO_CALL] UID conflict, retrying with random UID")
+            // Handle specific error codes
+            if (error.code === "INVALID_TOKEN" || error.message?.includes("token")) {
+              console.error("[VIDEO_CALL] Token error detected, cannot retry")
+              throw new Error("Authentication failed. Please refresh the page and try again.")
+            }
+            
+            if (error.code === "UID_CONFLICT") {
+              console.log("[VIDEO_CALL] UID conflict, retrying with UID 0")
               agoraConfig.uid = 0
+              await new Promise(resolve => setTimeout(resolve, 1000))
               continue
             }
             
-            if (joinAttempts >= maxJoinAttempts) {
-              throw new Error(`Failed to join after ${maxJoinAttempts} attempts: ${error.message}`)
+            if (error.code === "INVALID_CHANNEL_NAME") {
+              throw new Error("Invalid channel configuration. Please contact support.")
             }
             
-            await new Promise(resolve => setTimeout(resolve, 1000))
+            if (joinAttempts >= maxJoinAttempts) {
+              throw new Error(`Failed to join after ${maxJoinAttempts} attempts: ${error.message || error.code || 'Unknown error'}`)
+            }
+            
+            // Wait before retry with exponential backoff
+            await new Promise(resolve => setTimeout(resolve, 1000 * joinAttempts))
           }
         }
 
@@ -594,6 +719,49 @@ export function VideoCallRoom({
           else setCallQuality("unknown")
         })
 
+        // Initialize RTM for chat and file sharing
+        try {
+          console.log("[VIDEO_CALL] Initializing Agora RTM...")
+          const AgoraRTM = await import("agora-rtm-sdk")
+          
+          const rtmClient = new AgoraRTM.default.RTM(agoraConfig.appId, agoraConfig.uid.toString())
+          rtmClientRef.current = rtmClient
+          
+          // Login to RTM
+          await rtmClient.login()
+          console.log("[VIDEO_CALL] RTM login successful")
+          
+          // Subscribe to channel messages
+          const streamChannel = rtmClient.createStreamChannel(agoraConfig.channel)
+          rtmChannelRef.current = streamChannel
+          
+          // Set up RTM event listeners
+          streamChannel.on('message', (eventArgs: any) => {
+            console.log("[VIDEO_CALL] Received RTM message:", eventArgs)
+            const { message, publisher } = eventArgs
+            if (message && message.stringData) {
+              handleRTMMessage({ text: message.stringData }, publisher)
+            }
+          })
+          
+          streamChannel.on('presence', (eventArgs: any) => {
+            console.log("[VIDEO_CALL] RTM presence event:", eventArgs)
+            if (eventArgs.eventType === 'REMOTE_JOIN') {
+              console.log("[VIDEO_CALL] RTM member joined:", eventArgs.publisher)
+            } else if (eventArgs.eventType === 'REMOTE_LEAVE') {
+              console.log("[VIDEO_CALL] RTM member left:", eventArgs.publisher)
+            }
+          })
+          
+          // Join RTM channel
+          await streamChannel.join()
+          console.log("[VIDEO_CALL] RTM channel joined successfully")
+          
+        } catch (rtmError) {
+          console.error("[VIDEO_CALL] RTM initialization failed:", rtmError)
+          setMediaError("Chat functionality unavailable. Video call will continue normally.")
+        }
+
         setConnectionState("connected")
         console.log("[VIDEO_CALL] Agora initialization completed successfully")
 
@@ -629,20 +797,8 @@ export function VideoCallRoom({
     initializeAgora()
 
     const handleBeforeUnload = () => {
-      if (hasJoinedChannelRef.current && agoraClientRef.current) {
-        try {
-          if (localTracksRef.current.audioTrack) {
-            localTracksRef.current.audioTrack.stop()
-            localTracksRef.current.audioTrack.close()
-          }
-          if (localTracksRef.current.videoTrack) {
-            localTracksRef.current.videoTrack.stop()
-            localTracksRef.current.videoTrack.close()
-          }
-          agoraClientRef.current.leave()
-        } catch (error) {
-          console.error("[VIDEO_CALL] Error in beforeunload cleanup:", error)
-        }
+      if (!isCleaningUpRef.current) {
+        performCleanup("beforeunload")
       }
     }
 
@@ -664,44 +820,56 @@ export function VideoCallRoom({
     }
   }, [agoraConfig, sessionId, onConnectionError, attemptReconnection, performCleanup, isCallEnding, pingSession, retryMediaCreation])
 
-  // Media control functions
+  // FIXED: Improved video toggle with better track management
   const toggleVideo = useCallback(async () => {
-    if (localTracksRef.current.videoTrack && !isCallEnding) {
-      try {
-        const newState = !isVideoEnabled
-        await localTracksRef.current.videoTrack.setEnabled(newState)
-        setIsVideoEnabled(newState)
-        console.log(`[VIDEO_CALL] Video ${newState ? 'enabled' : 'disabled'}`)
-      } catch (error) {
-        console.error("[VIDEO_CALL] Error toggling video:", error)
-      }
-    } else if (!localTracksRef.current.videoTrack && !isCallEnding) {
-      // Try to recreate video track
-      try {
-        const AgoraRTC = await import("agora-rtc-sdk-ng")
-        const videoTrack = await AgoraRTC.default.createCameraVideoTrack({
-          encoderConfig: "480p_1",
-          optimizationMode: "motion"
-        })
-        
-        localTracksRef.current.videoTrack = videoTrack
-        if (localVideoRef.current) {
-          videoTrack.play(localVideoRef.current)
+    if (!agoraClientRef.current || isCallEnding) return
+    
+    try {
+      if (isVideoEnabled && localTracksRef.current.videoTrack) {
+        // Disable existing video
+        await localTracksRef.current.videoTrack.setEnabled(false)
+        setIsVideoEnabled(false)
+        console.log("[VIDEO_CALL] Video disabled")
+      } else {
+        // Enable or create video track
+        if (localTracksRef.current.videoTrack) {
+          // Re-enable existing track
+          await localTracksRef.current.videoTrack.setEnabled(true)
+          setIsVideoEnabled(true)
+          console.log("[VIDEO_CALL] Video re-enabled")
+        } else {
+          // Create new video track
+          try {
+            const AgoraRTC = await import("agora-rtc-sdk-ng")
+            const videoTrack = await AgoraRTC.default.createCameraVideoTrack({
+              encoderConfig: "480p_1",
+              optimizationMode: "motion"
+            })
+            
+            localTracksRef.current.videoTrack = videoTrack
+            if (localVideoRef.current) {
+              videoTrack.play(localVideoRef.current)
+            }
+            
+            // Only publish if not currently screen sharing
+            if (!isScreenSharing) {
+              await agoraClientRef.current.publish([videoTrack])
+            }
+            
+            setIsVideoEnabled(true)
+            setMediaError("")
+            console.log("[VIDEO_CALL] Video track recreated and enabled")
+          } catch (error) {
+            console.error("[VIDEO_CALL] Error recreating video track:", error)
+            setMediaError("Failed to enable camera")
+          }
         }
-        
-        if (agoraClientRef.current) {
-          await agoraClientRef.current.publish([videoTrack])
-        }
-        
-        setIsVideoEnabled(true)
-        setMediaError("")
-        console.log("[VIDEO_CALL] Video track recreated and enabled")
-      } catch (error) {
-        console.error("[VIDEO_CALL] Error recreating video track:", error)
-        setMediaError("Failed to enable camera")
       }
+    } catch (error) {
+      console.error("[VIDEO_CALL] Error toggling video:", error)
+      setMediaError("Failed to toggle video")
     }
-  }, [isVideoEnabled, isCallEnding])
+  }, [isVideoEnabled, isCallEnding, isScreenSharing])
 
   const toggleAudio = useCallback(async () => {
     if (localTracksRef.current.audioTrack && !isCallEnding) {
@@ -716,20 +884,6 @@ export function VideoCallRoom({
     }
   }, [isAudioEnabled, isCallEnding])
 
-  const toggleFullscreen = useCallback(async () => {
-    try {
-      if (!document.fullscreenElement) {
-        await document.documentElement.requestFullscreen()
-        setIsFullscreen(true)
-      } else {
-        await document.exitFullscreen()
-        setIsFullscreen(false)
-      }
-    } catch (error) {
-      console.error("[VIDEO_CALL] Error toggling fullscreen:", error)
-    }
-  }, [])
-
   const handleRetryMedia = useCallback(async () => {
     if (isRetryingMedia || !agoraClientRef.current) return
     
@@ -741,14 +895,450 @@ export function VideoCallRoom({
     }
   }, [isRetryingMedia, retryMediaCreation])
 
-  useEffect(() => {
-    const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement)
+  // FIXED: Enhanced screen sharing functionality with proper error handling
+  const toggleScreenShare = useCallback(async () => {
+    if (!agoraClientRef.current) {
+      console.warn("[VIDEO_CALL] No Agora client available for screen sharing")
+      return
     }
 
-    document.addEventListener('fullscreenchange', handleFullscreenChange)
-    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
+    // Prevent multiple simultaneous calls
+    if (isRetryingMedia) {
+      console.log("[VIDEO_CALL] Screen share toggle blocked - media retry in progress")
+      return
+    }
+
+    try {
+      const AgoraRTC = await import("agora-rtc-sdk-ng")
+
+      if (isScreenSharing) {
+        // Stop screen sharing
+        console.log("[VIDEO_CALL] Stopping screen share...")
+        
+        if (localTracksRef.current.screenTrack) {
+          try {
+            // Unpublish screen track first
+            await agoraClientRef.current.unpublish([localTracksRef.current.screenTrack])
+            console.log("[VIDEO_CALL] Screen track unpublished")
+            
+            // Stop and close screen track
+            localTracksRef.current.screenTrack.stop()
+            localTracksRef.current.screenTrack.close()
+            localTracksRef.current.screenTrack = undefined
+            console.log("[VIDEO_CALL] Screen track stopped and closed")
+          } catch (error) {
+            console.error("[VIDEO_CALL] Error stopping screen track:", error)
+            // Continue with cleanup even if error occurs
+            localTracksRef.current.screenTrack = undefined
+          }
+        }
+
+        setIsScreenSharing(false)
+
+        // Resume camera video if it was enabled before screen sharing
+        if (isVideoEnabled) {
+          try {
+            console.log("[VIDEO_CALL] Recreating camera track after screen share...")
+            
+            // Clean up any existing video track first
+            if (localTracksRef.current.videoTrack) {
+              try {
+                localTracksRef.current.videoTrack.stop()
+                localTracksRef.current.videoTrack.close()
+              } catch (cleanupError) {
+                console.log("[VIDEO_CALL] Error cleaning existing video track:", cleanupError)
+              }
+              localTracksRef.current.videoTrack = undefined
+            }
+            
+            const videoTrack = await AgoraRTC.default.createCameraVideoTrack({
+              encoderConfig: "480p_1",
+              optimizationMode: "motion"
+            })
+            
+            localTracksRef.current.videoTrack = videoTrack
+            
+            if (localVideoRef.current) {
+              videoTrack.play(localVideoRef.current)
+            }
+            
+            // Wait a moment before publishing to avoid conflicts
+            await new Promise(resolve => setTimeout(resolve, 500))
+            await agoraClientRef.current.publish([videoTrack])
+            
+            console.log("[VIDEO_CALL] Camera video resumed after screen share")
+          } catch (error) {
+            console.error("[VIDEO_CALL] Error resuming camera video:", error)
+            setMediaError("Failed to resume camera after screen sharing")
+          }
+        }
+
+        console.log("[VIDEO_CALL] Screen sharing stopped")
+        
+      } else {
+        // Start screen sharing
+        console.log("[VIDEO_CALL] Starting screen share...")
+        
+        // Clear any previous errors
+        setMediaError("")
+        
+        let screenTrack: any = null
+        
+        try {
+          // Create screen share track with proper error handling
+          console.log("[VIDEO_CALL] Creating screen video track...")
+          const screenResult = await AgoraRTC.default.createScreenVideoTrack({
+            encoderConfig: "1080p_1",
+            optimizationMode: "detail"
+          })
+          
+          // Handle both single track and array return types
+          if (Array.isArray(screenResult)) {
+            // If it returns [videoTrack, audioTrack], we only want the video track
+            screenTrack = screenResult[0]
+            console.log("[VIDEO_CALL] Screen track created (from array)")
+          } else {
+            // Single video track
+            screenTrack = screenResult
+            console.log("[VIDEO_CALL] Screen track created (single)")
+          }
+
+          // Verify we have a valid screen track
+          if (!screenTrack || typeof screenTrack.play !== 'function') {
+            console.error("[VIDEO_CALL] Invalid screen track received")
+            throw new Error("Invalid screen track created")
+          }
+
+        } catch (screenError: any) {
+          console.error("[VIDEO_CALL] Screen share creation failed:", screenError)
+          
+          // Handle specific error cases based on error properties
+          const errorName = screenError.name || screenError.code || ''
+          const errorMessage = screenError.message || ''
+          const errorCode = screenError.code || ''
+          
+          // Check for various forms of permission denied or user cancellation
+          const isPermissionDenied = 
+            errorName.includes('NotAllowedError') || 
+            errorMessage.includes('Permission denied') || 
+            errorMessage.includes('denied by user') ||
+            errorCode === 'PERMISSION_DENIED' ||
+            errorName.includes('PERMISSION_DENIED')
+          
+          const isUserCancelled = 
+            errorName.includes('AbortError') || 
+            errorMessage.includes('aborted') || 
+            errorMessage.includes('cancelled') ||
+            errorMessage.includes('User cancelled')
+          
+          const isNotSupported = 
+            errorName.includes('NotSupportedError') || 
+            errorMessage.includes('not supported')
+          
+          if (isPermissionDenied || isUserCancelled) {
+            // User denied permission or cancelled - don't show error message
+            console.log("[VIDEO_CALL] Screen sharing permission denied or cancelled by user")
+            return
+          } else if (isNotSupported) {
+            setMediaError("Screen sharing is not supported in this browser.")
+            return
+          } else {
+            // Other errors
+            console.log("[VIDEO_CALL] Screen sharing failed with error:", errorName, errorMessage, errorCode)
+            setMediaError("Failed to start screen sharing. Please try again.")
+            return
+          }
+        }
+
+        try {
+          // Stop camera video if it's currently published
+          if (localTracksRef.current.videoTrack) {
+            console.log("[VIDEO_CALL] Unpublishing camera track for screen share...")
+            await agoraClientRef.current.unpublish([localTracksRef.current.videoTrack])
+            console.log("[VIDEO_CALL] Camera track unpublished for screen share")
+          }
+
+          // Store screen track and publish it
+          localTracksRef.current.screenTrack = screenTrack
+          
+          // Wait a moment to avoid publishing conflicts
+          await new Promise(resolve => setTimeout(resolve, 300))
+          
+          console.log("[VIDEO_CALL] Publishing screen track...")
+          await agoraClientRef.current.publish([screenTrack])
+          
+          if (localVideoRef.current) {
+            screenTrack.play(localVideoRef.current)
+          }
+
+          setIsScreenSharing(true)
+          console.log("[VIDEO_CALL] Screen sharing started successfully")
+
+          // Listen for screen share end (when user stops from browser or system)
+          if (screenTrack.on && typeof screenTrack.on === 'function') {
+            screenTrack.on("track-ended", async () => {
+              console.log("[VIDEO_CALL] Screen share ended by user/system")
+              
+              // Update state immediately
+              setIsScreenSharing(false)
+              
+              // Clean up the screen track
+              if (localTracksRef.current.screenTrack) {
+                try {
+                  // Unpublish if still connected
+                  if (agoraClientRef.current && hasJoinedChannelRef.current) {
+                    await agoraClientRef.current.unpublish([localTracksRef.current.screenTrack])
+                    console.log("[VIDEO_CALL] Screen track unpublished after track-ended")
+                  }
+                  
+                  localTracksRef.current.screenTrack.stop()
+                  localTracksRef.current.screenTrack.close()
+                  localTracksRef.current.screenTrack = undefined
+                  console.log("[VIDEO_CALL] Screen track cleaned up after track-ended")
+                } catch (error) {
+                  console.error("[VIDEO_CALL] Error cleaning up ended screen track:", error)
+                  localTracksRef.current.screenTrack = undefined
+                }
+              }
+              
+              // Resume camera video if it was enabled before screen sharing
+              if (isVideoEnabled && agoraClientRef.current) {
+                try {
+                  console.log("[VIDEO_CALL] Recreating camera track after browser stop...")
+                  
+                  // Clean up any existing video track first
+                  if (localTracksRef.current.videoTrack) {
+                    try {
+                      localTracksRef.current.videoTrack.stop()
+                      localTracksRef.current.videoTrack.close()
+                    } catch (cleanupError) {
+                      console.log("[VIDEO_CALL] Error cleaning existing video track:", cleanupError)
+                    }
+                    localTracksRef.current.videoTrack = undefined
+                  }
+                  
+                  const videoTrack = await AgoraRTC.default.createCameraVideoTrack({
+                    encoderConfig: "480p_1",
+                    optimizationMode: "motion"
+                  })
+                  
+                  localTracksRef.current.videoTrack = videoTrack
+                  
+                  if (localVideoRef.current) {
+                    videoTrack.play(localVideoRef.current)
+                  }
+                  
+                  // Wait a moment before publishing to avoid conflicts
+                  await new Promise(resolve => setTimeout(resolve, 500))
+                  
+                  if (hasJoinedChannelRef.current) {
+                    await agoraClientRef.current.publish([videoTrack])
+                    console.log("[VIDEO_CALL] Camera video resumed after browser stop")
+                  }
+                } catch (error) {
+                  console.error("[VIDEO_CALL] Error resuming camera after browser stop:", error)
+                }
+              }
+            })
+          }
+
+        } catch (publishError: any) {
+          console.error("[VIDEO_CALL] Failed to publish screen share:", publishError)
+          
+          // Clean up screen track if publishing failed
+          if (screenTrack) {
+            try {
+              screenTrack.stop()
+              screenTrack.close()
+            } catch (cleanupError) {
+              console.error("[VIDEO_CALL] Error cleaning up failed screen track:", cleanupError)
+            }
+          }
+          
+          localTracksRef.current.screenTrack = undefined
+          
+          // Check if it's a multiple video tracks error
+          if (publishError.code === 'CAN_NOT_PUBLISH_MULTIPLE_VIDEO_TRACKS' || 
+              publishError.message?.includes('multiple video tracks')) {
+            setMediaError("Cannot publish screen share while camera is active. Please try again.")
+          } else {
+            setMediaError("Failed to share screen. Please try again.")
+          }
+          
+          // Try to republish camera track if it was unpublished
+          if (localTracksRef.current.videoTrack && isVideoEnabled) {
+            try {
+              await new Promise(resolve => setTimeout(resolve, 500))
+              await agoraClientRef.current.publish([localTracksRef.current.videoTrack])
+              console.log("[VIDEO_CALL] Camera track republished after screen share failure")
+            } catch (error) {
+              console.error("[VIDEO_CALL] Failed to republish camera track:", error)
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error("[VIDEO_CALL] Screen sharing error:", error)
+      setMediaError("Screen sharing failed due to an unexpected error.")
+      
+      // Ensure we're not stuck in screen sharing state
+      setIsScreenSharing(false)
+      
+      // Clean up any screen track that might exist
+      if (localTracksRef.current.screenTrack) {
+        try {
+          localTracksRef.current.screenTrack.stop()
+          localTracksRef.current.screenTrack.close()
+          localTracksRef.current.screenTrack = undefined
+        } catch (cleanupError) {
+          console.error("[VIDEO_CALL] Error cleaning up screen track after error:", cleanupError)
+        }
+      }
+    }
+  }, [isScreenSharing, isVideoEnabled, isRetryingMedia])
+
+  // RTM message handler
+  const handleRTMMessage = useCallback((message: any, peerId: string) => {
+    try {
+      const messageData = JSON.parse(message.text)
+      const newMessage: ChatMessage = {
+        id: messageData.id || Date.now().toString(),
+        message: messageData.message,
+        messageType: messageData.messageType || 'text',
+        timestamp: messageData.timestamp || Date.now(),
+        senderName: messageData.senderName,
+        senderRole: messageData.senderRole,
+        senderId: peerId,
+        attachment: messageData.attachment
+      }
+      
+      setChatMessages(prev => [...prev, newMessage])
+    } catch (error) {
+      console.error('Failed to parse RTM message:', error)
+    }
   }, [])
+
+  // RTM-based messaging
+  const sendMessage = useCallback(async (message: string, file?: File) => {
+    if (!message.trim() && !file) return
+    if (!rtmChannelRef.current) {
+      console.error("[VIDEO_CALL] RTM channel not available for sending message")
+      setMediaError('Chat is not connected. Please try again.')
+      return
+    }
+
+    setIsUploading(!!file)
+    
+    try {
+      // Get current user name
+      const currentUserName = `${currentUser.firstName} ${currentUser.lastName}`
+      
+      let messageData: any = {
+        id: Date.now().toString(),
+        message: message.trim(),
+        messageType: file ? 'file' : 'text',
+        timestamp: Date.now(),
+        senderName: currentUserName,
+        senderRole: userRole,
+        senderId: agoraConfig.uid.toString()
+      }
+
+      if (file) {
+        // Check file size limit (RTM has message size limits)
+        if (file.size > 5 * 1024 * 1024) { // 5MB limit for RTM
+          setMediaError('File too large. Maximum size is 5MB.')
+          setIsUploading(false)
+          return
+        }
+
+        // Convert file to base64 for RTM transmission
+        const fileData = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve(reader.result as string)
+          reader.onerror = reject
+          reader.readAsDataURL(file)
+        })
+        
+        messageData = {
+          ...messageData,
+          message: file.name,
+          attachment: {
+            fileName: file.name,
+            fileSize: file.size,
+            fileType: file.type,
+            fileData: fileData
+          }
+        }
+      }
+
+      console.log("[VIDEO_CALL] Sending RTM message:", messageData)
+
+      // Send via RTM stream channel
+      await rtmChannelRef.current.publishMessage(JSON.stringify(messageData))
+      
+      console.log("[VIDEO_CALL] RTM message sent successfully")
+      
+      // Add to local messages (sender's copy)
+      const localMessage: ChatMessage = {
+        ...messageData,
+        senderId: 'self'
+      }
+      setChatMessages(prev => [...prev, localMessage])
+      setNewMessage("")
+      
+    } catch (error) {
+      console.error('[VIDEO_CALL] Failed to send RTM message:', error)
+      setMediaError('Failed to send message. Please check your connection and try again.')
+    } finally {
+      setIsUploading(false)
+    }
+  }, [rtmChannelRef, userRole, currentUser, agoraConfig.uid])
+
+  const handleSendMessage = useCallback(() => {
+    if (newMessage.trim()) {
+      sendMessage(newMessage)
+    }
+  }, [newMessage, sendMessage])
+
+  const handleFileUpload = useCallback((file: File) => {
+    if (file.size > 5 * 1024 * 1024) { // 5MB limit for RTM
+      setMediaError('File size must be less than 5MB')
+      return
+    }
+    sendMessage('', file)
+  }, [sendMessage])
+
+  const downloadFile = useCallback(async (attachment: ChatAttachment) => {
+    try {
+      // Convert base64 data back to blob
+      const response = await fetch(attachment.fileData)
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = attachment.fileName
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+    } catch (error) {
+      console.error('Failed to download file:', error)
+    }
+  }, [])
+
+  // Auto-scroll chat to bottom when new messages arrive
+  useEffect(() => {
+    if (chatEndRef.current && showSidebar) {
+      chatEndRef.current.scrollIntoView({ behavior: 'smooth' })
+    }
+    // Update unread count if sidebar is closed and message is from other user
+    const lastMessage = chatMessages[chatMessages.length - 1]
+    if (!showSidebar && lastMessage && lastMessage.senderId !== 'self') {
+      setUnreadCount(prev => prev + 1)
+    } else if (showSidebar) {
+      setUnreadCount(0)
+    }
+  }, [chatMessages, showSidebar])
 
   // Helper functions
   const getConnectionStatusColor = (state: ConnectionState) => {
@@ -844,8 +1434,10 @@ export function VideoCallRoom({
         </div>
       </div>
 
-      {/* Video Area */}
-      <div className="flex-1 relative bg-slate-900">
+      {/* Main Content Area */}
+      <div className="flex-1 flex relative">
+        {/* Video Area */}
+        <div className={`flex-1 relative bg-slate-900 ${showSidebar ? 'mr-80' : ''}`}>
         {(connectionState === "connecting" || connectionState === "reconnecting") && (
           <div className="absolute inset-0 flex items-center justify-center z-10">
             <Card className="bg-slate-800/90 border-slate-600">
@@ -899,6 +1491,16 @@ export function VideoCallRoom({
               </div>
             )}
             
+            {/* Screen share indicator */}
+            {isRemoteScreenSharing && (
+              <div className="absolute top-4 left-4">
+                <Badge className="bg-blue-600 text-white">
+                  <Monitor className="h-3 w-3 mr-1" />
+                  Screen Sharing
+                </Badge>
+              </div>
+            )}
+            
             <div className="absolute bottom-4 left-4">
               {isRemoteAudioEnabled ? (
                 <Volume2 className="h-5 w-5 text-green-400" />
@@ -911,7 +1513,7 @@ export function VideoCallRoom({
           {/* Local Video */}
           <div className="relative bg-slate-800 rounded-lg overflow-hidden">
             <div ref={localVideoRef} className="w-full h-full min-h-[300px]" />
-            {(!isVideoEnabled || !localTracksRef.current.videoTrack) && (
+            {(!isVideoEnabled || !localTracksRef.current.videoTrack) && !isScreenSharing && (
               <div className="absolute inset-0 flex items-center justify-center bg-slate-800">
                 <div className="text-center">
                   <VideoOff className="h-12 w-12 text-slate-400 mx-auto mb-2" />
@@ -943,6 +1545,16 @@ export function VideoCallRoom({
               </div>
             )}
             
+            {/* Screen sharing indicator */}
+            {isScreenSharing && (
+              <div className="absolute top-4 left-4">
+                <Badge className="bg-green-600 text-white">
+                  <Monitor className="h-3 w-3 mr-1" />
+                  You're sharing
+                </Badge>
+              </div>
+            )}
+            
             <div className="absolute bottom-4 right-4">
               <Badge variant="outline" className="text-blue-400 border-blue-400">
                 You ({userRole})
@@ -960,7 +1572,7 @@ export function VideoCallRoom({
             size="lg"
             onClick={toggleVideo}
             className="rounded-full w-12 h-12 p-0"
-            disabled={isCallEnding || isRetryingMedia}
+            disabled={isCallEnding || isRetryingMedia || isScreenSharing}
           >
             {isVideoEnabled && localTracksRef.current.videoTrack ? (
               <Video className="h-5 w-5" />
@@ -984,26 +1596,42 @@ export function VideoCallRoom({
           </Button>
 
           <Button
-            variant="outline"
+            variant={isScreenSharing ? "default" : "outline"}
             size="lg"
-            onClick={toggleFullscreen}
+            onClick={toggleScreenShare}
             className="rounded-full w-12 h-12 p-0"
-            disabled={isCallEnding}
+            disabled={isCallEnding || (!isScreenSharing && isRemoteScreenSharing)}
+            title={
+              isScreenSharing 
+                ? "Stop Screen Share" 
+                : isRemoteScreenSharing 
+                  ? "Other participant is sharing screen"
+                  : "Share Screen"
+            }
           >
-            {isFullscreen ? (
-              <Minimize2 className="h-5 w-5" />
-            ) : (
-              <Maximize2 className="h-5 w-5" />
-            )}
+            <Monitor className={`h-5 w-5 ${
+              isScreenSharing 
+                ? 'text-green-400' 
+                : isRemoteScreenSharing 
+                  ? 'text-orange-400' 
+                  : ''
+            }`} />
           </Button>
 
           <Button
-            variant="outline"
+            variant={showSidebar ? "default" : "outline"}
             size="lg"
-            className="rounded-full w-12 h-12 p-0"
-            disabled
+            onClick={() => setShowSidebar(!showSidebar)}
+            className="rounded-full w-12 h-12 p-0 relative"
+            disabled={isCallEnding}
+            title="Toggle Chat"
           >
-            <Settings className="h-5 w-5" />
+            <MessageSquare className={`h-5 w-5 ${showSidebar ? 'text-blue-400' : ''}`} />
+            {unreadCount > 0 && !showSidebar && (
+              <Badge className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full min-w-[20px] h-5 flex items-center justify-center p-1">
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </Badge>
+            )}
           </Button>
 
           <Separator orientation="vertical" className="h-8 bg-slate-600" />
@@ -1031,11 +1659,19 @@ export function VideoCallRoom({
 
       {/* Media Error Alert */}
       {mediaError && (
-        <div className="absolute top-20 left-1/2 transform -translate-x-1/2">
+        <div className="absolute top-20 left-1/2 transform -translate-x-1/2 z-50">
           <Alert className="bg-orange-900/20 border-orange-600/30 max-w-md">
             <AlertTriangle className="h-4 w-4 text-orange-400" />
-            <AlertDescription className="text-orange-300">
-              {mediaError}
+            <AlertDescription className="text-orange-300 flex items-center justify-between">
+              <span>{mediaError}</span>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => setMediaError("")}
+                className="ml-2 h-6 w-6 p-0"
+              >
+                <X className="h-3 w-3" />
+              </Button>
             </AlertDescription>
           </Alert>
         </div>
@@ -1067,6 +1703,151 @@ export function VideoCallRoom({
           </Alert>
         </div>
       )}
+
+        {/* Chat/Files Sidebar */}
+        {showSidebar && (
+          <div className="absolute right-0 top-0 bottom-0 w-80 bg-slate-800 border-l border-slate-700 flex flex-col">
+            <div className="p-4 border-b border-slate-700 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-white">Chat & Files</h3>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowSidebar(false)}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+
+            <div className="flex-1 flex flex-col">
+              <div className="p-4 border-b border-slate-700">
+                <h4 className="text-sm font-medium text-slate-300">Session Chat</h4>
+              </div>
+
+              {/* Chat Content */}
+              <div className="flex-1 flex flex-col m-0 p-0">
+                <ScrollArea className="flex-1 p-4">
+                  <div className="space-y-3">
+                    {chatMessages.map((message) => (
+                      <div key={message.id} className={`flex flex-col space-y-1 ${message.senderId === 'self' ? 'items-end' : 'items-start'}`}>
+                        <div className="flex items-center space-x-2 text-xs text-slate-400">
+                          <span>{message.senderName}</span>
+                          <span>{new Date(message.timestamp).toLocaleTimeString()}</span>
+                        </div>
+                        {message.messageType === 'text' ? (
+                          <div className={`rounded-lg p-3 max-w-[90%] ${
+                            message.senderId === 'self' 
+                              ? 'bg-blue-600 text-white' 
+                              : 'bg-slate-700 text-slate-200'
+                          }`}>
+                            <p className="text-sm">{message.message}</p>
+                          </div>
+                        ) : (
+                          <div className={`rounded-lg p-3 max-w-[90%] flex items-center space-x-2 ${
+                            message.senderId === 'self' 
+                              ? 'bg-blue-600 text-white' 
+                              : 'bg-slate-700 text-slate-200'
+                          }`}>
+                            {message.attachment?.fileType?.startsWith('image/') ? (
+                              <ImageIcon className="h-4 w-4 text-current" />
+                            ) : (
+                              <FileText className="h-4 w-4 text-current" />
+                            )}
+                            <div className="flex-1">
+                              <p className="text-sm">{message.attachment?.fileName}</p>
+                              <p className="text-xs opacity-70">
+                                {message.attachment?.fileSize ? `${(message.attachment.fileSize / 1024).toFixed(1)} KB` : 'Unknown size'}
+                              </p>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => message.attachment && downloadFile(message.attachment)}
+                              className="text-current hover:bg-white/20"
+                            >
+                              <Download className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    <div ref={chatEndRef} />
+                  </div>
+                </ScrollArea>
+
+                {/* Chat Input with File Upload */}
+                <div className="p-4 border-t border-slate-700">
+                  <div className="space-y-2">
+                    {/* File upload area */}
+                    <div 
+                      className="border-2 border-dashed border-slate-600 rounded-lg p-3 text-center hover:border-slate-500 transition-colors cursor-pointer"
+                      onClick={() => fileInputRef.current?.click()}
+                      onDrop={(e) => {
+                        e.preventDefault()
+                        const file = e.dataTransfer.files[0]
+                        if (file) handleFileUpload(file)
+                      }}
+                      onDragOver={(e) => e.preventDefault()}
+                    >
+                      <Upload className="h-5 w-5 text-slate-400 mx-auto mb-1" />
+                      <p className="text-xs text-slate-400">Click or drag files here to share</p>
+                      <p className="text-xs text-slate-500 mt-1">Max 5MB</p>
+                    </div>
+                    
+                    {/* Text input */}
+                    <div className="flex space-x-2">
+                      <Input
+                        value={newMessage}
+                        onChange={(e) => setNewMessage(e.target.value)}
+                        placeholder="Type a message..."
+                        className="bg-slate-700 border-slate-600 text-white placeholder-slate-400"
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault()
+                            handleSendMessage()
+                          }
+                        }}
+                        disabled={isCallEnding || isUploading}
+                      />
+                      <Button
+                        size="sm"
+                        onClick={handleSendMessage}
+                        disabled={!newMessage.trim() || isCallEnding || isUploading}
+                        className="bg-blue-600 hover:bg-blue-700"
+                      >
+                        {isUploading ? (
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <Send className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        )}
+
+        {/* Hidden file input */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0]
+            if (file) {
+              handleFileUpload(file)
+              // Reset the input
+              if (fileInputRef.current) {
+                fileInputRef.current.value = ''
+              }
+            }
+          }}
+          accept="*/*"
+        />
+      </div>
     </div>
   )
 }

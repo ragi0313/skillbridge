@@ -18,6 +18,8 @@ interface Session {
   agoraCallEndedAt: string | null
   learnerJoinedAt: string | null
   mentorJoinedAt: string | null
+  learnerLeftAt: string | null
+  mentorLeftAt: string | null
   refundAmount: number | null
   rejectionReason: string | null
   cancellationReason: string | null
@@ -29,6 +31,11 @@ interface Session {
   mentorProfessionalTitle: string | null
   skillName: string | null
   skillRatePerHour: number | null
+  // Review information
+  reviewId: number | null
+  reviewRating: number | null
+  reviewText: string | null
+  reviewCreatedAt: string | null
 }
 
 export function LearnerSessionsPage() {
@@ -63,7 +70,7 @@ export function LearnerSessionsPage() {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <Card className="w-full max-w-md p-6 text-center">
-          <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+          <div className="animate-spin w-8 h-8 mx-auto mb-4"></div>
           <p className="text-gray-600">Loading your sessions...</p>
         </Card>
       </div>

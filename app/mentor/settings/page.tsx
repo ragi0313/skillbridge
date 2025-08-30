@@ -125,8 +125,9 @@ export default function MentorSettingsPage() {
         })
       } catch (err) {
         console.error("Failed to fetch mentor data", err)
-        toast.error("Error", {
-          description: "An unexpected error occurred.",
+        toast.error("Failed to load profile", {
+          description: "Could not load your profile data. Please refresh the page.",
+          duration: 5000,
        })
       } finally {
         setLoading(false)
@@ -192,12 +193,14 @@ export default function MentorSettingsPage() {
         throw new Error(errorData.error || "Failed to update profile")
       }
 
-       toast.success("Profile Updated", {
-      description: "Your profile has been successfully updated.",
+       toast.success("Profile updated successfully!", {
+      description: "Your changes have been saved and are now live on your profile.",
+      duration: 4000,
     })
   } catch (error: any) {
-    toast.error("Error", {
-      description: error.message || "An unexpected error occurred.",
+    toast.error("Failed to save changes", {
+      description: error.message || "Please check your information and try again.",
+      duration: 5000,
     })
     } finally {
       setIsSaving(false)

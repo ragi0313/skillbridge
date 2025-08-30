@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid request body" }, { status: 400 })
     }
 
-    const { sessionId, forceNew = false } = body
+    const { sessionId, forceNew = false, preferredUid = null } = body
 
     if (!sessionId) {
       console.error("[AGORA_TOKEN] Missing sessionId in request")
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid session ID format" }, { status: 400 })
     }
 
-    console.log(`[AGORA_TOKEN] Processing request for session ${parsedSessionId}, user ${session.id}`)
+    console.log(`[AGORA_TOKEN] Processing request for session ${parsedSessionId}, user ${session.id}, forceNew: ${forceNew}`)
 
     // Get booking session details with proper error handling
     let booking
@@ -68,17 +68,19 @@ export async function POST(request: NextRequest) {
 
     const sessionData = booking[0]
 
-    // Validate session timing
+    // Validate session timing - be more lenient
     const now = new Date()
     const sessionStart = new Date(sessionData.startTime)
     const sessionEnd = new Date(sessionData.endTime)
     const joinWindowStart = new Date(sessionStart.getTime() - 30 * 60 * 1000) // 30 min before
+    const extendedEndTime = new Date(sessionEnd.getTime() + 60 * 60 * 1000) // 1 hour after end
 
     console.log(`[AGORA_TOKEN] Session timing validation:`, {
       now: now.toISOString(),
       sessionStart: sessionStart.toISOString(),
       sessionEnd: sessionEnd.toISOString(),
-      joinWindowStart: joinWindowStart.toISOString()
+      joinWindowStart: joinWindowStart.toISOString(),
+      extendedEndTime: extendedEndTime.toISOString()
     })
 
     if (now < joinWindowStart) {
@@ -89,8 +91,9 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
-    if (now > sessionEnd) {
-      console.error(`[AGORA_TOKEN] Session ${parsedSessionId} has already ended`)
+    // Allow token generation up to 1 hour after session end for reconnections
+    if (now > extendedEndTime) {
+      console.error(`[AGORA_TOKEN] Session ${parsedSessionId} has already ended (extended window passed)`)
       return NextResponse.json({ error: "Session has already ended" }, { status: 400 })
     }
 
@@ -100,11 +103,12 @@ export async function POST(request: NextRequest) {
       userRole: session.role,
       userId: session.id,
       agoraChannel: sessionData.agoraChannelName,
-      forceNew
+      forceNew,
+      preferredUid
     })
 
     // Allow more session statuses for token generation
-    const allowedStatuses = ["confirmed", "upcoming", "ongoing", null] // null for new sessions
+    const allowedStatuses = ["confirmed", "upcoming", "ongoing", "pending", null] // null for new sessions
     if (sessionData.status !== null && !allowedStatuses.includes(sessionData.status)) {
       console.error(`[AGORA_TOKEN] Invalid session status for token generation: ${sessionData.status}`)
       return NextResponse.json({ 
@@ -149,11 +153,25 @@ export async function POST(request: NextRequest) {
 
     console.log(`[AGORA_TOKEN] User ${session.id} verified as ${userRole} for session ${parsedSessionId}`)
 
-    // Create or get Agora channel
+    // Create or get Agora channel with improved reconnection handling
     let channel = sessionData.agoraChannelName
     if (!channel || forceNew) {
       try {
         console.log(`[AGORA_TOKEN] Creating new Agora room for session ${parsedSessionId}`)
+        
+        // For reconnections, try to clean up any existing channel first
+        if (sessionData.agoraChannelName && forceNew) {
+          console.log(`[AGORA_TOKEN] Cleaning up existing channel for reconnection: ${sessionData.agoraChannelName}`)
+          try {
+            await agoraService.endRoom(sessionData.agoraChannelName, 'reconnection_cleanup')
+            console.log(`[AGORA_TOKEN] Successfully cleaned up existing channel`)
+          } catch (cleanupError) {
+            console.warn("[AGORA_TOKEN] Channel cleanup failed (continuing anyway):", cleanupError)
+          }
+          // Wait for cleanup to propagate on Agora's servers
+          await new Promise(resolve => setTimeout(resolve, 2000))
+        }
+        
         const room = await agoraService.createRoom(parsedSessionId.toString(), sessionEnd)
         channel = room.channel
 
@@ -184,26 +202,57 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid channel configuration" }, { status: 500 })
     }
 
-    // Generate Agora token with extended expiration
+    // Generate Agora token with extended expiration and improved UID handling
     try {
-      // Set token to expire 1 hour after session ends
-      const tokenExpirationTime = Math.floor(sessionEnd.getTime() / 1000) + 3600
+      // Set token to expire 2 hours after session ends for flexibility
+      const tokenExpirationTime = Math.floor(sessionEnd.getTime() / 1000) + 7200 // 2 hours after end
+      
+      // Create unique user identifier for token generation
+      // Include timestamp for uniqueness in reconnection scenarios
+      const uniqueUserId = forceNew ? 
+        `${session.id}_${userRole}_${Date.now()}` : 
+        `${session.id}_${userRole}`
       
       console.log(`[AGORA_TOKEN] Generating token for:`, {
         channel,
-        userId: session.id.toString(),
+        uniqueUserId,
+        originalUserId: session.id,
         userRole,
+        forceNew,
+        preferredUid,
         expiresAt: new Date(tokenExpirationTime * 1000).toISOString()
       })
       
       const tokenData = await agoraService.generateToken(
         channel, 
-        session.id.toString(), 
+        uniqueUserId,
         userRole,
         tokenExpirationTime
       )
 
+      // If a preferred UID was provided (for UID conflict resolution), try to use it
+      if (preferredUid && preferredUid !== tokenData.uid) {
+        console.log(`[AGORA_TOKEN] Attempting to use preferred UID: ${preferredUid}`)
+        try {
+          const preferredTokenData = await agoraService.generateToken(
+            channel,
+            preferredUid.toString(),
+            userRole,
+            tokenExpirationTime
+          )
+          console.log(`[AGORA_TOKEN] Successfully generated token with preferred UID`)
+          Object.assign(tokenData, preferredTokenData)
+        } catch (preferredUidError) {
+          console.warn(`[AGORA_TOKEN] Could not use preferred UID, using generated UID:`, preferredUidError)
+          // Continue with the originally generated token
+        }
+      }
+
       // Validate generated token
+      if (!tokenData || !tokenData.token || !tokenData.appId || tokenData.token.length < 50) {
+        throw new Error("Invalid token generated - missing or malformed data")
+      }
+
       const isTokenValid = await agoraService.validateToken(tokenData.token, channel)
       if (!isTokenValid) {
         throw new Error("Generated token failed validation")
@@ -215,11 +264,13 @@ export async function POST(request: NextRequest) {
         channel: tokenData.channel,
         uid: tokenData.uid,
         tokenLength: tokenData.token.length,
-        userRole
+        tokenPrefix: tokenData.token.substring(0, 10) + "...",
+        userRole,
+        isForceNew: forceNew
       })
 
-      // Return complete token information
-      return NextResponse.json({
+      // Return complete token information with validated structure
+      const response = {
         appId: tokenData.appId,
         channel: tokenData.channel,
         token: tokenData.token,
@@ -233,8 +284,22 @@ export async function POST(request: NextRequest) {
           durationMinutes: sessionData.durationMinutes,
         },
         generatedAt: new Date().toISOString(),
-        expiresAt: new Date(tokenExpirationTime * 1000).toISOString()
-      })
+        expiresAt: new Date(tokenExpirationTime * 1000).toISOString(),
+        isReconnection: forceNew
+      }
+
+      // Final validation before sending
+      if (!response.appId || !response.channel || !response.token || !response.uid) {
+        console.error("[AGORA_TOKEN] Response validation failed:", {
+          hasAppId: !!response.appId,
+          hasChannel: !!response.channel,
+          hasToken: !!response.token,
+          hasUid: !!response.uid
+        })
+        throw new Error("Response validation failed - missing required fields")
+      }
+
+      return NextResponse.json(response)
 
     } catch (tokenError) {
       console.error(`[AGORA_TOKEN] Token generation failed:`, tokenError)

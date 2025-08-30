@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
     
     console.log(`[SESSION_CLEANUP] Manual cleanup triggered with action: ${action || 'all'}`)
     
-    let results: any = {}
+    const results: any = {}
     
     if (action === 'monitor' || action === 'all' || !action) {
       // Run the full monitoring cycle

@@ -10,6 +10,9 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  experimental: {
+    optimizePackageImports: ['agora-rtc-sdk-ng']
+  }
 };
 
 export default nextConfig;

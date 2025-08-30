@@ -20,6 +20,12 @@ interface SessionData {
   agoraChannelName?: string | null
 }
 
+interface CurrentUser {
+  firstName: string
+  lastName: string
+  profilePictureUrl?: string | null
+}
+
 interface OtherParticipant {
   firstName: string
   lastName: string
@@ -44,6 +50,7 @@ export default function SessionPage() {
   const [sessionPhase, setSessionPhase] = useState<SessionPhase>("loading")
   const [sessionData, setSessionData] = useState<SessionData | null>(null)
   const [userRole, setUserRole] = useState<"learner" | "mentor" | null>(null)
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null)
   const [otherParticipant, setOtherParticipant] = useState<OtherParticipant | null>(null)
   const [agoraConfig, setAgoraConfig] = useState<AgoraConfig | null>(null)
   const [error, setError] = useState<string>("")
@@ -57,6 +64,7 @@ export default function SessionPage() {
   const hasCalledLeaveRef = useRef(false)
   const isUnmountingRef = useRef(false)
   const lastKnownStatusRef = useRef<string | null>(null)
+  const isTokenRequestInProgressRef = useRef(false)
 
   // Load initial session data
   const loadSessionData = useCallback(async () => {
@@ -66,6 +74,7 @@ export default function SessionPage() {
     setError("")
 
     try {
+      console.log("[SESSION_PAGE] Loading session data for:", sessionId)
       const response = await fetch(`/api/sessions/${sessionId}`)
       
       if (!response.ok) {
@@ -74,14 +83,22 @@ export default function SessionPage() {
         } else if (response.status === 403) {
           throw new Error("You are not authorized to access this session")
         } else {
-          throw new Error("Failed to load session data")
+          const errorData = await response.json().catch(() => ({}))
+          throw new Error(errorData.error || "Failed to load session data")
         }
       }
 
       const data = await response.json()
       
+      console.log("[SESSION_PAGE] Session data loaded:", {
+        sessionStatus: data.session.status,
+        userRole: data.userRole,
+        isReconnection: data.isReconnection
+      })
+      
       setSessionData(data.session)
       setUserRole(data.userRole)
+      setCurrentUser(data.currentUser)
       setOtherParticipant(data.otherParticipant)
       setIsReconnection(data.isReconnection || false)
       setPreviouslyJoinedAt(data.previouslyJoinedAt)
@@ -99,10 +116,11 @@ export default function SessionPage() {
       }
 
       // For active sessions, always go to waiting room first
+      console.log("[SESSION_PAGE] Setting phase to waiting_room")
       setSessionPhase("waiting_room")
 
     } catch (error) {
-      console.error("Error loading session:", error)
+      console.error("[SESSION_PAGE] Error loading session:", error)
       setError(error instanceof Error ? error.message : "Failed to load session")
       setSessionPhase("error")
     } finally {
@@ -122,7 +140,7 @@ export default function SessionPage() {
       })
 
       if (!response.ok) {
-        const data = await response.json()
+        const data = await response.json().catch(() => ({}))
         throw new Error(data.error || 'Failed to join session')
       }
 
@@ -137,25 +155,81 @@ export default function SessionPage() {
     }
   }, [sessionId, hasJoinedSession])
 
-  // Load Agora token for video call
-  const loadAgoraToken = useCallback(async () => {
+  // Load Agora token for video call - with enhanced validation and retry logic
+  const loadAgoraToken = useCallback(async (forceNew: boolean = false) => {
     if (!sessionId) return null
 
+    // Prevent concurrent token requests
+    if (isTokenRequestInProgressRef.current) {
+      console.log("[SESSION_PAGE] Token request already in progress, waiting...")
+      // Wait for existing request to complete
+      while (isTokenRequestInProgressRef.current) {
+        await new Promise(resolve => setTimeout(resolve, 100))
+      }
+      return null
+    }
+
+    isTokenRequestInProgressRef.current = true
+
     try {
+      console.log("[SESSION_PAGE] Requesting Agora token, forceNew:", forceNew)
+      
+      const requestBody = { 
+        sessionId: parseInt(sessionId),
+        forceNew: forceNew || false
+      }
+
+      console.log("[SESSION_PAGE] Token request body:", requestBody)
+
       const response = await fetch("/api/agora/token", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ sessionId: parseInt(sessionId) }),
+        body: JSON.stringify(requestBody),
       })
 
       if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || "Failed to get video call token")
+        const data = await response.json().catch(() => ({}))
+        console.error("[SESSION_PAGE] Token request failed:", response.status, data)
+        throw new Error(data.error || `Failed to get video call token (${response.status})`)
       }
 
       const data = await response.json()
+      console.log("[SESSION_PAGE] Token response received:", {
+        hasAppId: !!data.appId,
+        hasChannel: !!data.channel,
+        hasToken: !!data.token,
+        hasUid: !!data.uid,
+        tokenLength: data.token?.length || 0,
+        channel: data.channel,
+        uid: data.uid
+      })
+      
+      // Validate the token data before returning
+      if (!data.appId || !data.channel || !data.token || data.uid === undefined) {
+        console.error("[SESSION_PAGE] Invalid token data received:", {
+          appId: !!data.appId,
+          channel: !!data.channel,
+          token: !!data.token,
+          uid: data.uid
+        })
+        throw new Error("Invalid token data received from server")
+      }
+
+      if (data.token.length < 50) {
+        console.error("[SESSION_PAGE] Token appears malformed, length:", data.token.length)
+        throw new Error("Token appears to be malformed")
+      }
+
+      // Validate token format
+      if (!data.token.startsWith('006') && !data.token.startsWith('007')) {
+        console.error("[SESSION_PAGE] Token has unexpected prefix:", data.token.substring(0, 3))
+        throw new Error("Token format appears invalid")
+      }
+
+      console.log("[SESSION_PAGE] Successfully validated Agora token")
+
       return {
         appId: data.appId,
         channel: data.channel,
@@ -163,53 +237,84 @@ export default function SessionPage() {
         uid: data.uid,
       }
     } catch (error) {
-      console.error("Error getting Agora token:", error)
+      console.error("[SESSION_PAGE] Error getting Agora token:", error)
       throw error
+    } finally {
+      isTokenRequestInProgressRef.current = false
     }
   }, [sessionId])
 
-  // Handle joining video call from waiting room
+  // Handle joining video call from waiting room - with improved error handling
   const handleJoinVideoCall = useCallback(async () => {
+    if (isLoading) {
+      console.log("[SESSION_PAGE] Already loading, ignoring duplicate call")
+      return
+    }
+
     setIsLoading(true)
     setError("")
 
     try {
+      console.log("[SESSION_PAGE] Starting video call join process...")
+      
       // Ensure user has joined the session
       if (!hasJoinedSession) {
+        console.log("[SESSION_PAGE] User hasn't joined session yet, joining now...")
         const joinSuccess = await joinSessionBackend()
         if (!joinSuccess) {
           throw new Error("Failed to join session")
         }
+        // Wait a moment for the backend state to settle
+        console.log("[SESSION_PAGE] Waiting for backend state to settle...")
+        await new Promise(resolve => setTimeout(resolve, 500))
       }
 
-      // Get Agora token with retry logic
+      // Get Agora token with improved retry logic
       let agoraData = null
       let tokenAttempts = 0
       const maxTokenAttempts = 3
+      let lastError: Error | null = null
       
       while (tokenAttempts < maxTokenAttempts && !agoraData) {
         try {
-          agoraData = await loadAgoraToken()
-          break
-        } catch (tokenError) {
           tokenAttempts++
+          console.log(`[SESSION_PAGE] Token attempt ${tokenAttempts}/${maxTokenAttempts}`)
+          
+          // Force new token on retry attempts
+          const forceNew = tokenAttempts > 1
+          agoraData = await loadAgoraToken(forceNew)
+          
+          if (agoraData) {
+            console.log("[SESSION_PAGE] Successfully obtained Agora token")
+            break
+          }
+        } catch (tokenError) {
+          lastError = tokenError instanceof Error ? tokenError : new Error(String(tokenError))
           console.warn(`[SESSION_PAGE] Agora token attempt ${tokenAttempts} failed:`, tokenError)
           
           if (tokenAttempts < maxTokenAttempts) {
-            // Wait before retrying
-            await new Promise(resolve => setTimeout(resolve, 1000 * tokenAttempts))
+            // Exponential backoff with some randomness to avoid thundering herd
+            const baseDelay = 1000 * Math.pow(2, tokenAttempts - 1)
+            const jitter = Math.random() * 500
+            const delay = baseDelay + jitter
+            console.log(`[SESSION_PAGE] Waiting ${delay}ms before retry...`)
+            await new Promise(resolve => setTimeout(resolve, delay))
           }
         }
       }
       
       if (!agoraData) {
-        throw new Error("Unable to get video call configuration after multiple attempts. Please check your connection and try again.")
+        const errorMsg = lastError?.message || "Unknown error"
+        console.error("[SESSION_PAGE] Failed to get token after all attempts:", errorMsg)
+        throw new Error(`Unable to get video call configuration after ${maxTokenAttempts} attempts. Last error: ${errorMsg}`)
       }
 
+      console.log("[SESSION_PAGE] Successfully got Agora config, transitioning to video call")
       setAgoraConfig(agoraData)
       setSessionPhase("video_call")
+      
     } catch (error) {
-      console.error("Error joining video call:", error)
+      console.error("[SESSION_PAGE] Error joining video call:", error)
       const errorMessage = error instanceof Error ? error.message : "Failed to join video call"
       setError(`Video Call Error: ${errorMessage}`)
       
@@ -217,11 +322,11 @@ export default function SessionPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [hasJoinedSession, joinSessionBackend, loadAgoraToken])
+  }, [hasJoinedSession, joinSessionBackend, loadAgoraToken, isLoading])
 
   // Handle leaving call - CRITICAL: Don't auto-complete session
-  const handleLeaveCall = useCallback(async () => {
-    console.log("[SESSION_PAGE] User leaving call - going to ended state")
+  const handleLeaveCall = useCallback(async (reason?: string) => {
+    console.log("[SESSION_PAGE] User leaving call, reason:", reason)
     
     // Just go to ended state - VideoCallRoom handles the leave API call
     setSessionPhase("ended")
@@ -232,18 +337,33 @@ export default function SessionPage() {
     }
   }, [userRole])
 
-  // Handle connection errors from video call
+  // Handle connection errors from video call - with enhanced logging
   const handleConnectionError = useCallback((errorMessage: string) => {
     console.error("[SESSION_PAGE] Connection error:", errorMessage)
-    setError(errorMessage)
+    console.error("[SESSION_PAGE] Current state when error occurred:", {
+      sessionPhase,
+      hasJoinedSession,
+      agoraConfigExists: !!agoraConfig,
+      sessionId,
+      userRole,
+      sessionStatus: sessionData?.status,
+      error: errorMessage
+    })
     
-    // For connection errors, go back to waiting room instead of ending session
+    setError(`Connection Error: ${errorMessage}`)
+    
+    // For connection errors, go back to waiting room and force fresh config
     setSessionPhase("waiting_room")
-    setAgoraConfig(null) // Reset Agora config so user can retry
-  }, [])
+    setAgoraConfig(null) // This is good - forces fresh token
+    
+    // Clear any cached state that might interfere
+    isTokenRequestInProgressRef.current = false
+    
+  }, [sessionPhase, hasJoinedSession, agoraConfig, sessionId, userRole, sessionData])
 
   // Handle rating submission
   const handleRatingSubmitted = useCallback(() => {
+    console.log("[SESSION_PAGE] Rating submitted, returning to dashboard")
     setShowRatingModal(false)
     if (userRole) {
       router.push(`/${userRole}/dashboard`)
@@ -252,24 +372,31 @@ export default function SessionPage() {
 
   // Handle navigation back to dashboard
   const handleBackToDashboard = useCallback(() => {
+    console.log("[SESSION_PAGE] Navigating back to dashboard")
     if (userRole) {
       router.push(`/${userRole}/dashboard`)
     }
   }, [router, userRole])
 
-  // Handle retry
+  // Handle retry with complete state reset
   const handleRetry = useCallback(() => {
+    console.log("[SESSION_PAGE] Retrying - resetting all state")
     setSessionPhase("loading")
     setHasJoinedSession(false)
     setError("")
     setAgoraConfig(null)
+    setSessionData(null)
+    setCurrentUser(null)
+    setOtherParticipant(null)
     hasCalledLeaveRef.current = false
+    isTokenRequestInProgressRef.current = false
     loadSessionData()
   }, [loadSessionData])
 
   // Proper cleanup function
   const performCleanup = useCallback(async (reason: string) => {
     if (hasCalledLeaveRef.current || isUnmountingRef.current) {
+      console.log("[SESSION_PAGE] Cleanup already performed or in progress")
       return
     }
 
@@ -284,12 +411,15 @@ export default function SessionPage() {
       try {
         // Use navigator.sendBeacon for more reliable cleanup on page unload
         if (reason === "beforeunload" && navigator.sendBeacon) {
-          const blob = new Blob([JSON.stringify({})], { type: 'application/json' })
+          console.log("[SESSION_PAGE] Using sendBeacon for cleanup")
+          const blob = new Blob([JSON.stringify({ reason })], { type: 'application/json' })
           navigator.sendBeacon(`/api/sessions/${sessionId}/leave`, blob)
         } else {
+          console.log("[SESSION_PAGE] Using fetch for cleanup")
           await fetch(`/api/sessions/${sessionId}/leave`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ reason })
           })
         }
         console.log("[SESSION_PAGE] Successfully called leave API in cleanup")
@@ -301,21 +431,24 @@ export default function SessionPage() {
 
   // Load session data on mount
   useEffect(() => {
+    console.log("[SESSION_PAGE] Component mounted, loading session data")
     loadSessionData()
   }, [loadSessionData])
 
-  // Handle browser events for cleanup with proper dependencies
+  // Handle browser events for cleanup
   useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (!isUnmountingRef.current) {
+      if (!isUnmountingRef.current && hasJoinedSession) {
+        console.log("[SESSION_PAGE] Page unloading, performing cleanup")
         performCleanup("beforeunload")
       }
     }
 
     const handleVisibilityChange = () => {
       if (document.hidden && hasJoinedSession && sessionPhase === "video_call") {
-        // User switched tabs/minimized during video call
         console.log("[SESSION_PAGE] Page hidden during video call")
+      } else if (!document.hidden && hasJoinedSession && sessionPhase === "video_call") {
+        console.log("[SESSION_PAGE] Page visible during video call")
       }
     }
 
@@ -333,16 +466,18 @@ export default function SessionPage() {
         console.warn("[SESSION_PAGE] Error removing event listeners:", error)
       }
     }
-  }, []) // Remove dependencies to prevent re-adding listeners
+  }, [hasJoinedSession, sessionPhase, performCleanup])
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      console.log("[SESSION_PAGE] Component unmounting")
       isUnmountingRef.current = true
       performCleanup("component_unmount")
     }
   }, [performCleanup])
 
+  // Loading state
   if (sessionPhase === "loading" || isLoading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-slate-950 flex items-center justify-center">
@@ -402,7 +537,7 @@ export default function SessionPage() {
             <div className="w-16 h-16 bg-green-600/20 rounded-full flex items-center justify-center mx-auto mb-4">
               <div className="w-8 h-8 bg-green-500 rounded-full" />
             </div>
-            <h2 className="text-xl font-semibold text-white mb-2">Session Left</h2>
+            <h2 className="text-xl font-semibold text-white mb-2">Session Complete</h2>
             <p className="text-slate-400 mb-6">
               You have left the mentorship session. Thank you for participating!
             </p>
@@ -462,12 +597,13 @@ export default function SessionPage() {
   }
 
   // Video call
-  if (sessionPhase === "video_call" && sessionData && otherParticipant && agoraConfig) {
+  if (sessionPhase === "video_call" && sessionData && currentUser && otherParticipant && agoraConfig) {
     return (
       <VideoCallRoom
         sessionId={sessionId}
         sessionData={sessionData}
         userRole={userRole!}
+        currentUser={currentUser}
         otherParticipant={otherParticipant}
         agoraConfig={agoraConfig}
         onLeaveCall={handleLeaveCall}
@@ -477,6 +613,7 @@ export default function SessionPage() {
     )
   }
 
+  // Fallback loading state
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-slate-950 flex items-center justify-center">
       <Card className="w-full max-w-md bg-slate-900/95 border-slate-700/50 backdrop-blur-sm">

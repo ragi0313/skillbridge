@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { getSession } from "@/lib/auth/getSession"
 import { db } from "@/db"
-import { bookingSessions, mentors, users, mentorSkills } from "@/db/schema"
+import { bookingSessions, mentors, users, mentorSkills, mentorReviews } from "@/db/schema"
 import { eq, desc } from "drizzle-orm"
 
 export async function GET() {
@@ -49,11 +49,17 @@ export async function GET() {
         mentorProfessionalTitle: mentors.professionalTitle,
         skillName: mentorSkills.skillName,
         skillRatePerHour: mentorSkills.ratePerHour,
+        // Review information
+        reviewId: mentorReviews.id,
+        reviewRating: mentorReviews.rating,
+        reviewText: mentorReviews.reviewText,
+        reviewCreatedAt: mentorReviews.createdAt,
       })
       .from(bookingSessions)
       .leftJoin(mentors, eq(bookingSessions.mentorId, mentors.id))
       .leftJoin(users, eq(mentors.userId, users.id))
       .leftJoin(mentorSkills, eq(bookingSessions.mentorSkillId, mentorSkills.id))
+      .leftJoin(mentorReviews, eq(bookingSessions.id, mentorReviews.sessionId))
       .where(eq(bookingSessions.learnerId, learner.id))
       .orderBy(desc(bookingSessions.createdAt))
 

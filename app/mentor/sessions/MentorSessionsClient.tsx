@@ -65,6 +65,9 @@ export function MentorSessionsClient({ sessions }: MentorSessionsClientProps) {
   const [selectedSession, setSelectedSession] = useState<Session | null>(null)
   const [responseMessage, setResponseMessage] = useState("")
   const [isAccepting, setIsAccepting] = useState(true)
+  const [cancelModalOpen, setCancelModalOpen] = useState(false)
+  const [cancelSessionId, setCancelSessionId] = useState<number | null>(null)
+  const [cancellationReason, setCancellationReason] = useState("")
 
   // Categorize sessions
   const categorizedSessions = useMemo(() => {
@@ -218,6 +221,39 @@ export function MentorSessionsClient({ sessions }: MentorSessionsClientProps) {
     }
   }
 
+  const handleCancelSession = (sessionId: number) => {
+    setCancelSessionId(sessionId)
+    setCancellationReason("")
+    setCancelModalOpen(true)
+  }
+
+  const submitCancellation = async () => {
+    if (!cancelSessionId || !cancellationReason.trim()) {
+      toast.error('Please provide a cancellation reason')
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/bookings/cancel/${cancelSessionId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: cancellationReason })
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to cancel session')
+      }
+
+      toast.success('Session cancelled successfully')
+      setCancelModalOpen(false)
+      // Refresh page to show updated status
+      window.location.reload()
+    } catch (error) {
+      console.error('Error cancelling session:', error)
+      toast.error('Failed to cancel session')
+    }
+  }
+
   const calculateEarnings = (session: Session) => {
     if (session.status === 'completed') {
       return Math.floor(session.totalCostCredits * 0.8) // 80% after platform fee
@@ -351,7 +387,7 @@ export function MentorSessionsClient({ sessions }: MentorSessionsClientProps) {
           <div className="flex items-center space-x-2">
             <CreditCard className="w-4 h-4 text-gray-500" />
             <span>Total Cost: {session.totalCostCredits} credits</span>
-            {session.refundAmount && (
+            {session.refundAmount !== 0 && session.refundAmount != null && (
               <Badge variant="secondary" className="ml-2">
                 Refunded: {session.refundAmount} credits
               </Badge>
@@ -450,6 +486,16 @@ export function MentorSessionsClient({ sessions }: MentorSessionsClientProps) {
             >
               <Video className="w-4 h-4 mr-2" />
               Reconnect
+            </Button>
+          )}
+
+          {session.status === 'confirmed' && session.startTime && 
+           isFuture(new Date(session.startTime)) && (
+            <Button 
+              variant="outline"
+              onClick={() => handleCancelSession(session.id)}
+            >
+              Cancel Session
             </Button>
           )}
         </div>
@@ -618,6 +664,50 @@ export function MentorSessionsClient({ sessions }: MentorSessionsClientProps) {
               variant={isAccepting ? "default" : "destructive"}
             >
               {isAccepting ? 'Accept Session' : 'Decline Session'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cancellation Modal */}
+      <Dialog open={cancelModalOpen} onOpenChange={setCancelModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cancel Session</DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Please provide a reason for cancelling this session. This will help us improve our service and will be shared with the learner.
+            </p>
+
+            <div>
+              <label className="text-sm font-medium mb-2 block">
+                Cancellation Reason *
+              </label>
+              <Textarea
+                value={cancellationReason}
+                onChange={(e) => setCancellationReason(e.target.value)}
+                placeholder="Please explain why you need to cancel this session..."
+                rows={4}
+                required
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setCancelModalOpen(false)}
+            >
+              Keep Session
+            </Button>
+            <Button 
+              onClick={submitCancellation}
+              variant="destructive"
+              disabled={!cancellationReason.trim()}
+            >
+              Cancel Session
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -104,7 +104,7 @@ export async function POST(
     // For approval, process the payout based on method
     if (action === "approve") {
       let payoutReference = ""
-      let processingError = null
+      const processingError = null
 
       try {
         if (withdrawal.payoutMethod === "stripe_connect") {

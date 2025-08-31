@@ -461,7 +461,7 @@ export function WaitingRoom({
           size="lg"
         >
           <VideoIcon className="h-5 w-5 mr-2" />
-          Start Video Call
+          Join Room
         </Button>
       )
     }

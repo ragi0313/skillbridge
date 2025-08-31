@@ -481,12 +481,10 @@ export default function BookMentorSessionPageClient({ session }: Props) {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex justify-center items-center">
-        <Card className="p-8">
           <div className="flex items-center space-x-3">
             <Loader2 className="animate-spin w-6 h-6 text-teal-600" />
             <span className="text-gray-700 font-medium">Loading mentor information...</span>
           </div>
-        </Card>
       </div>
     )
   }

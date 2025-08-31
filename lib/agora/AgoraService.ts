@@ -89,39 +89,45 @@ class AgoraService {
         throw new Error(`Invalid expiration time: ${privilegeExpiredTs} <= ${currentTimestamp}`)
       }
 
-      console.log(`[AGORA_SERVICE] Generating token for:`, {
+      console.log(`[AGORA_SERVICE] Generating RTC token for:`, {
         channel,
         uid,
         role,
+        originalUserId: userId,
         currentTime: new Date(currentTimestamp * 1000).toISOString(),
         expiresAt: new Date(privilegeExpiredTs * 1000).toISOString(),
         secondsUntilExpiry: privilegeExpiredTs - currentTimestamp
       })
 
-      // Generate production token using Agora's official library
-      const token = await this.buildToken(channel, uid, privilegeExpiredTs, role)
+      // Generate RTC token for video/audio only
+      const rtcToken = await this.buildRTCToken(channel, uid, privilegeExpiredTs, role)
 
       // Validate the generated token
-      if (!token || token.length < 50) {
-        throw new Error(`Invalid token generated: length=${token?.length || 0}`)
+      if (!rtcToken || rtcToken.length < 50) {
+        throw new Error(`Invalid RTC token generated: length=${rtcToken?.length || 0}`)
       }
 
-      console.log(`[AGORA_SERVICE] Successfully generated token:`, {
-        tokenLength: token.length,
-        tokenPrefix: token.substring(0, 10) + "...",
+      const isRTCTokenValid = await this.validateToken(rtcToken, channel)
+      if (!isRTCTokenValid) {
+        throw new Error("Generated RTC token failed validation")
+      }
+
+      console.log(`[AGORA_SERVICE] Successfully generated RTC token:`, {
+        rtcTokenLength: rtcToken.length,
+        rtcTokenPrefix: rtcToken.substring(0, 10) + "...",
         uid,
         channel
       })
 
       return {
-        token,
+        token: rtcToken,
         channel,
         uid,
         appId: this.appId,
       }
     } catch (error) {
       console.error("[AGORA_SERVICE] Error in generateToken:", error)
-      throw new Error(`Failed to generate Agora token: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      throw new Error(`Failed to generate Agora tokens: ${error instanceof Error ? error.message : 'Unknown error'}`)
     }
   }
 
@@ -158,7 +164,7 @@ class AgoraService {
     }
   }
 
-  private async buildToken(
+  private async buildRTCToken(
     channel: string,
     uid: number,
     privilegeExpiredTs: number,
@@ -186,7 +192,7 @@ class AgoraService {
       // Both mentors and learners should be able to publish and subscribe
       const agoraRole = RtcRole.PUBLISHER
 
-      console.log(`[AGORA_SERVICE] Building token with parameters:`, {
+      console.log(`[AGORA_SERVICE] Building RTC token with parameters:`, {
         appId: this.appId.substring(0, 8) + "...",
         appCertLength: this.appCertificate.length,
         channel,
@@ -197,28 +203,27 @@ class AgoraService {
         secondsUntilExpiry: privilegeExpiredTs - currentTimestamp
       })
 
-      // Build token with validated parameters
-      // In the new agora-token package, we need both tokenExpire and privilegeExpire
+      // Build RTC token
       const token = RtcTokenBuilder.buildTokenWithUid(
         this.appId,
         this.appCertificate,
         channel,
         uid,
         agoraRole,
-        privilegeExpiredTs, // tokenExpire
-        privilegeExpiredTs, // privilegeExpire (same as tokenExpire for simplicity)
+        privilegeExpiredTs,
+        privilegeExpiredTs,
       )
 
       if (!token || token.length < 50) {
-        throw new Error(`Generated token is invalid: length=${token?.length || 0}`)
+        throw new Error(`Generated RTC token is invalid: length=${token?.length || 0}`)
       }
 
       // Verify token starts with expected prefix
       if (!token.startsWith("006") && !token.startsWith("007")) {
-        throw new Error(`Token has unexpected prefix: ${token.substring(0, 3)}`)
+        throw new Error(`RTC token has unexpected prefix: ${token.substring(0, 3)}`)
       }
 
-      console.log(`[AGORA_SERVICE] Successfully built token:`, {
+      console.log(`[AGORA_SERVICE] Successfully built RTC token:`, {
         channel,
         uid,
         role,
@@ -229,13 +234,14 @@ class AgoraService {
       return token
 
     } catch (error) {
-      console.error("[AGORA_SERVICE] Error building token:", error)
+      console.error("[AGORA_SERVICE] Error building RTC token:", error)
       if (error instanceof Error) {
-        throw error // Re-throw with original message
+        throw error
       }
-      throw new Error(`Token generation failed: ${error}`)
+      throw new Error(`RTC token generation failed: ${error}`)
     }
   }
+
 
   async validateToken(token: string, channel: string): Promise<boolean> {
     try {
@@ -440,11 +446,11 @@ class AgoraService {
       
       console.log("[AGORA_SERVICE] Testing connection...")
       
-      const token = await this.generateToken(testChannel, testUserId, "learner")
-      const isValid = await this.validateToken(token.token, token.channel)
+      const tokenData = await this.generateToken(testChannel, testUserId, "learner")
+      const isRTCValid = await this.validateToken(tokenData.token, tokenData.channel)
       
-      console.log(`[AGORA_SERVICE] Connection test result: ${isValid}`)
-      return isValid
+      console.log(`[AGORA_SERVICE] Connection test result: RTC=${isRTCValid}`)
+      return isRTCValid
     } catch (error) {
       console.error("[AGORA_SERVICE] Connection test failed:", error)
       return false

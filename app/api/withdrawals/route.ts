@@ -1,15 +1,32 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/db"
-import { withdrawalRequests, mentors, users, mentorPayouts } from "@/db/schema"
-import { eq, and, sum, desc } from "drizzle-orm"
+import { users, mentors, learners, withdrawalRequests, creditTransactions } from "@/db/schema"
+import { eq, and, desc, sum } from "drizzle-orm"
 import { getSession } from "@/lib/auth/getSession"
+import { validateWithdrawalSecurity, logWithdrawalSecurityEvent } from "@/lib/security/withdrawalSecurity"
 import Stripe from 'stripe'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2024-12-18.acacia',
+  apiVersion: '2025-06-30.basil', 
 })
 
-// GET - Fetch withdrawal requests for current user
+// Credit to USD conversion rate (5 credits = $1 USD)
+const CREDITS_TO_USD_RATE = 0.2 // 1 credit = $0.20
+const MIN_WITHDRAWAL_CREDITS = 25 // Minimum 25 credits ($5 USD)
+
+// Fee structure according to documentation
+function calculateWithdrawalFee(amountUsd: number): number {
+  const FEE_PERCENTAGE = 0.015 // 1.5%
+  const MIN_FEE = 0.50 // $0.50 minimum
+  const MAX_FEE_PERCENTAGE = 0.05 // 5% maximum
+  
+  const percentageFee = amountUsd * FEE_PERCENTAGE
+  const maxFee = amountUsd * MAX_FEE_PERCENTAGE
+  
+  return Math.min(Math.max(percentageFee, MIN_FEE), maxFee)
+}
+
+// GET - Get withdrawal summary and history
 export async function GET(request: NextRequest) {
   try {
     const session = await getSession()
@@ -17,68 +34,93 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Check if user is a mentor
-    const [mentor] = await db
-      .select({ id: mentors.id })
-      .from(mentors)
-      .where(eq(mentors.userId, session.id))
+    // Get user info and check if mentor or learner
+    const [user] = await db
+      .select({
+        id: users.id,
+        role: users.role
+      })
+      .from(users)
+      .where(eq(users.id, session.id))
       .limit(1)
 
-    if (!mentor) {
-      return NextResponse.json({ error: "Only mentors can view withdrawal requests" }, { status: 403 })
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
-    // Get mentor's withdrawal requests
-    const requests = await db
+    // Get credits based on role
+    let availableCredits = 0
+    
+    if (user.role === 'mentor') {
+      const [mentor] = await db
+        .select({ credits: mentors.creditsBalance })
+        .from(mentors)
+        .where(eq(mentors.userId, session.id))
+        .limit(1)
+      availableCredits = mentor?.credits || 0
+    } else if (user.role === 'learner') {
+      const [learner] = await db
+        .select({ credits: learners.creditsBalance })
+        .from(learners)
+        .where(eq(learners.userId, session.id))
+        .limit(1)
+      availableCredits = learner?.credits || 0
+    } else {
+      return NextResponse.json({ error: "Only mentors and learners can withdraw" }, { status: 403 })
+    }
+
+    // FIXED: Use userId instead of mentorId
+    const withdrawalHistory = await db
       .select()
       .from(withdrawalRequests)
-      .where(eq(withdrawalRequests.mentorId, mentor.id))
+      .where(eq(withdrawalRequests.userId, session.id))
       .orderBy(desc(withdrawalRequests.createdAt))
 
-    // Get available credits (released payouts that haven't been withdrawn)
-    const availableCreditsResult = await db
-      .select({ 
-        totalEarned: sum(mentorPayouts.earnedCredits),
-        totalFees: sum(mentorPayouts.platformFeeCredits)
-      })
-      .from(mentorPayouts)
-      .where(and(
-        eq(mentorPayouts.mentorId, mentor.id),
-        eq(mentorPayouts.status, "released") // Only released credits can be withdrawn
-      ))
+    // Calculate pending withdrawals
+    const pendingWithdrawals = withdrawalHistory
+      .filter(w => w.status !== null && ['pending', 'approved', 'processing'].includes(w.status))
+      .reduce((sum, w) => sum + w.requestedCredits, 0);
 
-    const availableCredits = Number(availableCreditsResult[0]?.totalEarned || 0)
-    const totalFees = Number(availableCreditsResult[0]?.totalFees || 0)
+    // Calculate withdrawable credits (available - pending)
+    const withdrawableCredits = Math.max(0, availableCredits - pendingWithdrawals)
 
-    // Get total requested credits from pending/processing withdrawals
-    const pendingCreditsResult = await db
-      .select({ total: sum(withdrawalRequests.requestedCredits) })
-      .from(withdrawalRequests)
-      .where(and(
-        eq(withdrawalRequests.mentorId, mentor.id),
-        eq(withdrawalRequests.status, "pending")
-      ))
-
-    const pendingCredits = Number(pendingCreditsResult[0]?.total || 0)
-    const withdrawableCredits = Math.max(0, availableCredits - pendingCredits)
+    // Calculate total fees paid (from completed withdrawals)
+    const completedWithdrawals = withdrawalHistory.filter(w => w.status === 'completed')
+    const totalFeesPaid = completedWithdrawals.reduce((sum, w) => {
+      const amountUsd = parseFloat(w.requestedAmountUsd.toString())
+      return sum + calculateWithdrawalFee(amountUsd)
+    }, 0)
 
     return NextResponse.json({
-      requests,
       summary: {
         availableCredits,
-        pendingCredits,
+        pendingCredits: pendingWithdrawals,
         withdrawableCredits,
-        totalFeesPaid: totalFees
-      }
+        totalFeesPaid: Math.round(totalFeesPaid * 100) / 100,
+        canWithdraw: withdrawableCredits >= MIN_WITHDRAWAL_CREDITS,
+        minWithdrawal: MIN_WITHDRAWAL_CREDITS,
+        conversionRate: CREDITS_TO_USD_RATE
+      },
+      requests: withdrawalHistory.map(request => ({
+        id: request.id,
+        requestedCredits: request.requestedCredits,
+        requestedAmountUsd: request.requestedAmountUsd,
+        status: request.status,
+        payoutMethod: request.payoutMethod,
+        createdAt: request.createdAt,
+        processedAt: request.processedAt,
+        completedAt: request.completedAt,
+        adminNotes: request.adminNotes
+      }))
     })
 
   } catch (error) {
-    console.error("Error fetching withdrawal requests:", error)
+    console.error("Error fetching withdrawals:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
 
-// POST - Create new withdrawal request
+// POST - Create withdrawal request
 export async function POST(request: NextRequest) {
   try {
     const session = await getSession()
@@ -86,166 +128,166 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Check if user is a mentor
-    const [mentor] = await db
-      .select({ id: mentors.id })
-      .from(mentors)
-      .where(eq(mentors.userId, session.id))
-      .limit(1)
-
-    if (!mentor) {
-      return NextResponse.json({ error: "Only mentors can request withdrawals" }, { status: 403 })
-    }
-
-    const { 
-      requestedCredits, 
-      payoutMethod, 
-      payoutDetails 
-    } = await request.json()
+    const body = await request.json()
+    const { requestedCredits, payoutMethod, stripeAccountId } = body
 
     // Validate input
-    if (!requestedCredits || requestedCredits <= 0) {
-      return NextResponse.json({ error: "Invalid withdrawal amount" }, { status: 400 })
-    }
-
-    if (!payoutMethod || !["bank_transfer", "stripe_connect"].includes(payoutMethod)) {
+    if (!requestedCredits || requestedCredits < MIN_WITHDRAWAL_CREDITS) {
       return NextResponse.json({ 
-        error: "Invalid payout method. Supported: bank_transfer, stripe_connect" 
+        error: `Minimum withdrawal amount is ${MIN_WITHDRAWAL_CREDITS} credits ($${(MIN_WITHDRAWAL_CREDITS * CREDITS_TO_USD_RATE).toFixed(2)})` 
       }, { status: 400 })
     }
 
-    // Validate payout details based on method
-    if (payoutMethod === "bank_transfer") {
-      const { accountNumber, routingNumber, accountHolderName } = payoutDetails || {}
-      if (!accountNumber || !routingNumber || !accountHolderName) {
-        return NextResponse.json({ 
-          error: "Bank details required: accountNumber, routingNumber, accountHolderName" 
-        }, { status: 400 })
-      }
-    } else if (payoutMethod === "stripe_connect") {
-      const { country } = payoutDetails || {}
-      if (!country) {
-        return NextResponse.json({ 
-          error: "Country required for Stripe Connect" 
-        }, { status: 400 })
-      }
-    }
-
-    // Check available credits
-    const availableCreditsResult = await db
-      .select({ total: sum(mentorPayouts.earnedCredits) })
-      .from(mentorPayouts)
-      .where(and(
-        eq(mentorPayouts.mentorId, mentor.id),
-        eq(mentorPayouts.status, "released")
-      ))
-
-    const availableCredits = Number(availableCreditsResult[0]?.total || 0)
-
-    // Check pending withdrawals
-    const pendingCreditsResult = await db
-      .select({ total: sum(withdrawalRequests.requestedCredits) })
-      .from(withdrawalRequests)
-      .where(and(
-        eq(withdrawalRequests.mentorId, mentor.id),
-        eq(withdrawalRequests.status, "pending")
-      ))
-
-    const pendingCredits = Number(pendingCreditsResult[0]?.total || 0)
-    const withdrawableCredits = availableCredits - pendingCredits
-
-    if (requestedCredits > withdrawableCredits) {
+    if (!payoutMethod || !['stripe_express'].includes(payoutMethod)) {
       return NextResponse.json({ 
-        error: `Insufficient credits. Available: ${withdrawableCredits} credits` 
+        error: "Invalid payout method. Only Stripe Express is supported." 
       }, { status: 400 })
     }
 
-    // Convert credits to USD (assuming 1 credit = $1 for now)
-    const requestedAmountUsd = requestedCredits * 1.0
-
-    // Process withdrawal immediately
-    let payoutReference = ""
-    let finalStatus = "completed"
-    
-    try {
-      if (payoutMethod === "stripe_connect") {
-        // Process Stripe transfer immediately
-        const amountCents = Math.round(requestedAmountUsd * 100)
-        
-        // In production, mentors would have connected Stripe accounts
-        // For now, we'll simulate the transfer
-        const transfer = await stripe.transfers.create({
-          amount: amountCents,
-          currency: 'usd',
-          destination: payoutDetails.stripeAccountId || 'acct_default', // Mentor's connected account
-          description: `Mentoring earnings withdrawal: ${requestedCredits} credits`
-        })
-        
-        payoutReference = transfer.id
-        
-      } else if (payoutMethod === "bank_transfer") {
-        // For bank transfers, integrate with your bank API
-        // For demo purposes, we'll mark as processing (requires manual completion)
-        payoutReference = `BANK_${Date.now()}_${mentor.id}`
-        finalStatus = "processing" // Bank transfers take 1-3 business days
-      }
-      
-    } catch (paymentError) {
-      console.error("Payment processing error:", paymentError)
-      finalStatus = "failed"
-      payoutReference = `FAILED_${Date.now()}`
-    }
-
-    // Create withdrawal record with immediate status
-    const [withdrawalRequest] = await db
-      .insert(withdrawalRequests)
-      .values({
-        mentorId: mentor.id,
-        requestedCredits,
-        requestedAmountUsd: requestedAmountUsd.toString(),
-        payoutMethod,
-        payoutDetails,
-        status: finalStatus,
-        processedAt: new Date(),
-        ...(finalStatus === "completed" ? { completedAt: new Date() } : {}),
-        ...(payoutReference ? { payoutReference } : {})
+    // Get user info
+    const [user] = await db
+      .select({
+        id: users.id,
+        role: users.role
       })
-      .returning()
+      .from(users)
+      .where(eq(users.id, session.id))
+      .limit(1)
 
-    // Update mentor payouts to mark as withdrawn
-    await db
-      .update(mentorPayouts)
-      .set({ status: "paid_out", paidOutAt: new Date() })
-      .where(and(
-        eq(mentorPayouts.mentorId, mentor.id),
-        eq(mentorPayouts.status, "released")
-      ))
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 })
+    }
 
-    // Notify mentor of processing result
-    const { notifications } = await import("@/db/schema")
-    await db.insert(notifications).values({
-      userId: session.id,
-      type: finalStatus === "completed" ? "withdrawal_completed" : 
-            finalStatus === "processing" ? "withdrawal_processing" : "withdrawal_failed",
-      title: finalStatus === "completed" ? "Withdrawal Completed! 💰" :
-             finalStatus === "processing" ? "Withdrawal Processing" : "Withdrawal Failed",
-      message: finalStatus === "completed" 
-        ? `Your withdrawal of ${requestedCredits} credits ($${requestedAmountUsd}) has been sent to your account.`
-        : finalStatus === "processing"
-        ? `Your withdrawal of ${requestedCredits} credits ($${requestedAmountUsd}) is being processed. Funds will arrive within 1-3 business days.`
-        : `Your withdrawal request failed. Please try again or contact support.`,
-      relatedEntityType: "withdrawal",
-      relatedEntityId: withdrawalRequest.id,
-      createdAt: new Date()
+    // Get available credits based on role
+    let availableCredits = 0
+    
+    if (user.role === 'mentor') {
+      const [mentor] = await db
+        .select({ credits: mentors.creditsBalance })
+        .from(mentors)
+        .where(eq(mentors.userId, session.id))
+        .limit(1)
+      availableCredits = mentor?.credits || 0
+    } else if (user.role === 'learner') {
+      const [learner] = await db
+        .select({ credits: learners.creditsBalance })
+        .from(learners)
+        .where(eq(learners.userId, session.id))
+        .limit(1)
+      availableCredits = learner?.credits || 0
+    } else {
+      return NextResponse.json({ error: "Only mentors and learners can withdraw" }, { status: 403 })
+    }
+
+    // Check if user has enough credits
+    if (requestedCredits > availableCredits) {
+      return NextResponse.json({ 
+        error: `Insufficient credits. Available: ${availableCredits} credits` 
+      }, { status: 400 })
+    }
+
+    // Calculate withdrawal amount and fees
+    const requestedAmountUsd = requestedCredits * CREDITS_TO_USD_RATE
+    const withdrawalFee = calculateWithdrawalFee(requestedAmountUsd)
+    const netAmount = requestedAmountUsd - withdrawalFee
+
+    // Security validation
+    const securityCheck = await validateWithdrawalSecurity(session.id, requestedCredits, requestedAmountUsd)
+    
+    if (!securityCheck.isValid) {
+      await logWithdrawalSecurityEvent(
+        session.id,
+        'withdrawal_request_blocked',
+        { errors: securityCheck.errors, requestedCredits, requestedAmountUsd },
+        securityCheck.riskLevel
+      )
+      return NextResponse.json({ 
+        error: securityCheck.errors.join(', ') 
+      }, { status: 400 })
+    }
+
+    // Log security warnings for high/medium risk
+    if (securityCheck.riskLevel === 'high' || securityCheck.riskLevel === 'medium') {
+      await logWithdrawalSecurityEvent(
+        session.id,
+        'withdrawal_request_flagged',
+        { warnings: securityCheck.warnings, riskLevel: securityCheck.riskLevel, requestedCredits, requestedAmountUsd },
+        securityCheck.riskLevel
+      )
+    }
+
+    // Validate Stripe account if provided
+    if (payoutMethod === 'stripe_express' && stripeAccountId) {
+      try {
+        const account = await stripe.accounts.retrieve(stripeAccountId)
+        if (!account.charges_enabled || !account.payouts_enabled) {
+          return NextResponse.json({ 
+            error: "Stripe account is not fully setup for payouts" 
+          }, { status: 400 })
+        }
+      } catch (stripeError) {
+        console.error("Stripe account validation error:", stripeError)
+        return NextResponse.json({ 
+          error: "Invalid Stripe account" 
+        }, { status: 400 })
+      }
+    }
+
+    // Create withdrawal request
+    const [withdrawalRequest] = await db.transaction(async (tx) => {
+      // FIXED: Insert with correct field names
+      const [newRequest] = await tx
+        .insert(withdrawalRequests)
+        .values({
+          userId: session.id, // FIXED: Use userId instead of mentorId
+          requestedCredits,
+          requestedAmountUsd: requestedAmountUsd.toFixed(2),
+          feeAmount: withdrawalFee.toFixed(2),
+          netAmount: netAmount.toFixed(2),
+          status: 'pending',
+          payoutMethod,
+          payoutDetails: {
+            stripeAccountId: stripeAccountId || null,
+          },
+          stripeAccountId: stripeAccountId || null,
+          createdAt: new Date()
+        })
+        .returning()
+
+      // Create credit transaction record
+      await tx
+        .insert(creditTransactions)
+        .values({
+          userId: session.id,
+          type: 'withdrawal_request',
+          direction: 'debit',
+          amount: requestedCredits,
+          balanceBefore: availableCredits,
+          balanceAfter: availableCredits, // Don't deduct yet, wait for processing
+          description: `Withdrawal request #${newRequest.id}`,
+          metadata: {
+            withdrawalRequestId: newRequest.id,
+            amountUsd: requestedAmountUsd,
+            feeAmount: withdrawalFee,
+            netAmount: netAmount
+          },
+          createdAt: new Date()
+        })
+
+      return [newRequest]
     })
 
     return NextResponse.json({
-      message: finalStatus === "completed" ? "Withdrawal processed successfully" :
-               finalStatus === "processing" ? "Withdrawal is being processed" : "Withdrawal failed",
-      request: withdrawalRequest,
-      status: finalStatus,
-      payoutReference
-    })
+      message: "Withdrawal request created successfully",
+      request: {
+        id: withdrawalRequest.id,
+        requestedCredits,
+        requestedAmountUsd: requestedAmountUsd.toFixed(2),
+        feeAmount: withdrawalFee.toFixed(2),
+        netAmount: netAmount.toFixed(2),
+        status: 'pending'
+      }
+    }, { status: 201 })
 
   } catch (error) {
     console.error("Error creating withdrawal request:", error)

@@ -202,7 +202,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid channel configuration" }, { status: 500 })
     }
 
-    // Generate Agora token with extended expiration and improved UID handling
+    // Generate Agora tokens (both RTC and RTM) with extended expiration and improved UID handling
     try {
       // Set token to expire 2 hours after session ends for flexibility
       const tokenExpirationTime = Math.floor(sessionEnd.getTime() / 1000) + 7200 // 2 hours after end
@@ -213,7 +213,7 @@ export async function POST(request: NextRequest) {
         `${session.id}_${userRole}_${Date.now()}` : 
         `${session.id}_${userRole}`
       
-      console.log(`[AGORA_TOKEN] Generating token for:`, {
+      console.log(`[AGORA_TOKEN] Generating tokens for:`, {
         channel,
         uniqueUserId,
         originalUserId: session.id,
@@ -250,26 +250,21 @@ export async function POST(request: NextRequest) {
 
       // Validate generated token
       if (!tokenData || !tokenData.token || !tokenData.appId || tokenData.token.length < 50) {
-        throw new Error("Invalid token generated - missing or malformed data")
+        throw new Error("Invalid RTC token generated - missing or malformed data")
       }
 
-      const isTokenValid = await agoraService.validateToken(tokenData.token, channel)
-      if (!isTokenValid) {
-        throw new Error("Generated token failed validation")
-      }
-
-      console.log(`[AGORA_TOKEN] Successfully generated and validated token for session ${parsedSessionId}`)
+      console.log(`[AGORA_TOKEN] Successfully generated RTC token for session ${parsedSessionId}`)
       console.log(`[AGORA_TOKEN] Token details:`, {
         appId: tokenData.appId.substring(0, 8) + "...",
         channel: tokenData.channel,
         uid: tokenData.uid,
-        tokenLength: tokenData.token.length,
-        tokenPrefix: tokenData.token.substring(0, 10) + "...",
+        rtcTokenLength: tokenData.token.length,
+        rtcTokenPrefix: tokenData.token.substring(0, 10) + "...",
         userRole,
         isForceNew: forceNew
       })
 
-      // Return complete token information with validated structure
+      // Return RTC token information only
       const response = {
         appId: tokenData.appId,
         channel: tokenData.channel,

@@ -37,6 +37,8 @@ interface AgoraConfig {
   appId: string
   channel: string
   token: string
+  rtmToken?: string // Add RTM token support
+  rtmUserId?: string // Add RTM user ID support
   uid: number
 }
 
@@ -172,7 +174,7 @@ export default function SessionPage() {
     isTokenRequestInProgressRef.current = true
 
     try {
-      console.log("[SESSION_PAGE] Requesting Agora token, forceNew:", forceNew)
+      console.log("[SESSION_PAGE] Requesting Agora tokens, forceNew:", forceNew)
       
       const requestBody = { 
         sessionId: parseInt(sessionId),
@@ -200,8 +202,10 @@ export default function SessionPage() {
         hasAppId: !!data.appId,
         hasChannel: !!data.channel,
         hasToken: !!data.token,
+        hasRtmToken: !!data.rtmToken, // Check RTM token
         hasUid: !!data.uid,
         tokenLength: data.token?.length || 0,
+        rtmTokenLength: data.rtmToken?.length || 0, // Log RTM token length
         channel: data.channel,
         uid: data.uid
       })
@@ -212,32 +216,49 @@ export default function SessionPage() {
           appId: !!data.appId,
           channel: !!data.channel,
           token: !!data.token,
+          rtmToken: !!data.rtmToken,
           uid: data.uid
         })
         throw new Error("Invalid token data received from server")
       }
 
       if (data.token.length < 50) {
-        console.error("[SESSION_PAGE] Token appears malformed, length:", data.token.length)
-        throw new Error("Token appears to be malformed")
+        console.error("[SESSION_PAGE] RTC token appears malformed, length:", data.token.length)
+        throw new Error("RTC token appears to be malformed")
       }
 
-      // Validate token format
+      // Validate RTC token format
       if (!data.token.startsWith('006') && !data.token.startsWith('007')) {
-        console.error("[SESSION_PAGE] Token has unexpected prefix:", data.token.substring(0, 3))
-        throw new Error("Token format appears invalid")
+        console.error("[SESSION_PAGE] RTC token has unexpected prefix:", data.token.substring(0, 3))
+        throw new Error("RTC token format appears invalid")
       }
 
-      console.log("[SESSION_PAGE] Successfully validated Agora token")
+      // Validate RTM token if present
+      if (data.rtmToken) {
+        if (data.rtmToken.length < 50) {
+          console.warn("[SESSION_PAGE] RTM token appears malformed, length:", data.rtmToken.length)
+          // Don't throw error for RTM token - chat can be disabled
+          data.rtmToken = undefined
+        } else if (!data.rtmToken.startsWith('006') && !data.rtmToken.startsWith('007')) {
+          console.warn("[SESSION_PAGE] RTM token has unexpected prefix:", data.rtmToken.substring(0, 3))
+          // Don't throw error for RTM token - chat can be disabled
+          data.rtmToken = undefined
+        }
+      } else {
+        console.warn("[SESSION_PAGE] No RTM token received - chat functionality will be disabled")
+      }
+
+      console.log("[SESSION_PAGE] Successfully validated Agora tokens")
 
       return {
         appId: data.appId,
         channel: data.channel,
         token: data.token,
+        rtmToken: data.rtmToken, // Include RTM token (may be undefined)
         uid: data.uid,
       }
     } catch (error) {
-      console.error("[SESSION_PAGE] Error getting Agora token:", error)
+      console.error("[SESSION_PAGE] Error getting Agora tokens:", error)
       throw error
     } finally {
       isTokenRequestInProgressRef.current = false
@@ -269,7 +290,7 @@ export default function SessionPage() {
         await new Promise(resolve => setTimeout(resolve, 500))
       }
 
-      // Get Agora token with improved retry logic
+      // Get Agora tokens with improved retry logic
       let agoraData = null
       let tokenAttempts = 0
       const maxTokenAttempts = 3
@@ -285,7 +306,7 @@ export default function SessionPage() {
           agoraData = await loadAgoraToken(forceNew)
           
           if (agoraData) {
-            console.log("[SESSION_PAGE] Successfully obtained Agora token")
+            console.log("[SESSION_PAGE] Successfully obtained Agora tokens")
             break
           }
         } catch (tokenError) {
@@ -293,7 +314,6 @@ export default function SessionPage() {
           console.warn(`[SESSION_PAGE] Agora token attempt ${tokenAttempts} failed:`, tokenError)
           
           if (tokenAttempts < maxTokenAttempts) {
-            // Exponential backoff with some randomness to avoid thundering herd
             const baseDelay = 1000 * Math.pow(2, tokenAttempts - 1)
             const jitter = Math.random() * 500
             const delay = baseDelay + jitter
@@ -305,7 +325,7 @@ export default function SessionPage() {
       
       if (!agoraData) {
         const errorMsg = lastError?.message || "Unknown error"
-        console.error("[SESSION_PAGE] Failed to get token after all attempts:", errorMsg)
+        console.error("[SESSION_PAGE] Failed to get tokens after all attempts:", errorMsg)
         throw new Error(`Unable to get video call configuration after ${maxTokenAttempts} attempts. Last error: ${errorMsg}`)
       }
 
@@ -490,7 +510,7 @@ export default function SessionPage() {
             <p className="text-slate-400">
               {sessionPhase === "loading" 
                 ? "Getting your session details ready" 
-                : "Setting up video connection"
+                : "Setting up video connection and chat"
               }
             </p>
           </CardContent>

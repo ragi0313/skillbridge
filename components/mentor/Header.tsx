@@ -523,6 +523,15 @@ export default function MentorHeader() {
                     Settings
                   </Link>
                 </DropdownMenuItem>
+                <DropdownMenuItem
+                  asChild
+                  className="text-gray-300 hover:bg-gray-700 hover:text-white cursor-pointer"
+                >
+                  <Link href="/mentor/withdrawals">
+                    <CreditCard className="mr-2 h-4 w-4" />
+                    Withdrawals
+                  </Link>
+                </DropdownMenuItem>
                 <DropdownMenuSeparator className="bg-gray-700" />
                 <DropdownMenuItem
                   onClick={handleLogout}

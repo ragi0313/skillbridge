@@ -13,9 +13,12 @@ export const users = pgTable("users", {
   lastName: varchar("last_name", { length: 100 }).notNull(),
   email: varchar("email", { length: 255 }).notNull().unique(),
   hashedPassword: varchar("hashed_password", { length: 255 }).notNull(),
-  role: varchar("role", { length: 20 }).notNull(), // 'learner' | 'mentor' | 'admin'
+  role: varchar("role", { length: 20 }).notNull(),
   status: varchar("status", { length: 20 }).default("offline").notNull(),
-  stripeCustomerId: varchar("stripe_customer_id", { length: 255 }), // For handling refunds and payments
+  stripeCustomerId: varchar("stripe_customer_id", { length: 255 }),
+  // ADD THESE NEW FIELDS:
+  stripeAccountId: varchar("stripe_account_id", { length: 255 }),
+  stripeAccountStatus: varchar("stripe_account_status", { length: 50 }).default("none"),
   suspendedAt: timestamp("suspended_at", { withTimezone: true }),
   suspensionEndsAt: timestamp("suspension_ends_at", { withTimezone: true }),
   suspensionReason: text("suspension_reason"),
@@ -205,21 +208,45 @@ export const mentorPayouts = pgTable("mentor_payouts", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 })
 
-// WITHDRAWAL REQUESTS
 export const withdrawalRequests = pgTable("withdrawal_requests", {
   id: serial("id").primaryKey(),
-  mentorId: integer("mentor_id").notNull().references(() => mentors.id, { onDelete: "cascade" }),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }), // Changed from mentorId
   requestedCredits: integer("requested_credits").notNull(),
   requestedAmountUsd: numeric("requested_amount_usd", { precision: 10, scale: 2 }).notNull(),
+  feeAmount: numeric("fee_amount", { precision: 10, scale: 2 }).default("0").notNull(),
+  netAmount: numeric("net_amount", { precision: 10, scale: 2 }).notNull(),
   localAmount: numeric("local_amount", { precision: 10, scale: 2 }),
   localCurrency: varchar("local_currency", { length: 10 }),
-  status: varchar("status", { length: 20 }).default("pending"), // 'pending', 'approved', 'processing', 'completed', 'rejected'
+  status: varchar("status", { length: 20 }).default("pending"),
   payoutMethod: varchar("payout_method", { length: 50 }).notNull(),
-  payoutDetails: json("payout_details"), // Bank details, PayPal email, etc.
+  payoutDetails: json("payout_details"),
+  stripeAccountId: varchar("stripe_account_id", { length: 255 }),
+  stripeTransferId: varchar("stripe_transfer_id", { length: 255 }),
   adminNotes: text("admin_notes"),
   processedBy: integer("processed_by").references(() => users.id),
   processedAt: timestamp("processed_at", { withTimezone: true }),
   completedAt: timestamp("completed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+})
+
+// WITHDRAWAL REQUESTS
+export const withdrawalFees = pgTable("withdrawal_fees", {
+  id: serial("id").primaryKey(),
+  withdrawalId: integer("withdrawal_id").notNull().references(() => withdrawalRequests.id, { onDelete: "cascade" }),
+  feePercentage: numeric("fee_percentage", { precision: 5, scale: 3 }).notNull(),
+  feeAmount: numeric("fee_amount", { precision: 10, scale: 2 }).notNull(),
+  feeType: varchar("fee_type", { length: 50 }).default("platform_fee"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+})
+
+export const withdrawalSecurityEvents = pgTable("withdrawal_security_events", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  withdrawalId: integer("withdrawal_id").references(() => withdrawalRequests.id, { onDelete: "cascade" }),
+  eventType: varchar("event_type", { length: 100 }).notNull(),
+  riskLevel: varchar("risk_level", { length: 20 }).notNull(),
+  eventData: json("event_data"),
+  description: text("description"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 })
 
@@ -346,6 +373,40 @@ export const sessionVisibility = pgTable("session_visibility", {
   ...timestamps,
 })
 
+export const usersRelations = relations(users, ({ many }) => ({
+  withdrawalRequests: many(withdrawalRequests),
+  withdrawalSecurityEvents: many(withdrawalSecurityEvents),
+}))
 
+export const withdrawalRequestsRelations = relations(withdrawalRequests, ({ one, many }) => ({
+  user: one(users, {
+    fields: [withdrawalRequests.userId],
+    references: [users.id],
+  }),
+  processedByUser: one(users, {
+    fields: [withdrawalRequests.processedBy],
+    references: [users.id],
+  }),
+  fees: many(withdrawalFees),
+  securityEvents: many(withdrawalSecurityEvents),
+}))
+
+export const withdrawalFeesRelations = relations(withdrawalFees, ({ one }) => ({
+  withdrawal: one(withdrawalRequests, {
+    fields: [withdrawalFees.withdrawalId],
+    references: [withdrawalRequests.id],
+  }),
+}))
+
+export const withdrawalSecurityEventsRelations = relations(withdrawalSecurityEvents, ({ one }) => ({
+  user: one(users, {
+    fields: [withdrawalSecurityEvents.userId],
+    references: [users.id],
+  }),
+  withdrawal: one(withdrawalRequests, {
+    fields: [withdrawalSecurityEvents.withdrawalId],
+    references: [withdrawalRequests.id],
+  }),
+}))
 
 

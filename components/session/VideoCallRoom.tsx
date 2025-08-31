@@ -709,7 +709,7 @@ export function VideoCallRoom({
           
           if (evt && evt.code) {
             switch (evt.code) {
-              case "WEBSOCKET_DISCONNECTED":
+              case "NETWORK_DISCONNECTED":
                 if (!isCallEnding) {
                   console.log("[VIDEO_CALL] Network disconnected, attempting reconnection")
                   attemptReconnection()

@@ -394,16 +394,16 @@ export class SessionMonitorService {
   private async detectNoShows(): Promise<void> {
     try {
       const now = new Date()
-      const fifteenMinutesAgo = new Date(now.getTime() - 15 * 60 * 1000) // 15 minutes grace period
       const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000) // Don't check sessions older than 2 hours
       
-      // OPTIMIZED: Find sessions past their grace period with time range filtering
+      // OPTIMIZED: Find sessions that need no-show checking
       const potentialNoShows = await db
         .select({
           id: bookingSessions.id,
           learnerId: bookingSessions.learnerId,
           mentorId: bookingSessions.mentorId,
           startTime: bookingSessions.startTime,
+          endTime: bookingSessions.endTime,
           totalCostCredits: bookingSessions.totalCostCredits,
           escrowCredits: bookingSessions.escrowCredits,
           learnerJoinedAt: bookingSessions.learnerJoinedAt,
@@ -412,6 +412,8 @@ export class SessionMonitorService {
           mentorLeftAt: bookingSessions.mentorLeftAt,
           noShowCheckedAt: bookingSessions.noShowCheckedAt,
           status: bookingSessions.status,
+          learnerConnectionDurationMs: bookingSessions.learnerConnectionDurationMs,
+          mentorConnectionDurationMs: bookingSessions.mentorConnectionDurationMs,
           learner: {
             id: learners.id,
             userId: learners.userId,
@@ -433,31 +435,53 @@ export class SessionMonitorService {
               eq(bookingSessions.status, 'upcoming'),
               eq(bookingSessions.status, 'ongoing') // Include ongoing sessions for no-show check
             ),
-            lt(bookingSessions.startTime, fifteenMinutesAgo),
             gt(bookingSessions.startTime, twoHoursAgo), // OPTIMIZATION: Don't check very old sessions
             isNull(bookingSessions.noShowCheckedAt) // Only process once
           )
         )
 
       for (const session of potentialNoShows) {
-        // Skip if session is ongoing and users are still active
-        if (session.status === 'ongoing') {
-          const learnerStillInSession = session.learnerJoinedAt && !session.learnerLeftAt
-          const mentorStillInSession = session.mentorJoinedAt && !session.mentorLeftAt
-          
-          // If either user is still in the session, don't mark as no-show yet
-          if (learnerStillInSession || mentorStillInSession) {
-            console.log(`[SESSION_MONITOR] Skipping no-show check for ongoing session ${session.id} - users still active`)
-            continue
-          }
+        const sessionStartTime = new Date(session.startTime)
+        const sessionEndTime = new Date(session.endTime)
+        const thirtyMinutesFromStart = new Date(sessionStartTime.getTime() + 30 * 60 * 1000) // First 30 minutes
+        const fifteenMinutesBeforeEnd = new Date(sessionEndTime.getTime() - 15 * 60 * 1000) // 15 minutes before end
+
+        // NEW NO-SHOW CONDITIONS:
+        // 1. If user is not in session for more than 10 minutes in the first 30 minutes from start time
+        // 2. If user is not in session for more than 30 minutes from (end time - 15 minutes)
+        // 3. Allow transition from ongoing to no show
+
+        let shouldCheckNoShow = false
+        
+        // Check if we're past the first condition window (30 minutes from start)
+        if (now > thirtyMinutesFromStart) {
+          shouldCheckNoShow = true
+        }
+        // Or if we're in the second condition window (15 minutes before end)
+        else if (now > fifteenMinutesBeforeEnd) {
+          shouldCheckNoShow = true
         }
 
-        const noShowType = this.determineNoShowType({
+        if (!shouldCheckNoShow) {
+          continue // Too early to check
+        }
+
+        // Skip if session is ongoing and users are still active (but allow transition to no-show)
+        if (session.status === 'ongoing') {
+          // For ongoing sessions, we need to be more strict about no-show detection
+          // Allow transition from ongoing to no-show based on new conditions
+        }
+
+        const noShowType = this.determineNoShowTypeEnhanced({
           learnerJoinedAt: session.learnerJoinedAt,
           mentorJoinedAt: session.mentorJoinedAt,
           learnerLeftAt: session.learnerLeftAt,
           mentorLeftAt: session.mentorLeftAt,
-          startTime: session.startTime
+          learnerConnectionDurationMs: session.learnerConnectionDurationMs,
+          mentorConnectionDurationMs: session.mentorConnectionDurationMs,
+          startTime: session.startTime,
+          endTime: session.endTime,
+          currentTime: now
         })
         
         if (noShowType) {
@@ -474,6 +498,146 @@ export class SessionMonitorService {
     } catch (error) {
       console.error('[SESSION_MONITOR] Error detecting no-shows:', error)
     }
+  }
+
+  private determineNoShowTypeEnhanced(session: {
+    learnerJoinedAt: Date | null
+    mentorJoinedAt: Date | null
+    learnerLeftAt: Date | null
+    mentorLeftAt: Date | null
+    learnerConnectionDurationMs: number | null
+    mentorConnectionDurationMs: number | null
+    startTime: Date
+    endTime: Date
+    currentTime: Date
+  }): 'both_no_show' | 'mentor_no_show' | 'learner_no_show' | null {
+    const sessionStartTime = new Date(session.startTime)
+    const sessionEndTime = new Date(session.endTime)
+    const thirtyMinutesFromStart = new Date(sessionStartTime.getTime() + 30 * 60 * 1000)
+    const fifteenMinutesBeforeEnd = new Date(sessionEndTime.getTime() - 15 * 60 * 1000)
+
+    // NEW CONDITIONS:
+    // 1. If user is not in session for more than 10 minutes in the first 30 minutes from start time
+    // 2. If user is not in session for more than 30 minutes from (end time - 15 minutes)
+
+    let learnerIsNoShow = false
+    let mentorIsNoShow = false
+
+    // Check condition 1: First 30 minutes from start (10 minute threshold)
+    if (session.currentTime > thirtyMinutesFromStart) {
+      // Calculate total connection time in first 30 minutes
+      const learnerConnectionInFirstThirty = this.calculateConnectionTimeInWindow(
+        session.learnerJoinedAt,
+        session.learnerLeftAt,
+        sessionStartTime,
+        thirtyMinutesFromStart,
+        session.learnerConnectionDurationMs
+      )
+      
+      const mentorConnectionInFirstThirty = this.calculateConnectionTimeInWindow(
+        session.mentorJoinedAt,
+        session.mentorLeftAt,
+        sessionStartTime,
+        thirtyMinutesFromStart,
+        session.mentorConnectionDurationMs
+      )
+
+      const tenMinutesMs = 10 * 60 * 1000
+      
+      if (learnerConnectionInFirstThirty < tenMinutesMs) {
+        learnerIsNoShow = true
+      }
+      
+      if (mentorConnectionInFirstThirty < tenMinutesMs) {
+        mentorIsNoShow = true
+      }
+    }
+    
+    // Check condition 2: 30 minutes from (end time - 15 minutes)
+    if (session.currentTime > fifteenMinutesBeforeEnd) {
+      const checkWindowStart = fifteenMinutesBeforeEnd
+      const checkWindowEnd = new Date(Math.min(session.currentTime.getTime(), sessionEndTime.getTime()))
+      
+      const learnerConnectionInEndWindow = this.calculateConnectionTimeInWindow(
+        session.learnerJoinedAt,
+        session.learnerLeftAt,
+        checkWindowStart,
+        checkWindowEnd,
+        session.learnerConnectionDurationMs
+      )
+      
+      const mentorConnectionInEndWindow = this.calculateConnectionTimeInWindow(
+        session.mentorJoinedAt,
+        session.mentorLeftAt,
+        checkWindowStart,
+        checkWindowEnd,
+        session.mentorConnectionDurationMs
+      )
+
+      const thirtyMinutesMs = 30 * 60 * 1000
+      const windowDurationMs = checkWindowEnd.getTime() - checkWindowStart.getTime()
+      
+      // Only apply if user was absent for more than 30 minutes in this window
+      if (windowDurationMs >= thirtyMinutesMs) {
+        const expectedConnectionTime = Math.min(thirtyMinutesMs, windowDurationMs)
+        
+        if (learnerConnectionInEndWindow < expectedConnectionTime) {
+          learnerIsNoShow = true
+        }
+        
+        if (mentorConnectionInEndWindow < expectedConnectionTime) {
+          mentorIsNoShow = true
+        }
+      }
+    }
+
+    // Return appropriate no-show type
+    if (learnerIsNoShow && mentorIsNoShow) {
+      return 'both_no_show'
+    } else if (learnerIsNoShow && !mentorIsNoShow) {
+      return 'learner_no_show'
+    } else if (!learnerIsNoShow && mentorIsNoShow) {
+      return 'mentor_no_show'
+    }
+    
+    return null // Neither is a no-show
+  }
+
+  private calculateConnectionTimeInWindow(
+    joinedAt: Date | null,
+    leftAt: Date | null,
+    windowStart: Date,
+    windowEnd: Date,
+    totalConnectionMs: number | null
+  ): number {
+    if (!joinedAt) {
+      return 0 // Never joined
+    }
+
+    // Use stored connection duration if available and reliable
+    if (totalConnectionMs !== null && leftAt !== null) {
+      // Calculate overlap between connection period and window
+      const connectionStart = Math.max(joinedAt.getTime(), windowStart.getTime())
+      const connectionEnd = Math.min(leftAt.getTime(), windowEnd.getTime())
+      
+      if (connectionEnd > connectionStart) {
+        return connectionEnd - connectionStart
+      }
+      return 0
+    }
+
+    // Fallback: calculate based on join/leave times
+    const connectionStart = Math.max(joinedAt.getTime(), windowStart.getTime())
+    const connectionEnd = Math.min(
+      leftAt ? leftAt.getTime() : windowEnd.getTime(), 
+      windowEnd.getTime()
+    )
+    
+    if (connectionEnd > connectionStart) {
+      return connectionEnd - connectionStart
+    }
+    
+    return 0
   }
 
   private determineNoShowType(session: {

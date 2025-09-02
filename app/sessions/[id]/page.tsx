@@ -348,14 +348,33 @@ export default function SessionPage() {
   const handleLeaveCall = useCallback(async (reason?: string) => {
     console.log("[SESSION_PAGE] User leaving call, reason:", reason)
     
-    // Just go to ended state - VideoCallRoom handles the leave API call
-    setSessionPhase("ended")
-    
-    // Show rating modal only for learners
-    if (userRole === "learner") {
-      setShowRatingModal(true)
+    // If user manually clicked leave, redirect to sessions management
+    if (reason === "user_action") {
+      console.log("[SESSION_PAGE] Manual leave detected, redirecting to sessions management")
+      if (userRole) {
+        router.push(`/${userRole}/sessions`)
+      }
+      return
     }
-  }, [userRole])
+    
+    // For automatic session end (timer expired), show the completion flow
+    if (reason === "session_ended") {
+      console.log("[SESSION_PAGE] Session timer expired, showing completion modal")
+      setSessionPhase("ended")
+      
+      // Show rating modal only for learners on timer expiration
+      if (userRole === "learner") {
+        setShowRatingModal(true)
+      }
+      return
+    }
+    
+    // For other reasons (connection errors, etc.), redirect to sessions management
+    console.log("[SESSION_PAGE] Other leave reason, redirecting to sessions management")
+    if (userRole) {
+      router.push(`/${userRole}/sessions`)
+    }
+  }, [userRole, router])
 
   // Handle connection errors from video call - with enhanced logging
   const handleConnectionError = useCallback((errorMessage: string) => {
@@ -383,18 +402,18 @@ export default function SessionPage() {
 
   // Handle rating submission
   const handleRatingSubmitted = useCallback(() => {
-    console.log("[SESSION_PAGE] Rating submitted, returning to dashboard")
+    console.log("[SESSION_PAGE] Rating submitted, returning to sessions")
     setShowRatingModal(false)
     if (userRole) {
-      router.push(`/${userRole}/dashboard`)
+      router.push(`/${userRole}/sessions`)
     }
   }, [router, userRole])
 
-  // Handle navigation back to dashboard
-  const handleBackToDashboard = useCallback(() => {
-    console.log("[SESSION_PAGE] Navigating back to dashboard")
+  // Handle navigation back to sessions management
+  const handleBackToSessions = useCallback(() => {
+    console.log("[SESSION_PAGE] Navigating back to sessions management")
     if (userRole) {
-      router.push(`/${userRole}/dashboard`)
+      router.push(`/${userRole}/sessions`)
     }
   }, [router, userRole])
 
@@ -537,9 +556,9 @@ export default function SessionPage() {
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Try Again
               </Button>
-              <Button variant="outline" onClick={handleBackToDashboard} className="w-full">
+              <Button variant="outline" onClick={handleBackToSessions} className="w-full">
                 <Home className="h-4 w-4 mr-2" />
-                Back to Dashboard
+                Back to Sessions
               </Button>
             </div>
           </CardContent>
@@ -561,9 +580,9 @@ export default function SessionPage() {
             <p className="text-slate-400 mb-6">
               You have left the mentorship session. Thank you for participating!
             </p>
-            <Button onClick={handleBackToDashboard} className="w-full">
+            <Button onClick={handleBackToSessions} className="w-full">
               <Home className="h-4 w-4 mr-2" />
-              Return to Dashboard
+              Return to Sessions
             </Button>
           </CardContent>
         </Card>

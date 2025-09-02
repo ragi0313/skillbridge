@@ -15,12 +15,14 @@ import {  Video,  VideoOff,  Mic,  MicOff,  Phone, Users, Clock, AlertTriangle, 
   X,
   FileText,
   Image as ImageIcon,
-  Upload
+  Upload,
+  PenTool
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useRealTimeTimer } from "@/lib/hooks/useRealTimeTimer"
-import AgoraChat from "agora-chat"
+import { Whiteboard } from "@/components/whiteboard/Whiteboard"
+// Simple REST-based chat - much more reliable than Agora Chat
 
 interface VideoCallRoomProps {
   sessionId: string
@@ -77,8 +79,6 @@ interface ChatAttachment {
   thumbnailData?: string // Base64 encoded thumbnail
 }
 
-// Note: Agora Chat will be dynamically imported to avoid SSR issues
-
 export function VideoCallRoom({
   sessionId,
   sessionData,
@@ -116,15 +116,19 @@ export function VideoCallRoom({
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [newMessage, setNewMessage] = useState("")
   const [unreadCount, setUnreadCount] = useState(0)
+  const [isChatInitialized, setIsChatInitialized] = useState(false)
 
   // File sharing states
   const [isUploading, setIsUploading] = useState(false)
+
+  // Whiteboard states
+  const [showWhiteboard, setShowWhiteboard] = useState(false)
 
   const localVideoRef = useRef<HTMLDivElement>(null)
   const remoteVideoRef = useRef<HTMLDivElement>(null)
   const screenShareRef = useRef<HTMLDivElement>(null)
   const agoraClientRef = useRef<any>(null)
-  const agoraChatRef = useRef<any>(null)
+  const chatPollIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const localTracksRef = useRef<{ videoTrack?: any; audioTrack?: any; screenTrack?: any }>({})
   const isInitializingRef = useRef<boolean>(false)
   const isCleaningUpRef = useRef<boolean>(false)
@@ -305,113 +309,81 @@ export function VideoCallRoom({
     return false
   }, [cleanupLocalTracks])
 
-  // Initialize Agora Chat functionality
-  const initializeAgoraChat = useCallback(async () => {
+  // Poll for new chat messages from REST API
+  const pollChatMessages = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/sessions/${sessionId}/chat`)
+      if (response.ok) {
+        const data = await response.json()
+        const allMessages = data.messages || []
+        
+        // Get current user identifier
+        const currentUserId = `${userRole}-${currentUser.firstName} ${currentUser.lastName}`
+        
+        // Filter messages to only include ones from other users
+        const otherUserMessages = allMessages.filter((msg: ChatMessage) => 
+          msg.senderId !== currentUserId
+        )
+        
+        if (otherUserMessages.length > 0) {
+          setChatMessages((prev: ChatMessage[]) => {
+            // Get current message IDs to avoid duplicates
+            const existingIds = prev.map(msg => msg.id)
+            
+            // Filter out messages we already have
+            const newMessages = otherUserMessages.filter((msg: ChatMessage) => 
+              !existingIds.includes(msg.id)
+            )
+            
+            if (newMessages.length > 0) {
+              console.log(`[VIDEO_CALL] Adding ${newMessages.length} new messages from other users`)
+              
+              // Add the new messages from other users
+              const updatedMessages = [...prev]
+              newMessages.forEach((msg: ChatMessage) => {
+                updatedMessages.push({
+                  ...msg,
+                  senderId: msg.senderId // Keep original senderId from API
+                })
+              })
+              
+              // Sort by timestamp to maintain order
+              return updatedMessages.sort((a: ChatMessage, b: ChatMessage) => a.timestamp - b.timestamp)
+            }
+            
+            return prev // No new messages
+          })
+        }
+      }
+    } catch (error) {
+      console.error("[VIDEO_CALL] Error polling chat messages:", error)
+    }
+  }, [sessionId, currentUser])
+
+  // Initialize REST-based chat polling
+  const initializeChat = useCallback(async () => {
     if (chatInitializedRef.current) {
-      console.log("[VIDEO_CALL] Agora Chat already initialized")
       return
     }
-
-    try {
-      console.log("[VIDEO_CALL] Initializing Agora Chat...")
-      
-      
-      // Create chat connection with proper Chat App Key
-      const chatAppKey = process.env.NEXT_PUBLIC_AGORA_CHAT_APP_KEY!
-      console.log('[VIDEO_CALL] Using Chat App Key:', chatAppKey)
-      
-      const chatConnection = new AgoraChat.connection({
-        appKey: chatAppKey,
-      })
-
-      agoraChatRef.current = chatConnection
-      
-      // Set up event listeners
-      chatConnection.addEventHandler("connection", {
-        onConnected: () => {
-          console.log("[VIDEO_CALL] Agora Chat connected")
-          chatInitializedRef.current = true
-          
-          // Initialize chat messaging
-          initializeChatMessaging()
-        },
-        onDisconnected: () => {
-          console.log("[VIDEO_CALL] Agora Chat disconnected")
-          chatInitializedRef.current = false
-        },
-        onError: (error: any) => {
-          console.error("[VIDEO_CALL] Agora Chat connection error:", error)
-          setMediaError("Chat connection failed")
-        }
-      })
-
-      // Message event handler
-      chatConnection.addEventHandler("message", {
-        onTextMessage: (message: any) => {
-          console.log("[VIDEO_CALL] Text message received:", message)
-          handleAgoraChatMessage(message)
-        },
-        onFileMessage: (message: any) => {
-          console.log("[VIDEO_CALL] File message received:", message)
-          handleAgoraChatMessage(message)
-        }
-      })
-
-      // Connect to Agora Chat using the same UID
-      const chatUserId = agoraConfig.uid.toString()
-      const chatToken = "" // Agora Chat can work without token for testing
-      
-      await chatConnection.open({
-        user: chatUserId,
-        accessToken: chatToken
-      })
-
-      console.log("[VIDEO_CALL] Agora Chat initialized successfully")
-
-    } catch (error) {
-      console.error('[VIDEO_CALL] Agora Chat initialization failed:', error)
-      setMediaError('Chat functionality temporarily unavailable')
-    }
-  }, [agoraConfig.appId, agoraConfig.uid])
-
-  // Join chat room - using peer-to-peer messaging instead of chat rooms for simplicity
-  const initializeChatMessaging = useCallback(async () => {
-    if (!agoraChatRef.current) return
     
     try {
-      console.log(`[VIDEO_CALL] Chat messaging initialized for channel: ${agoraConfig.channel}`)
-      // Agora Chat peer-to-peer messaging doesn't require joining a room
-      // Messages will be sent directly between participants
-      console.log("[VIDEO_CALL] Ready for peer-to-peer chat messaging")
+      console.log("[VIDEO_CALL] Initializing REST-based chat...")
+      
+      // Start polling for messages every 3 seconds to reduce API calls
+      chatPollIntervalRef.current = setInterval(pollChatMessages, 3000)
+      
+      // Do an initial poll to get existing messages
+      await pollChatMessages()
+      chatInitializedRef.current = true
+      setIsChatInitialized(true)
+      
+      console.log("[VIDEO_CALL] REST chat initialized successfully - polling every 3 seconds")
+      
     } catch (error) {
-      console.error("[VIDEO_CALL] Failed to initialize chat messaging:", error)
+      console.error("[VIDEO_CALL] Failed to initialize chat:", error)
     }
-  }, [agoraConfig.channel])
+  }, [pollChatMessages])
 
-  // Handle incoming Agora Chat messages
-  const handleAgoraChatMessage = useCallback((agoraMessage: any) => {
-    try {
-      const message: ChatMessage = {
-        id: agoraMessage.id || Date.now().toString(),
-        message: agoraMessage.msg || agoraMessage.body?.msg || "",
-        messageType: agoraMessage.body?.type === "file" ? "file" : "text",
-        timestamp: agoraMessage.time || Date.now(),
-        senderName: agoraMessage.from || "Unknown",
-        senderRole: "learner", // Default, could be enhanced
-        senderId: agoraMessage.from,
-        attachment: agoraMessage.body?.type === "file" ? {
-          fileName: agoraMessage.body.filename,
-          fileSize: agoraMessage.body.file_length,
-          fileType: agoraMessage.body.filetype,
-          fileData: agoraMessage.body.url
-        } : undefined
-      }
-
-      setChatMessages(prev => [...prev, message])
-    } catch (error) {
-      console.error("[VIDEO_CALL] Error processing Agora Chat message:", error)
-    }
-  }, [])
 
   // Comprehensive cleanup function
   const performCleanup = useCallback(async (reason: string = "component_cleanup") => {
@@ -438,17 +410,18 @@ export function VideoCallRoom({
       // Clean up local tracks
       await cleanupLocalTracks()
 
-      // Clean up Agora Chat
-      if (agoraChatRef.current && chatInitializedRef.current) {
+      // Clean up chat polling
+      if (chatPollIntervalRef.current) {
         try {
-          console.log("[VIDEO_CALL] Disconnecting Agora Chat...")
-          await agoraChatRef.current.close()
-          console.log("[VIDEO_CALL] Agora Chat cleanup completed")
+          console.log("[VIDEO_CALL] Stopping chat polling...")
+          clearInterval(chatPollIntervalRef.current)
+          chatPollIntervalRef.current = null
+          console.log("[VIDEO_CALL] Chat polling cleanup completed")
         } catch (error) {
-          console.error("[VIDEO_CALL] Error during Agora Chat cleanup:", error)
+          console.error("[VIDEO_CALL] Error during chat cleanup:", error)
         }
-        agoraChatRef.current = null
         chatInitializedRef.current = false
+        setIsChatInitialized(false)
       }
       
       // Clean up Agora client
@@ -473,7 +446,7 @@ export function VideoCallRoom({
     } finally {
       isCleaningUpRef.current = false
     }
-  }, [cleanupLocalTracks, agoraConfig.channel])
+  }, [cleanupLocalTracks])
 
   // Handle leaving the call
   const handleLeaveCall = useCallback(async (reason: string = "user_action") => {
@@ -607,7 +580,6 @@ export function VideoCallRoom({
           throw new Error("Invalid Agora configuration - missing required fields")
         }
 
-
         const AgoraRTC = await import("agora-rtc-sdk-ng")
         
         AgoraRTC.default.enableLogUpload()
@@ -651,6 +623,12 @@ export function VideoCallRoom({
             
             currentRemoteUsersRef.current.add(user.uid.toString())
             setParticipants(currentRemoteUsersRef.current.size + 1)
+            
+            // Initialize chat when first user joins
+            if (currentRemoteUsersRef.current.size === 1 && !chatInitializedRef.current) {
+              // Initialize chat immediately when other user joins
+              initializeChat()
+            }
           } catch (error) {
             console.error("[VIDEO_CALL] Error handling user published:", error)
           }
@@ -810,13 +788,20 @@ export function VideoCallRoom({
           else setCallQuality("unknown")
         })
 
-        // Initialize Agora Chat after RTC is working
+        // Initialize REST-based chat immediately after RTC connection
         setTimeout(() => {
-          initializeAgoraChat()
-        }, 2000)
+          if (!isCleaningUpRef.current && !isCallEnding) {
+            initializeChat()
+          }
+        }, 1000) // Reduced delay
 
         setConnectionState("connected")
         console.log("[VIDEO_CALL] Agora initialization completed successfully")
+        
+        // Always initialize chat after successful connection
+        if (!chatInitializedRef.current) {
+          setTimeout(initializeChat, 500)
+        }
 
         // Start session tracking with proper cleanup handling
         const startPing = () => {
@@ -871,7 +856,7 @@ export function VideoCallRoom({
       document.removeEventListener('visibilitychange', handleVisibilityChange)
       performCleanup("component_unmount")
     }
-  }, [agoraConfig, sessionId, onConnectionError, attemptReconnection, performCleanup, isCallEnding, pingSession, retryMediaCreation, initializeAgoraChat])
+  }, [agoraConfig, sessionId, onConnectionError, attemptReconnection, performCleanup, isCallEnding, pingSession, retryMediaCreation, initializeChat])
 
   // FIXED: Improved video toggle with better track management
   const toggleVideo = useCallback(async () => {
@@ -1250,69 +1235,66 @@ export function VideoCallRoom({
     }
   }, [isScreenSharing, isVideoEnabled, isRetryingMedia])
 
-  // Agora Chat messaging
+  // REST-based chat messaging - much more reliable!
   const sendMessage = useCallback(async (message: string, file?: File) => {
     if (!message.trim() && !file) return
-    if (!agoraChatRef.current || !chatInitializedRef.current) {
-      console.error("[VIDEO_CALL] Agora Chat not available for sending message")
-      setMediaError('Chat is not connected. Please try again.')
-      return
-    }
 
     setIsUploading(!!file)
     
     try {
-      console.log("[VIDEO_CALL] Sending Agora Chat message...")
+      console.log("[VIDEO_CALL] Sending message via REST API...")
       
-      // For simplicity, we'll use the other participant's UID as recipient
-      // In a real implementation, you'd get this from the session data
-      const recipientUid = agoraConfig.uid === 1001 ? "1002" : "1001" // Simple peer determination
+      const currentUserName = `${currentUser.firstName} ${currentUser.lastName}`
       
+      let attachment = undefined
       if (file) {
-        // Send file message
-        const fileMessage = {
-          chatType: "singleChat",
-          type: "file",
-          to: recipientUid,
-          file: file,
-          filename: file.name,
-          ext: {
-            senderName: `${currentUser.firstName} ${currentUser.lastName}`,
-            senderRole: userRole,
-            sessionId: sessionId
-          }
-        }
+        // For file sharing, convert to base64
+        const reader = new FileReader()
+        const fileData = await new Promise<string>((resolve) => {
+          reader.onload = () => resolve(reader.result as string)
+          reader.readAsDataURL(file)
+        })
         
-        await agoraChatRef.current.send(fileMessage)
-        console.log("[VIDEO_CALL] File message sent successfully")
-      } else {
-        // Send text message
-        const textMessage = {
-          chatType: "singleChat",
-          type: "txt",
-          to: recipientUid,
-          msg: message.trim(),
-          ext: {
-            senderName: `${currentUser.firstName} ${currentUser.lastName}`,
-            senderRole: userRole,
-            sessionId: sessionId
-          }
+        attachment = {
+          fileName: file.name,
+          fileSize: file.size,
+          fileType: file.type,
+          fileData: fileData
         }
-        
-        await agoraChatRef.current.send(textMessage)
-        console.log("[VIDEO_CALL] Text message sent successfully")
       }
       
+      // Send message to API
+      const response = await fetch(`/api/sessions/${sessionId}/chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          message: file ? file.name : message.trim(),
+          messageType: file ? 'file' : 'text',
+          senderName: currentUserName,
+          senderRole: userRole,
+          attachment
+        })
+      })
+      
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`HTTP ${response.status}: ${response.statusText} - ${errorText}`)
+      }
+      
+      const result = await response.json()
+      console.log("[VIDEO_CALL] Message sent successfully:", result)
+      
       // Add to local messages (sender's copy)
-      const currentUserName = `${currentUser.firstName} ${currentUser.lastName}`
       const localMessage: ChatMessage = {
-        id: Date.now().toString(),
+        id: result.message?.id || Date.now().toString(),
         message: file ? file.name : message.trim(),
         messageType: file ? 'file' : 'text',
         timestamp: Date.now(),
         senderName: currentUserName,
         senderRole: userRole,
-        senderId: 'self',
+        senderId: `${userRole}-${currentUserName}`, // Use same format as API
         attachment: file ? {
           fileName: file.name,
           fileSize: file.size,
@@ -1320,16 +1302,33 @@ export function VideoCallRoom({
           fileData: URL.createObjectURL(file)
         } : undefined
       }
-      setChatMessages(prev => [...prev, localMessage])
+      
+      setChatMessages((prev: ChatMessage[]) => {
+        // Check if message already exists to avoid duplicates
+        if (prev.some(msg => msg.id === localMessage.id)) {
+          return prev
+        }
+        return [...prev, localMessage].sort((a, b) => a.timestamp - b.timestamp)
+      })
+      
       setNewMessage("")
       
+      // Clear any previous errors
+      setMediaError("")
+      
     } catch (error) {
-      console.error('[VIDEO_CALL] Failed to send Agora Chat message:', error)
-      setMediaError(`Failed to send message: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      console.error('[VIDEO_CALL] Failed to send message:', error)
+      
+      // Don't show error for network issues during message sending
+      if (error instanceof Error && !error.message.includes('Failed to fetch')) {
+        setMediaError(`Failed to send message: ${error.message}`)
+      } else {
+        console.warn('[VIDEO_CALL] Network error while sending message, will retry on next poll')
+      }
     } finally {
       setIsUploading(false)
     }
-  }, [agoraChatRef, userRole, currentUser, chatInitializedRef, agoraConfig.channel])
+  }, [userRole, currentUser, sessionId])
 
   const handleSendMessage = useCallback(() => {
     if (newMessage.trim()) {
@@ -1370,8 +1369,9 @@ export function VideoCallRoom({
     }
     // Update unread count if sidebar is closed and message is from other user
     const lastMessage = chatMessages[chatMessages.length - 1]
-    if (!showSidebar && lastMessage && lastMessage.senderId !== 'self') {
-      setUnreadCount(prev => prev + 1)
+    const currentUserId = `${userRole}-${currentUser.firstName} ${currentUser.lastName}`
+    if (!showSidebar && lastMessage && lastMessage.senderId !== currentUserId) {
+      setUnreadCount((prev: number) => prev + 1)
     } else if (showSidebar) {
       setUnreadCount(0)
     }
@@ -1671,6 +1671,17 @@ export function VideoCallRoom({
             )}
           </Button>
 
+          <Button
+            variant={showWhiteboard ? "default" : "outline"}
+            size="lg"
+            onClick={() => setShowWhiteboard(!showWhiteboard)}
+            className="rounded-full w-12 h-12 p-0"
+            disabled={isCallEnding}
+            title="Toggle Whiteboard"
+          >
+            <PenTool className={`h-5 w-5 ${showWhiteboard ? 'text-green-400' : ''}`} />
+          </Button>
+
           <Separator orientation="vertical" className="h-8 bg-slate-600" />
 
           <Button
@@ -1759,8 +1770,8 @@ export function VideoCallRoom({
             <div className="flex-1 flex flex-col">
               <div className="p-4 border-b border-slate-700">
                 <h4 className="text-sm font-medium text-slate-300">Session Chat</h4>
-                {!chatInitializedRef.current && (
-                  <p className="text-xs text-slate-500 mt-1">Connecting to chat...</p>
+                {!isChatInitialized && (
+                  <p className="text-xs text-slate-500 mt-1">Initializing chat...</p>
                 )}
               </div>
 
@@ -1768,15 +1779,18 @@ export function VideoCallRoom({
               <div className="flex-1 flex flex-col m-0 p-0">
                 <ScrollArea className="flex-1 p-4">
                   <div className="space-y-3">
-                    {chatMessages.map((message) => (
-                      <div key={message.id} className={`flex flex-col space-y-1 ${message.senderId === 'self' ? 'items-end' : 'items-start'}`}>
+                    {chatMessages.map((message) => {
+                      const currentUserId = `${userRole}-${currentUser.firstName} ${currentUser.lastName}`
+                      const isOwnMessage = message.senderId === currentUserId
+                      return (
+                      <div key={message.id} className={`flex flex-col space-y-1 ${isOwnMessage ? 'items-end' : 'items-start'}`}>
                         <div className="flex items-center space-x-2 text-xs text-slate-400">
                           <span>{message.senderName}</span>
                           <span>{new Date(message.timestamp).toLocaleTimeString()}</span>
                         </div>
                         {message.messageType === 'text' ? (
                           <div className={`rounded-lg p-3 max-w-[90%] ${
-                            message.senderId === 'self' 
+                            isOwnMessage 
                               ? 'bg-blue-600 text-white' 
                               : 'bg-slate-700 text-slate-200'
                           }`}>
@@ -1784,7 +1798,7 @@ export function VideoCallRoom({
                           </div>
                         ) : (
                           <div className={`rounded-lg p-3 max-w-[90%] flex items-center space-x-2 ${
-                            message.senderId === 'self' 
+                            isOwnMessage 
                               ? 'bg-blue-600 text-white' 
                               : 'bg-slate-700 text-slate-200'
                           }`}>
@@ -1810,7 +1824,8 @@ export function VideoCallRoom({
                           </div>
                         )}
                       </div>
-                    ))}
+                      )
+                    })}
                     <div ref={chatEndRef} />
                   </div>
                 </ScrollArea>
@@ -1822,16 +1837,16 @@ export function VideoCallRoom({
                     <div 
                       className="border-2 border-dashed border-slate-600 rounded-lg p-3 text-center hover:border-slate-500 transition-colors cursor-pointer"
                       onClick={() => fileInputRef.current?.click()}
-                      onDrop={(e) => {
+                      onDrop={(e: React.DragEvent<HTMLDivElement>) => {
                         e.preventDefault()
                         const file = e.dataTransfer.files[0]
                         if (file) handleFileUpload(file)
                       }}
-                      onDragOver={(e) => e.preventDefault()}
+                      onDragOver={(e: React.DragEvent<HTMLDivElement>) => e.preventDefault()}
                     >
                       <Upload className="h-5 w-5 text-slate-400 mx-auto mb-1" />
                       <p className="text-xs text-slate-400">Click or drag files here to share</p>
-                      <p className="text-xs text-slate-500 mt-1">Max 5MB</p>
+                      <p className="text-xs text-slate-500 mt-1">Max 10MB</p>
                     </div>
                     
                     {/* Text input */}
@@ -1841,18 +1856,18 @@ export function VideoCallRoom({
                         onChange={(e) => setNewMessage(e.target.value)}
                         placeholder="Type a message..."
                         className="bg-slate-700 border-slate-600 text-white placeholder-slate-400"
-                        onKeyPress={(e) => {
+                        onKeyPress={(e: React.KeyboardEvent<HTMLInputElement>) => {
                           if (e.key === 'Enter' && !e.shiftKey) {
                             e.preventDefault()
                             handleSendMessage()
                           }
                         }}
-                        disabled={isCallEnding || isUploading || !chatInitializedRef.current}
+                        disabled={isCallEnding || isUploading || !isChatInitialized}
                       />
                       <Button
                         size="sm"
                         onClick={handleSendMessage}
-                        disabled={!newMessage.trim() || isCallEnding || isUploading || !chatInitializedRef.current}
+                        disabled={!newMessage.trim() || isCallEnding || isUploading || !isChatInitialized}
                         className="bg-blue-600 hover:bg-blue-700"
                       >
                         {isUploading ? (
@@ -1886,6 +1901,15 @@ export function VideoCallRoom({
             }
           }}
           accept="*/*"
+        />
+
+        {/* Whiteboard */}
+        <Whiteboard
+          sessionId={sessionId}
+          userRole={userRole}
+          currentUser={currentUser}
+          isVisible={showWhiteboard}
+          onClose={() => setShowWhiteboard(false)}
         />
       </div>
     </div>

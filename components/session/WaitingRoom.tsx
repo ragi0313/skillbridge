@@ -10,7 +10,6 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Clock, User, VideoIcon, AlertCircle, Users, CheckCircle, Loader2, Camera, Mic, MicOff, CameraOff, Volume2 } from "lucide-react"
 import { SessionCountdown } from "@/components/session/SessionCountdown"
 import { useRealTimeTimer, formatTimeRemaining } from "@/lib/hooks/useRealTimeTimer"
-import { useSessionState } from "@/lib/hooks/useSessionState"
 
 interface WaitingRoomProps {
   sessionId: string
@@ -92,7 +91,51 @@ export function WaitingRoom({
     }
   }, [hasJoinedSession, canJoin, onJoinSession])
 
-  // Set initial session status and handle automatic video call start
+  const handleStartVideoCall = useCallback(async () => {
+    // Clean up waiting room media streams before starting video call
+    try {
+      if (cameraStreamRef.current) {
+        cameraStreamRef.current.getTracks().forEach(track => {
+          track.stop()
+          console.log('Stopped camera track:', track.label)
+        })
+        cameraStreamRef.current = null
+        setCameraEnabled(false)
+      }
+      
+      if (microphoneStreamRef.current) {
+        microphoneStreamRef.current.getTracks().forEach(track => {
+          track.stop()
+          console.log('Stopped microphone track:', track.label)
+        })
+        microphoneStreamRef.current = null
+        setMicrophoneEnabled(false)
+        setAudioLevel(0)
+        setAudioPlaybackEnabled(false)
+      }
+      
+      if (audioContextRef.current) {
+        await audioContextRef.current.close()
+        audioContextRef.current = null
+        analyserRef.current = null
+        gainNodeRef.current = null
+      }
+      
+      if (videoRef.current) {
+        videoRef.current.srcObject = null
+      }
+      
+      console.log('Media streams cleanup completed')
+    } catch (error) {
+      console.error("Error cleaning up media streams:", error)
+    }
+    
+    setTimeout(() => {
+      onJoinVideoCall()
+    }, 200)
+  }, [onJoinVideoCall])
+
+  // Set initial session status and handle manual video call start
   useEffect(() => {
     if (sessionData.status === "ongoing") {
       setIsSessionStarted(true)
@@ -301,50 +344,6 @@ export function WaitingRoom({
     }
   }, [microphoneEnabled, audioPlaybackEnabled])
 
-  const handleStartVideoCall = useCallback(async () => {
-    // Clean up waiting room media streams before starting video call
-    try {
-      if (cameraStreamRef.current) {
-        cameraStreamRef.current.getTracks().forEach(track => {
-          track.stop()
-          console.log('Stopped camera track:', track.label)
-        })
-        cameraStreamRef.current = null
-        setCameraEnabled(false)
-      }
-      
-      if (microphoneStreamRef.current) {
-        microphoneStreamRef.current.getTracks().forEach(track => {
-          track.stop()
-          console.log('Stopped microphone track:', track.label)
-        })
-        microphoneStreamRef.current = null
-        setMicrophoneEnabled(false)
-        setAudioLevel(0)
-        setAudioPlaybackEnabled(false)
-      }
-      
-      if (audioContextRef.current) {
-        await audioContextRef.current.close()
-        audioContextRef.current = null
-        analyserRef.current = null
-        gainNodeRef.current = null
-      }
-      
-      if (videoRef.current) {
-        videoRef.current.srcObject = null
-      }
-      
-      console.log('Media streams cleanup completed')
-    } catch (error) {
-      console.error("Error cleaning up media streams:", error)
-    }
-    
-    setTimeout(() => {
-      onJoinVideoCall()
-    }, 200)
-  }, [onJoinVideoCall])
-
   // Session status polling with proper cleanup
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null
@@ -415,6 +414,7 @@ export function WaitingRoom({
   const isTimeRemaining = (timer: any): timer is { isExpired: boolean; totalSeconds: number; days: number; hours: number; minutes: number; seconds: number } => {
     return 'isExpired' in timer && 'totalSeconds' in timer
   }
+
 
   const renderJoinButton = () => {
     if (joinStatus === "joining") {

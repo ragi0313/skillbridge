@@ -123,13 +123,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     })
 
     // Broadcast real-time update to connected clients
-    await broadcastSessionUpdate(sessionId, 'status_change', {
-      previousStatus: 'pending',
-      newStatus: 'rejected',
-      mentorResponse: true,
-      rejectionReason: rejectionReason.trim(),
-      refundAmount: result.refundAmount
-    })
+    try {
+      await broadcastSessionUpdate(sessionId, 'status_change', {
+        previousStatus: 'pending',
+        newStatus: 'rejected',
+        mentorResponse: true,
+        rejectionReason: rejectionReason.trim(),
+        refundAmount: result.refundAmount
+      })
+    } catch (broadcastError) {
+      // Log broadcast error but don't fail the request
+      console.warn("Failed to broadcast session update:", broadcastError)
+    }
 
     return NextResponse.json(result)
   } catch (error: any) {

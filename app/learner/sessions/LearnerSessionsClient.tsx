@@ -76,11 +76,9 @@ export function LearnerSessionsClient({ sessions }: LearnerSessionsClientProps) 
     
     return {
       all: sessions,
-      upcoming: sessions.filter(session => {
-        if (!['confirmed', 'upcoming'].includes(session.status)) return false
-        const dateToCheck = session.startTime || session.scheduledDate
-        return dateToCheck && isFuture(new Date(dateToCheck))
-      }),
+      upcoming: sessions.filter(session => 
+        ['confirmed', 'upcoming'].includes(session.status)
+      ),
       ongoing: sessions.filter(session => session.status === 'ongoing'),
       pending: sessions.filter(session => session.status === 'pending'),
       completed: sessions.filter(session => 

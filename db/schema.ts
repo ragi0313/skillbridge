@@ -148,6 +148,10 @@ export const bookingSessions = pgTable("booking_sessions", {
   mentorLeftAt: timestamp("mentor_left_at", { withTimezone: true }),
   learnerConnectionDurationMs: integer("learner_connection_duration_ms").default(0),
   mentorConnectionDurationMs: integer("mentor_connection_duration_ms").default(0),
+  learnerActiveTimeMs: integer("learner_active_time_ms").default(0), // Total time learner was actively in session
+  mentorActiveTimeMs: integer("mentor_active_time_ms").default(0), // Total time mentor was actively in session
+  learnerLastActiveAt: timestamp("learner_last_active_at", { withTimezone: true }), // Last activity timestamp for learner
+  mentorLastActiveAt: timestamp("mentor_last_active_at", { withTimezone: true }), // Last activity timestamp for mentor
   noShowCheckedAt: timestamp("no_show_checked_at", { withTimezone: true }),
   refundProcessedAt: timestamp("refund_processed_at", { withTimezone: true }),
   refundAmount: integer("refund_amount").default(0),

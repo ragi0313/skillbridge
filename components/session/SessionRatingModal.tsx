@@ -85,25 +85,31 @@ export function SessionRatingModal({
 
   return (
     <Dialog open={true} onOpenChange={() => !isSubmitting && onClose()}>
-      <DialogContent className="sm:max-w-[425px]" onPointerDownOutside={(e) => isSubmitting && e.preventDefault()}>
-        <DialogHeader>
-          <DialogTitle>Rate Your Session</DialogTitle>
-          <DialogDescription>
-            How was your mentoring session? Your feedback helps us improve the platform.
-          </DialogDescription>
+      <DialogContent className="sm:max-w-[500px]" onPointerDownOutside={(e) => isSubmitting && e.preventDefault()}>
+        <DialogHeader className="space-y-4 pb-2">
+          <div className="text-center">
+            <div className="text-4xl mb-3">⭐</div>
+            <DialogTitle className="text-2xl font-bold text-gray-900">Rate Your Session</DialogTitle>
+            <DialogDescription className="text-gray-600 mt-2">
+              How was your mentoring session? Your feedback helps us improve the platform and assists other learners.
+            </DialogDescription>
+          </div>
         </DialogHeader>
 
-        <div className="space-y-6 py-4">
+        <div className="space-y-8 py-6">
           {/* Star Rating */}
-          <div className="space-y-3">
-            <Label className="text-base font-medium">Rating (Required) *</Label>
-            <div className="flex items-center gap-2">
+          <div className="space-y-4">
+            <div className="text-center">
+              <Label className="text-lg font-semibold text-gray-900">How would you rate your mentor?</Label>
+              <p className="text-sm text-gray-500 mt-1">Click on the stars to rate your experience</p>
+            </div>
+            <div className="flex items-center justify-center gap-2">
               {[1, 2, 3, 4, 5].map((star) => (
                 <button
                   key={star}
                   type="button"
-                  className={`p-1 transition-colors hover:scale-110 ${
-                    isSubmitting ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
+                  className={`p-2 transition-all duration-200 hover:scale-125 rounded-full ${
+                    isSubmitting ? 'cursor-not-allowed opacity-50' : 'cursor-pointer hover:bg-yellow-50'
                   }`}
                   onClick={() => !isSubmitting && handleStarClick(star)}
                   onMouseEnter={() => !isSubmitting && handleStarHover(star)}
@@ -111,63 +117,81 @@ export function SessionRatingModal({
                   disabled={isSubmitting}
                 >
                   <Star
-                    className={`h-8 w-8 transition-colors ${
+                    className={`h-10 w-10 transition-all duration-200 ${
                       star <= displayRating
-                        ? 'fill-yellow-400 text-yellow-400'
-                        : 'text-gray-300 hover:text-yellow-400'
+                        ? 'fill-yellow-400 text-yellow-400 drop-shadow-sm'
+                        : 'text-gray-300 hover:text-yellow-300'
                     }`}
                   />
                 </button>
               ))}
-              {displayRating > 0 && (
-                <span className="ml-2 text-sm font-medium text-gray-600">
+            </div>
+            {displayRating > 0 && (
+              <div className="text-center">
+                <span className="inline-block px-4 py-2 bg-yellow-100 text-yellow-800 rounded-full text-base font-semibold">
                   {getRatingText(displayRating)}
                 </span>
-              )}
-            </div>
+              </div>
+            )}
           </div>
 
           {/* Review Text */}
-          <div className="space-y-3">
-            <Label htmlFor="review" className="text-base font-medium">
-              Comments (Optional)
-            </Label>
-            <Textarea
-              id="review"
-              placeholder="Share your experience with this mentor... (optional)"
-              value={review}
-              onChange={(e) => setReview(e.target.value)}
-              className="min-h-[100px] resize-none"
-              maxLength={1000}
-              disabled={isSubmitting}
-            />
-            <p className="text-xs text-gray-500">
-              {review.length}/1000 characters
-            </p>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="review" className="text-lg font-semibold text-gray-900">
+                Share your experience (Optional)
+              </Label>
+              <p className="text-sm text-gray-500 mt-1">
+                Help other learners by sharing what made this session valuable
+              </p>
+            </div>
+            <div className="relative">
+              <Textarea
+                id="review"
+                placeholder="What did you learn? How was your mentor's teaching style? Would you recommend them to other learners?"
+                value={review}
+                onChange={(e) => setReview(e.target.value)}
+                className="min-h-[120px] resize-none border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200 rounded-lg"
+                maxLength={1000}
+                disabled={isSubmitting}
+              />
+              <div className="absolute bottom-3 right-3">
+                <span className={`text-xs ${review.length > 900 ? 'text-red-500' : 'text-gray-400'}`}>
+                  {review.length}/1000
+                </span>
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="flex justify-end gap-3">
+        <div className="flex justify-between items-center gap-4 pt-6 border-t">
           <Button
-            variant="outline"
+            variant="ghost"
             onClick={onClose}
             disabled={isSubmitting}
-            className="px-6"
+            className="px-6 text-gray-500 hover:text-gray-700"
           >
             Skip for Now
           </Button>
           <Button
             onClick={handleSubmit}
             disabled={isSubmitting || rating === 0}
-            className="px-6"
+            className={`px-8 py-2.5 font-semibold ${
+              rating === 0 
+                ? 'bg-gray-300 text-gray-500 cursor-not-allowed' 
+                : 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl transition-all duration-200'
+            }`}
           >
             {isSubmitting ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                Submitting...
-              </>
+              <div className="flex items-center">
+                <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-3"></div>
+                Submitting Review...
+              </div>
             ) : (
-              "Rate Mentor"
+              <div className="flex items-center">
+                <Star className="w-4 h-4 mr-2" />
+                Submit Rating
+              </div>
             )}
           </Button>
         </div>

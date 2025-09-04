@@ -74,11 +74,9 @@ export function MentorSessionsClient({ sessions }: MentorSessionsClientProps) {
     return {
       all: sessions,
       pending: sessions.filter(session => session.status === 'pending'),
-      upcoming: sessions.filter(session => {
-        if (!['confirmed', 'upcoming'].includes(session.status)) return false
-        const dateToCheck = session.startTime || session.scheduledDate
-        return dateToCheck && isFuture(new Date(dateToCheck))
-      }),
+      upcoming: sessions.filter(session => 
+        ['confirmed', 'upcoming'].includes(session.status)
+      ),
       ongoing: sessions.filter(session => session.status === 'ongoing'),
       completed: sessions.filter(session => 
         ['completed', 'technical_issues'].includes(session.status)
@@ -204,7 +202,9 @@ export function MentorSessionsClient({ sessions }: MentorSessionsClientProps) {
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: responseMessage })
+        body: JSON.stringify({ 
+          message: isAccepting ? "" : responseMessage 
+        })
       })
 
       if (!response.ok) {
@@ -614,56 +614,92 @@ export function MentorSessionsClient({ sessions }: MentorSessionsClientProps) {
 
       {/* Response Modal */}
       <Dialog open={responseModalOpen} onOpenChange={setResponseModalOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {isAccepting ? 'Accept' : 'Decline'} Session Request
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader className="space-y-3">
+            <DialogTitle className={`text-xl font-semibold ${isAccepting ? 'text-green-700' : 'text-red-700'}`}>
+              {isAccepting ? '✓ Accept Session Request' : '✗ Decline Session Request'}
             </DialogTitle>
           </DialogHeader>
           
           {selectedSession && (
-            <div className="space-y-4">
-              <div>
-                <p className="text-sm text-gray-600 mb-2">
-                  Session with {selectedSession.learnerFirstName} {selectedSession.learnerLastName}
-                </p>
-                <p className="text-sm font-medium">
-                  {format(new Date(selectedSession.scheduledDate), "MMM dd, yyyy 'at' h:mm a")} 
-                  ({selectedSession.durationMinutes} minutes)
-                </p>
+            <div className="space-y-6">
+              <div className="bg-gray-50 border rounded-lg p-4">
+                <div className="flex items-center space-x-3 mb-3">
+                  <Avatar className="h-10 w-10">
+                    <AvatarImage src={selectedSession.learnerProfilePictureUrl || undefined} />
+                    <AvatarFallback>
+                      {selectedSession.learnerFirstName?.[0]}{selectedSession.learnerLastName?.[0]}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <h3 className="font-semibold text-gray-900">
+                      {selectedSession.learnerFirstName} {selectedSession.learnerLastName}
+                    </h3>
+                    <p className="text-sm text-gray-600">
+                      {selectedSession.learnerExperienceLevel} • {selectedSession.skillName}
+                    </p>
+                  </div>
+                </div>
+                <div className="space-y-3 text-sm">
+                  <div>
+                    <span className="font-medium text-gray-700">Date:</span> {format(new Date(selectedSession.scheduledDate), "MMM dd, yyyy")}
+                  </div>
+                  <div>
+                    <span className="font-medium text-gray-700">Time:</span> {selectedSession.startTime && selectedSession.endTime 
+                      ? `${format(new Date(selectedSession.startTime), "h:mm a")} - ${format(new Date(selectedSession.endTime), "h:mm a")}`
+                      : `${format(new Date(selectedSession.scheduledDate), "h:mm a")} (${selectedSession.durationMinutes}min)`}
+                  </div>
+                  <div>
+                    <span className="font-medium text-gray-700">Credits:</span> {selectedSession.totalCostCredits} credits
+                  </div>
+                  <div>
+                    <span className="font-medium text-gray-700">Your earnings:</span> +{Math.floor(selectedSession.totalCostCredits * 0.8)} credits
+                  </div>
+                  <div>
+                    <span className="font-medium text-gray-700">What you'll teach:</span> {selectedSession.skillName}
+                  </div>
+                </div>
+                {selectedSession.sessionNotes && (
+                  <div className="mt-3 pt-3 border-t">
+                    <p className="text-xs font-medium text-gray-700 mb-1">Learner's Notes:</p>
+                    <p className="text-sm text-gray-600 italic">"{selectedSession.sessionNotes}"</p>
+                  </div>
+                )}
               </div>
 
-              <div>
-                <label className="text-sm font-medium mb-2 block">
-                  {isAccepting ? 'Welcome message (optional)' : 'Reason for declining (optional)'}
-                </label>
-                <Textarea
-                  value={responseMessage}
-                  onChange={(e) => setResponseMessage(e.target.value)}
-                  placeholder={
-                    isAccepting 
-                      ? "Looking forward to our session! Let me know if you have any questions."
-                      : "Please explain why you're declining this session request."
-                  }
-                  rows={3}
-                />
-              </div>
+              {!isAccepting && (
+                <div>
+                  <label className="text-sm font-medium mb-2 block">
+                    Reason for declining (optional)
+                  </label>
+                  <Textarea
+                    value={responseMessage}
+                    onChange={(e) => setResponseMessage(e.target.value)}
+                    placeholder="Please explain why you're declining this session request."
+                    rows={3}
+                  />
+                </div>
+              )}
             </div>
           )}
 
-          <DialogFooter>
+          <DialogFooter className="gap-3 pt-6 border-t">
             <Button 
               variant="outline" 
               onClick={() => setResponseModalOpen(false)}
+              className="px-6"
             >
               Cancel
             </Button>
             <Button 
               onClick={submitResponse}
-              className={isAccepting ? "bg-green-600 hover:bg-green-700" : ""}
-              variant={isAccepting ? "default" : "destructive"}
+              className={
+                isAccepting 
+                  ? "bg-green-600 hover:bg-green-700 text-white px-6" 
+                  : "bg-red-600 hover:bg-red-700 text-white px-6"
+              }
             >
-              {isAccepting ? 'Accept Session' : 'Decline Session'}
+              {isAccepting ? '✓ Accept Session' : '✗ Decline Session'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -671,43 +707,59 @@ export function MentorSessionsClient({ sessions }: MentorSessionsClientProps) {
 
       {/* Cancellation Modal */}
       <Dialog open={cancelModalOpen} onOpenChange={setCancelModalOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Cancel Session</DialogTitle>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader className="space-y-3">
+            <DialogTitle className="text-xl font-semibold text-red-700">
+              ⚠️ Cancel Session
+            </DialogTitle>
           </DialogHeader>
           
-          <div className="space-y-4">
-            <p className="text-sm text-gray-600">
-              Please provide a reason for cancelling this session. This will help us improve our service and will be shared with the learner.
-            </p>
+          <div className="space-y-6">
+            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <div className="flex items-start space-x-3">
+                <AlertCircle className="w-5 h-5 text-yellow-600 mt-0.5 flex-shrink-0" />
+                <div>
+                  <h4 className="text-sm font-medium text-yellow-800 mb-1">Important Notice</h4>
+                  <p className="text-sm text-yellow-700">
+                    Cancelling this session will notify the learner and may affect your mentor rating. 
+                    Please provide a clear reason to help maintain trust and improve our service.
+                  </p>
+                </div>
+              </div>
+            </div>
 
             <div>
-              <label className="text-sm font-medium mb-2 block">
-                Cancellation Reason *
+              <label className="text-sm font-medium mb-3 block text-gray-900">
+                Cancellation Reason <span className="text-red-500">*</span>
               </label>
               <Textarea
                 value={cancellationReason}
                 onChange={(e) => setCancellationReason(e.target.value)}
-                placeholder="Please explain why you need to cancel this session..."
+                placeholder="Please explain why you need to cancel this session. This message will be shared with the learner."
                 rows={4}
                 required
+                className="resize-none"
               />
+              <p className="text-xs text-gray-500 mt-2">
+                {cancellationReason.length}/500 characters
+              </p>
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="gap-3 pt-6 border-t">
             <Button 
               variant="outline" 
               onClick={() => setCancelModalOpen(false)}
+              className="px-6"
             >
               Keep Session
             </Button>
             <Button 
               onClick={submitCancellation}
-              variant="destructive"
+              className="bg-red-600 hover:bg-red-700 text-white px-6"
               disabled={!cancellationReason.trim()}
             >
-              Cancel Session
+              ⚠️ Cancel Session
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -82,7 +82,6 @@ export default function PricingPage() {
       <>
         <CreditCard className="w-4 h-4 mr-2" />
         Buy Credits
-        <ArrowRight className="w-4 h-4 ml-2" />
       </>
     )
   }
@@ -90,12 +89,12 @@ export default function PricingPage() {
   const getButtonStyles = (pack: any) => {
     const isDisabled = loading || checkingSession || (session && session.role !== "learner")
     const baseStyles =
-      "w-full py-3 px-6 rounded-xl font-semibold transition-all duration-300 flex items-center justify-center text-base md:text-lg"
+      "w-full py-4 px-8 rounded-2xl font-semibold transition-all duration-300 flex items-center justify-center text-lg text-white"
 
-    if (pack.popular) {
-      return `${baseStyles} ${isDisabled ? "bg-gray-300 text-gray-500 cursor-not-allowed" : "cursor-pointer bg-gradient-to-r from-purple-600 to-blue-600 text-white hover:from-purple-700 hover:to-blue-700 transform hover:scale-105 shadow-lg hover:shadow-xl focus:ring-4 focus:ring-purple-300 focus:ring-opacity-75"}`
+    if (isDisabled) {
+      return `${baseStyles} bg-gray-300 text-gray-500 cursor-not-allowed`
     }
-    return `${baseStyles} border-2 ${isDisabled ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed" : "cursor-pointer bg-white text-gray-800 border-gray-300 hover:border-purple-500 hover:text-purple-600 transform hover:scale-105 shadow-sm hover:shadow-md focus:ring-2 focus:ring-purple-200 focus:ring-opacity-50"}`
+    return `${baseStyles} gradient-bg transform hover:scale-[1.02] shadow-lg hover:shadow-xl focus:ring-4 focus:ring-blue-300 focus:ring-opacity-75`
   }
 
   if (checkingSession) {
@@ -119,15 +118,16 @@ export default function PricingPage() {
 
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
               {/* Header Section */}
-              <div className="text-center mb-12 md:mb-16">
-                <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold text-gray-900 mb-4 leading-tight">
-                  Flexible{" "}
-                  <span className="bg-gradient-to-r from-purple-600 to-blue-600 bg-clip-text text-transparent">
-                    Credit Packages
+              <div className="text-center mb-16">
+                <h1 className="text-5xl md:text-6xl font-extrabold leading-tight tracking-tight">
+                  <span className="bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 bg-clip-text text-transparent">
+                    Fuel Your Growth
+                     <span className="block mt-2 text-gray-900">with Flexible Credits Packages</span>
                   </span>
                 </h1>
-                <p className="text-lg md:text-xl text-gray-600 max-w-3xl mx-auto">
-                  Choose the perfect package to fuel your mentorship journey. Every $1 equals 5 credits.
+                <p className="mt-6 text-lg md:text-xl text-gray-600 max-w-2xl mx-auto">
+                  Unlock personalized mentorship and skill-building opportunities. 
+                  Choose a credit package that matches your ambition.
                 </p>
               </div>
 
@@ -136,7 +136,7 @@ export default function PricingPage() {
                 {creditPackages.map((pack) => (
                   <div
                     key={pack.id}
-                    className={`${pack.popular ? "bg-gradient-to-br from-purple-600 to-blue-600 p-1 shadow-2xl" : "bg-white shadow-xl hover:shadow-2xl"} relative rounded-2xl transition-all duration-300 hover:transform hover:scale-105`}
+                    className={`${pack.popular ? "bg-gradient-to-br from-purple-600 to-blue-600 p-1 shadow-2xl" : "bg-white shadow-lg hover:shadow-xl"} relative rounded-3xl transition-all duration-300 hover:transform hover:scale-[1.02]`}
                   >
                     {/* Popular Badge */}
                     {pack.popular && (
@@ -155,31 +155,28 @@ export default function PricingPage() {
                       </div>
                     )}
                     <div
-                      className={`${pack.popular ? "bg-white m-0.5" : ""} rounded-2xl p-8 h-full flex flex-col justify-between`}
+                      className="bg-white rounded-3xl p-10 h-full flex flex-col justify-between"
                     >
                       {/* Package Header */}
-                      <div className="text-center mb-6">
-                        <h3 className="text-2xl font-bold text-gray-900 mb-2">{pack.name}</h3>
-                        <p className="text-gray-600 mb-4 text-sm">{pack.description}</p>
-                        <div className="mb-4">
-                          <div className="flex items-center justify-center space-x-2 mb-2">
-                            <span className="text-5xl font-bold text-gray-900">${pack.price}</span>
+                      <div className="text-center mb-8">
+                        <div className="mb-6">
+                          <div className="flex items-center justify-center mb-4">
+                            <Coins className="w-12 h-12 text-yellow-500 mr-3" />
+                            <span className="text-4xl font-bold text-gray-800">{pack.credits}</span>
+                            <span className="text-2xl text-gray-600 ml-2">Credits</span>
+                          </div>
+                          <div className="flex items-center justify-center space-x-3">
+                            <span className="text-4xl font-bold text-gray-900">${pack.price}</span>
                             {pack.discount > 0 && (
-                              <span className="text-xl text-gray-500 line-through">${pack.originalPrice}</span>
+                              <span className="text-2xl text-gray-400 line-through">${pack.originalPrice}</span>
                             )}
                           </div>
-
                           {pack.discount > 0 && (
-                            <div className="text-sm text-green-600 font-semibold mt-1">
+                            <div className="text-lg text-green-600 font-semibold mt-2">
                               Save ${pack.originalPrice - pack.price} ({pack.discount}% off)
                             </div>
                           )}
                         </div>
-                      </div>
-                      <div className="flex items-center justify-center mb-6">
-                        <Coins className="w-8 h-8 text-yellow-500 mr-2" />
-                        <span className="text-3xl font-bold text-gray-800">{pack.credits}</span>
-                        <span className="text-xl text-gray-600 ml-2">Credits</span>
                       </div>
                       {/* CTA Button */}
                       <button

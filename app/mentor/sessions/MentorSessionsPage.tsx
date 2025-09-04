@@ -18,6 +18,8 @@ interface Session {
   agoraCallEndedAt: string | null
   learnerJoinedAt: string | null
   mentorJoinedAt: string | null
+  learnerLeftAt: string | null
+  mentorLeftAt: string | null
   refundAmount: number | null
   rejectionReason: string | null
   cancellationReason: string | null

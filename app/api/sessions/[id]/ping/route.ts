@@ -62,9 +62,19 @@ export async function POST(
       }, { status: 400 })
     }
 
+    // Update lastActiveAt timestamp to show user is actively in the session
+    const now = new Date()
+    const updateData: any = {}
+    updateData[isLearner ? 'learnerLastActiveAt' : 'mentorLastActiveAt'] = now
+    
+    await db
+      .update(bookingSessions)
+      .set(updateData)
+      .where(eq(bookingSessions.id, sessionId))
+
     return NextResponse.json({
       success: true,
-      timestamp: new Date().toISOString(),
+      timestamp: now.toISOString(),
       sessionId,
       userId: session.id,
       sessionStatus: sessionData.status,

@@ -14,6 +14,19 @@ export class SessionMonitorService {
     noShowsDetected: 0,
     sessionsCompleted: 0,
     expiredBookings: 0,
+    antiGamingDetections: 0,
+    sustainedConnectionUpgrades: 0,
+  }
+
+  // Anti-Gaming Configuration
+  private readonly ANTI_GAMING_CONFIG = {
+    MINIMUM_CONNECTION_TIME_MS: 2 * 60 * 1000, // 2 minutes minimum connection
+    MINIMUM_PARTICIPATION_PERCENTAGE: 0.10, // 10% of session duration
+    MAX_LATE_JOIN_MS: 10 * 60 * 1000, // Max 10 minutes late
+    MIN_COMPLETION_PERCENTAGE: 0.25, // Must stay for 25% of session
+    SUSTAINED_CONNECTION_TIME_MS: 30 * 1000, // 30 seconds for ongoing status
+    GRACE_PERIOD_MS: 20 * 60 * 1000, // 20 minutes grace period
+    MAX_INACTIVITY_MS: 10 * 60 * 1000, // 10 minutes max inactivity
   }
 
   private constructor() {}
@@ -62,7 +75,13 @@ export class SessionMonitorService {
       isRunning: this.isRunning,
       lastRunTime: this.lastRunTime,
       stats: { ...this.stats },
+      antiGamingConfig: { ...this.ANTI_GAMING_CONFIG },
     }
+  }
+
+  // Get anti-gaming configuration for debugging/monitoring
+  getAntiGamingConfig() {
+    return { ...this.ANTI_GAMING_CONFIG }
   }
 
   private async runMonitoring(): Promise<void> {
@@ -350,13 +369,15 @@ export class SessionMonitorService {
       const now = new Date()
       
       // Find confirmed or upcoming sessions that should be marked as ongoing 
-      // (both users have joined and session time has arrived)
+      // (both users have joined and sustained connection)
       const sessionsToUpdate = await db
         .select({
           id: bookingSessions.id,
           startTime: bookingSessions.startTime,
           learnerJoinedAt: bookingSessions.learnerJoinedAt,
           mentorJoinedAt: bookingSessions.mentorJoinedAt,
+          learnerConnectionDurationMs: bookingSessions.learnerConnectionDurationMs,
+          mentorConnectionDurationMs: bookingSessions.mentorConnectionDurationMs,
           status: bookingSessions.status,
         })
         .from(bookingSessions)
@@ -365,8 +386,7 @@ export class SessionMonitorService {
             or(
               eq(bookingSessions.status, 'confirmed'),
               eq(bookingSessions.status, 'upcoming')
-            ),
-            lt(bookingSessions.startTime, now)
+            )
           )
         )
 
@@ -374,16 +394,33 @@ export class SessionMonitorService {
         const bothUsersJoined = session.learnerJoinedAt !== null && session.mentorJoinedAt !== null
         
         if (bothUsersJoined) {
-          // Both users have joined and session time has arrived - mark as ongoing
-          await db
-            .update(bookingSessions)
-            .set({ 
-              status: 'ongoing',
-              agoraCallStartedAt: now
-            })
-            .where(eq(bookingSessions.id, session.id))
+          // Check for sustained connection before marking as ongoing
+          const sustainedConnectionTimeMs = this.ANTI_GAMING_CONFIG.SUSTAINED_CONNECTION_TIME_MS
+          const learnerConnectionTime = session.learnerConnectionDurationMs || 0
+          const mentorConnectionTime = session.mentorConnectionDurationMs || 0
+          
+          // Calculate current connection time if still connected
+          const currentLearnerConnection = session.learnerJoinedAt ? 
+            (now.getTime() - session.learnerJoinedAt.getTime()) : 0
+          const currentMentorConnection = session.mentorJoinedAt ? 
+            (now.getTime() - session.mentorJoinedAt.getTime()) : 0
+          
+          const learnerSustainedConnection = Math.max(learnerConnectionTime, currentLearnerConnection) >= sustainedConnectionTimeMs
+          const mentorSustainedConnection = Math.max(mentorConnectionTime, currentMentorConnection) >= sustainedConnectionTimeMs
+          
+          if (learnerSustainedConnection && mentorSustainedConnection) {
+            // Both users have sustained connection - mark as ongoing
+            await db
+              .update(bookingSessions)
+              .set({ 
+                status: 'ongoing',
+                agoraCallStartedAt: session.startTime <= now ? now : session.startTime
+              })
+              .where(eq(bookingSessions.id, session.id))
 
-          console.log(`[SESSION_MONITOR] Updated session ${session.id} to ongoing status (both users joined)`)
+            console.log(`[SESSION_MONITOR] Updated session ${session.id} to ongoing status (both users sustained connection 30+ seconds)`)
+            this.stats.sustainedConnectionUpgrades++
+          }
         }
       }
     } catch (error) {
@@ -414,6 +451,10 @@ export class SessionMonitorService {
           status: bookingSessions.status,
           learnerConnectionDurationMs: bookingSessions.learnerConnectionDurationMs,
           mentorConnectionDurationMs: bookingSessions.mentorConnectionDurationMs,
+          learnerActiveTimeMs: bookingSessions.learnerActiveTimeMs,
+          mentorActiveTimeMs: bookingSessions.mentorActiveTimeMs,
+          learnerLastActiveAt: bookingSessions.learnerLastActiveAt,
+          mentorLastActiveAt: bookingSessions.mentorLastActiveAt,
           learner: {
             id: learners.id,
             userId: learners.userId,
@@ -442,51 +483,47 @@ export class SessionMonitorService {
 
       for (const session of potentialNoShows) {
         const sessionStartTime = new Date(session.startTime)
-        const sessionEndTime = new Date(session.endTime)
-        const thirtyMinutesFromStart = new Date(sessionStartTime.getTime() + 30 * 60 * 1000) // First 30 minutes
-        const fifteenMinutesBeforeEnd = new Date(sessionEndTime.getTime() - 15 * 60 * 1000) // 15 minutes before end
 
-        // NEW NO-SHOW CONDITIONS:
-        // 1. If user is not in session for more than 10 minutes in the first 30 minutes from start time
-        // 2. If user is not in session for more than 30 minutes from (end time - 15 minutes)
-        // 3. Allow transition from ongoing to no show
-
-        let shouldCheckNoShow = false
+        // ENHANCED NO-SHOW CONDITIONS:
+        // Check for no-show if we're past the grace period from session start time
+        const gracePeroidFromStart = new Date(sessionStartTime.getTime() + this.ANTI_GAMING_CONFIG.GRACE_PERIOD_MS)
         
-        // Check if we're past the first condition window (30 minutes from start)
-        if (now > thirtyMinutesFromStart) {
-          shouldCheckNoShow = true
-        }
-        // Or if we're in the second condition window (15 minutes before end)
-        else if (now > fifteenMinutesBeforeEnd) {
-          shouldCheckNoShow = true
+        if (now < gracePeroidFromStart) {
+          continue // Too early to check - give 20 minute grace period
         }
 
-        if (!shouldCheckNoShow) {
-          continue // Too early to check
-        }
+        console.log(`[SESSION_MONITOR] Checking session ${session.id} for no-show - ${Math.floor((now.getTime() - sessionStartTime.getTime()) / (60 * 1000))} minutes past start time`)
 
-        // Skip if session is ongoing and users are still active (but allow transition to no-show)
+        // Enhanced validation for ongoing sessions
         if (session.status === 'ongoing') {
-          // For ongoing sessions, we need to be more strict about no-show detection
-          // Allow transition from ongoing to no-show based on new conditions
+          // For ongoing sessions, apply stricter criteria to prevent gaming
+          // Users can still be marked as no-show if they don't meet meaningful participation criteria
+          console.log(`[SESSION_MONITOR] Session ${session.id} is ongoing - applying enhanced anti-gaming validation`)
         }
 
-        const noShowType = this.determineNoShowTypeEnhanced({
+        const noShowType = await this.determineNoShowTypeEnhanced({
+          id: session.id,
           learnerJoinedAt: session.learnerJoinedAt,
           mentorJoinedAt: session.mentorJoinedAt,
           learnerLeftAt: session.learnerLeftAt,
           mentorLeftAt: session.mentorLeftAt,
           learnerConnectionDurationMs: session.learnerConnectionDurationMs,
           mentorConnectionDurationMs: session.mentorConnectionDurationMs,
+          learnerActiveTimeMs: session.learnerActiveTimeMs,
+          mentorActiveTimeMs: session.mentorActiveTimeMs,
+          learnerLastActiveAt: session.learnerLastActiveAt,
+          mentorLastActiveAt: session.mentorLastActiveAt,
           startTime: session.startTime,
           endTime: session.endTime,
-          currentTime: now
+          currentTime: now,
+          learner: session.learner,
+          mentor: session.mentor
         })
         
         if (noShowType) {
           await this.processNoShow(session, noShowType)
           this.stats.noShowsDetected++
+          this.stats.antiGamingDetections++
         } else {
           // Mark as checked even if no no-show to avoid reprocessing
           await db
@@ -500,108 +537,233 @@ export class SessionMonitorService {
     }
   }
 
-  private determineNoShowTypeEnhanced(session: {
+  private async determineNoShowTypeEnhanced(session: {
+    id: number
     learnerJoinedAt: Date | null
     mentorJoinedAt: Date | null
     learnerLeftAt: Date | null
     mentorLeftAt: Date | null
     learnerConnectionDurationMs: number | null
     mentorConnectionDurationMs: number | null
+    learnerActiveTimeMs: number | null
+    mentorActiveTimeMs: number | null
+    learnerLastActiveAt: Date | null
+    mentorLastActiveAt: Date | null
     startTime: Date
     endTime: Date
     currentTime: Date
-  }): 'both_no_show' | 'mentor_no_show' | 'learner_no_show' | null {
+    learner: { userId: number } | null
+    mentor: { userId: number } | null
+  }): Promise<'both_no_show' | 'mentor_no_show' | 'learner_no_show' | null> {
     const sessionStartTime = new Date(session.startTime)
     const sessionEndTime = new Date(session.endTime)
-    const thirtyMinutesFromStart = new Date(sessionStartTime.getTime() + 30 * 60 * 1000)
-    const fifteenMinutesBeforeEnd = new Date(sessionEndTime.getTime() - 15 * 60 * 1000)
+    const sessionDurationMs = sessionEndTime.getTime() - sessionStartTime.getTime()
+    const sessionElapsedMs = session.currentTime.getTime() - sessionStartTime.getTime()
 
-    // NEW CONDITIONS:
-    // 1. If user is not in session for more than 10 minutes in the first 30 minutes from start time
-    // 2. If user is not in session for more than 30 minutes from (end time - 15 minutes)
+    // Use centralized anti-gaming configuration
+    const {
+      MINIMUM_CONNECTION_TIME_MS,
+      MINIMUM_PARTICIPATION_PERCENTAGE,
+      MAX_LATE_JOIN_MS,
+      MIN_COMPLETION_PERCENTAGE,
+      GRACE_PERIOD_MS
+    } = this.ANTI_GAMING_CONFIG
+    
+    console.log(`[SESSION_MONITOR] Enhanced no-show analysis for session ${session.id}:`);
+    console.log(`- Session duration: ${Math.floor(sessionDurationMs / 60000)} minutes`);
+    console.log(`- Time elapsed: ${Math.floor(sessionElapsedMs / 60000)} minutes`);
+    
+    // Only check for no-shows after grace period
+    if (sessionElapsedMs < GRACE_PERIOD_MS) {
+      console.log(`[SESSION_MONITOR] Too early for no-show check (${Math.floor(sessionElapsedMs / 60000)} < ${Math.floor(GRACE_PERIOD_MS / 60000)} min)`);
+      return null
+    }
 
     let learnerIsNoShow = false
     let mentorIsNoShow = false
 
-    // Check condition 1: First 30 minutes from start (10 minute threshold)
-    if (session.currentTime > thirtyMinutesFromStart) {
-      // Calculate total connection time in first 30 minutes
-      const learnerConnectionInFirstThirty = this.calculateConnectionTimeInWindow(
-        session.learnerJoinedAt,
-        session.learnerLeftAt,
-        sessionStartTime,
-        thirtyMinutesFromStart,
-        session.learnerConnectionDurationMs
-      )
-      
-      const mentorConnectionInFirstThirty = this.calculateConnectionTimeInWindow(
-        session.mentorJoinedAt,
-        session.mentorLeftAt,
-        sessionStartTime,
-        thirtyMinutesFromStart,
-        session.mentorConnectionDurationMs
-      )
+    // Analyze learner participation
+    const learnerAnalysis = this.analyzeParticipation({
+      userId: session.learner?.userId || 0,
+      userType: 'learner',
+      joinedAt: session.learnerJoinedAt,
+      leftAt: session.learnerLeftAt,
+      connectionDurationMs: session.learnerConnectionDurationMs,
+      activeTimeMs: session.learnerActiveTimeMs,
+      lastActiveAt: session.learnerLastActiveAt,
+      sessionStartTime,
+      sessionEndTime,
+      currentTime: session.currentTime,
+      sessionDurationMs,
+      criteria: {
+        MINIMUM_CONNECTION_TIME_MS,
+        MINIMUM_PARTICIPATION_PERCENTAGE,
+        MAX_LATE_JOIN_MS,
+        MIN_COMPLETION_PERCENTAGE
+      }
+    })
 
-      const tenMinutesMs = 10 * 60 * 1000
-      
-      if (learnerConnectionInFirstThirty < tenMinutesMs) {
-        learnerIsNoShow = true
+    // Analyze mentor participation
+    const mentorAnalysis = this.analyzeParticipation({
+      userId: session.mentor?.userId || 0,
+      userType: 'mentor',
+      joinedAt: session.mentorJoinedAt,
+      leftAt: session.mentorLeftAt,
+      connectionDurationMs: session.mentorConnectionDurationMs,
+      activeTimeMs: session.mentorActiveTimeMs,
+      lastActiveAt: session.mentorLastActiveAt,
+      sessionStartTime,
+      sessionEndTime,
+      currentTime: session.currentTime,
+      sessionDurationMs,
+      criteria: {
+        MINIMUM_CONNECTION_TIME_MS,
+        MINIMUM_PARTICIPATION_PERCENTAGE,
+        MAX_LATE_JOIN_MS,
+        MIN_COMPLETION_PERCENTAGE
       }
-      
-      if (mentorConnectionInFirstThirty < tenMinutesMs) {
-        mentorIsNoShow = true
-      }
-    }
-    
-    // Check condition 2: 30 minutes from (end time - 15 minutes)
-    if (session.currentTime > fifteenMinutesBeforeEnd) {
-      const checkWindowStart = fifteenMinutesBeforeEnd
-      const checkWindowEnd = new Date(Math.min(session.currentTime.getTime(), sessionEndTime.getTime()))
-      
-      const learnerConnectionInEndWindow = this.calculateConnectionTimeInWindow(
-        session.learnerJoinedAt,
-        session.learnerLeftAt,
-        checkWindowStart,
-        checkWindowEnd,
-        session.learnerConnectionDurationMs
-      )
-      
-      const mentorConnectionInEndWindow = this.calculateConnectionTimeInWindow(
-        session.mentorJoinedAt,
-        session.mentorLeftAt,
-        checkWindowStart,
-        checkWindowEnd,
-        session.mentorConnectionDurationMs
-      )
+    })
 
-      const thirtyMinutesMs = 30 * 60 * 1000
-      const windowDurationMs = checkWindowEnd.getTime() - checkWindowStart.getTime()
-      
-      // Only apply if user was absent for more than 30 minutes in this window
-      if (windowDurationMs >= thirtyMinutesMs) {
-        const expectedConnectionTime = Math.min(thirtyMinutesMs, windowDurationMs)
-        
-        if (learnerConnectionInEndWindow < expectedConnectionTime) {
-          learnerIsNoShow = true
-        }
-        
-        if (mentorConnectionInEndWindow < expectedConnectionTime) {
-          mentorIsNoShow = true
-        }
-      }
-    }
+    console.log(`[SESSION_MONITOR] Learner participation: ${JSON.stringify(learnerAnalysis)}`);
+    console.log(`[SESSION_MONITOR] Mentor participation: ${JSON.stringify(mentorAnalysis)}`);
+
+    learnerIsNoShow = !learnerAnalysis.meaningfulParticipation
+    mentorIsNoShow = !mentorAnalysis.meaningfulParticipation
 
     // Return appropriate no-show type
     if (learnerIsNoShow && mentorIsNoShow) {
+      console.log(`[SESSION_MONITOR] Both users failed meaningful participation criteria`);
       return 'both_no_show'
     } else if (learnerIsNoShow && !mentorIsNoShow) {
+      console.log(`[SESSION_MONITOR] Learner failed meaningful participation criteria`);
       return 'learner_no_show'
     } else if (!learnerIsNoShow && mentorIsNoShow) {
+      console.log(`[SESSION_MONITOR] Mentor failed meaningful participation criteria`);
       return 'mentor_no_show'
     }
     
+    console.log(`[SESSION_MONITOR] Both users met meaningful participation criteria`);
     return null // Neither is a no-show
   }
+
+  private analyzeParticipation(params: {
+    userId: number
+    userType: 'learner' | 'mentor'
+    joinedAt: Date | null
+    leftAt: Date | null
+    connectionDurationMs: number | null
+    activeTimeMs: number | null
+    lastActiveAt: Date | null
+    sessionStartTime: Date
+    sessionEndTime: Date
+    currentTime: Date
+    sessionDurationMs: number
+    criteria: {
+      MINIMUM_CONNECTION_TIME_MS: number
+      MINIMUM_PARTICIPATION_PERCENTAGE: number
+      MAX_LATE_JOIN_MS: number
+      MIN_COMPLETION_PERCENTAGE: number
+    }
+  }): {
+    meaningfulParticipation: boolean
+    reasons: string[]
+    metrics: {
+      neverJoined: boolean
+      joinedTooLate: boolean
+      connectionTimeTooShort: boolean
+      leftTooEarly: boolean
+      insufficientParticipation: boolean
+      prolongedInactivity: boolean
+    }
+  } {
+    const {
+      userId, userType, joinedAt, leftAt, connectionDurationMs, activeTimeMs, lastActiveAt,
+      sessionStartTime, sessionEndTime, currentTime, sessionDurationMs, criteria
+    } = params
+
+    const reasons: string[] = []
+    const metrics = {
+      neverJoined: false,
+      joinedTooLate: false,
+      connectionTimeTooShort: false,
+      leftTooEarly: false,
+      insufficientParticipation: false,
+      prolongedInactivity: false
+    }
+
+    // 1. Never joined the session
+    if (!joinedAt) {
+      metrics.neverJoined = true
+      reasons.push('never joined session')
+      return { meaningfulParticipation: false, reasons, metrics }
+    }
+
+    // 2. Joined more than 10 minutes late
+    const lateJoinMs = joinedAt.getTime() - sessionStartTime.getTime()
+    if (lateJoinMs > criteria.MAX_LATE_JOIN_MS) {
+      metrics.joinedTooLate = true
+      reasons.push(`joined ${Math.floor(lateJoinMs / 60000)} min late (max ${Math.floor(criteria.MAX_LATE_JOIN_MS / 60000)} min)`)
+    }
+
+    // 3. Calculate actual connection time
+    let actualConnectionTime = 0
+    if (connectionDurationMs !== null && connectionDurationMs > 0) {
+      actualConnectionTime = connectionDurationMs
+    } else if (leftAt) {
+      actualConnectionTime = leftAt.getTime() - joinedAt.getTime()
+    } else {
+      // Still connected, calculate current connection time
+      actualConnectionTime = currentTime.getTime() - joinedAt.getTime()
+    }
+
+    // 4. Connection time too short (less than 2 minutes)
+    if (actualConnectionTime < criteria.MINIMUM_CONNECTION_TIME_MS) {
+      metrics.connectionTimeTooShort = true
+      reasons.push(`connected for only ${Math.floor(actualConnectionTime / 1000)}s (min ${Math.floor(criteria.MINIMUM_CONNECTION_TIME_MS / 1000)}s)`)
+    }
+
+    // 5. Left before 25% of session was complete
+    const minStayTimeMs = sessionDurationMs * criteria.MIN_COMPLETION_PERCENTAGE
+    const sessionProgressWhenLeft = leftAt ? 
+      (leftAt.getTime() - sessionStartTime.getTime()) : 
+      (currentTime.getTime() - sessionStartTime.getTime())
+    
+    if (leftAt && sessionProgressWhenLeft < minStayTimeMs) {
+      metrics.leftTooEarly = true
+      reasons.push(`left after ${Math.floor(sessionProgressWhenLeft / 60000)} min (min ${Math.floor(minStayTimeMs / 60000)} min required)`)
+    }
+
+    // 6. Active time insufficient (less than 10% of session duration)
+    const requiredActiveTime = sessionDurationMs * criteria.MINIMUM_PARTICIPATION_PERCENTAGE
+    const userActiveTime = activeTimeMs || 0
+    
+    if (userActiveTime < requiredActiveTime) {
+      metrics.insufficientParticipation = true
+      reasons.push(`active for ${Math.floor(userActiveTime / 60000)} min (min ${Math.floor(requiredActiveTime / 60000)} min required)`)
+    }
+
+    // 7. Prolonged inactivity (inactive for specified time while connected)
+    if (lastActiveAt && joinedAt && !leftAt) {
+      const inactiveTime = currentTime.getTime() - lastActiveAt.getTime()
+      const maxInactivityMs = 10 * 60 * 1000 // Using constant for consistency
+      if (inactiveTime > maxInactivityMs) {
+        metrics.prolongedInactivity = true
+        reasons.push(`inactive for ${Math.floor(inactiveTime / 60000)} min (max ${Math.floor(maxInactivityMs / 60000)} min)`);
+      }
+    }
+
+    // Determine if participation was meaningful
+    const failedCriteria = metrics.neverJoined || metrics.joinedTooLate || 
+      metrics.connectionTimeTooShort || metrics.leftTooEarly || 
+      metrics.insufficientParticipation || metrics.prolongedInactivity
+
+    return {
+      meaningfulParticipation: !failedCriteria,
+      reasons,
+      metrics
+    }
+  }
+
 
   private calculateConnectionTimeInWindow(
     joinedAt: Date | null,
@@ -640,70 +802,7 @@ export class SessionMonitorService {
     return 0
   }
 
-  private determineNoShowType(session: {
-    learnerJoinedAt: Date | null
-    mentorJoinedAt: Date | null
-    learnerLeftAt: Date | null
-    mentorLeftAt: Date | null
-    startTime: Date
-  }): 'both_no_show' | 'mentor_no_show' | 'learner_no_show' | null {
-    // Check if users actually joined the session meaningfully
-    const learnerJoined = !!session.learnerJoinedAt
-    const mentorJoined = !!session.mentorJoinedAt
-    
-    // Minimum connection time to avoid marking brief connections as "joined"
-    const minConnectionTimeMs = 30 * 1000 // 30 seconds minimum connection
-    const now = new Date()
-    
-    // Calculate actual connection duration for learner
-    let learnerConnectionTime = 0
-    if (learnerJoined) {
-      const endTime = session.learnerLeftAt || now
-      learnerConnectionTime = endTime.getTime() - session.learnerJoinedAt!.getTime()
-    }
-    
-    // Calculate actual connection duration for mentor
-    let mentorConnectionTime = 0
-    if (mentorJoined) {
-      const endTime = session.mentorLeftAt || now
-      mentorConnectionTime = endTime.getTime() - session.mentorJoinedAt!.getTime()
-    }
-    
-    // Determine if connections were meaningful
-    const learnerConnectedMeaningfully = learnerJoined && learnerConnectionTime >= minConnectionTimeMs
-    const mentorConnectedMeaningfully = mentorJoined && mentorConnectionTime >= minConnectionTimeMs
-    
-    // Additional check: if someone joined significantly after session start (>5 min late)
-    // and connected for less than 2 minutes, consider it not meaningful
-    const sessionStartTime = session.startTime.getTime()
-    const maxLateJoinMs = 5 * 60 * 1000 // 5 minutes
-    const minConnectionForLateJoinMs = 2 * 60 * 1000 // 2 minutes
-    
-    let learnerTooLateAndShort = false
-    let mentorTooLateAndShort = false
-    
-    if (learnerJoined && session.learnerJoinedAt!.getTime() > (sessionStartTime + maxLateJoinMs)) {
-      learnerTooLateAndShort = learnerConnectionTime < minConnectionForLateJoinMs
-    }
-    
-    if (mentorJoined && session.mentorJoinedAt!.getTime() > (sessionStartTime + maxLateJoinMs)) {
-      mentorTooLateAndShort = mentorConnectionTime < minConnectionForLateJoinMs
-    }
-    
-    // Override meaningful connection if they were too late and didn't stay long
-    const learnerActuallyConnected = learnerConnectedMeaningfully && !learnerTooLateAndShort
-    const mentorActuallyConnected = mentorConnectedMeaningfully && !mentorTooLateAndShort
-
-    if (!learnerActuallyConnected && !mentorActuallyConnected) {
-      return 'both_no_show'
-    } else if (learnerActuallyConnected && !mentorActuallyConnected) {
-      return 'mentor_no_show'
-    } else if (!learnerActuallyConnected && mentorActuallyConnected) {
-      return 'learner_no_show'
-    }
-    
-    return null // Both joined and connected meaningfully
-  }
+  // Legacy method - keeping for backward compatibility, but enhanced version is used by default
 
   private async processNoShow(session: {
     id: number
@@ -916,6 +1015,8 @@ export class SessionMonitorService {
           mentorLeftAt: bookingSessions.mentorLeftAt,
           learnerConnectionDurationMs: bookingSessions.learnerConnectionDurationMs,
           mentorConnectionDurationMs: bookingSessions.mentorConnectionDurationMs,
+          learnerActiveTimeMs: bookingSessions.learnerActiveTimeMs,
+          mentorActiveTimeMs: bookingSessions.mentorActiveTimeMs,
           status: bookingSessions.status,
           learner: {
             id: learners.id,

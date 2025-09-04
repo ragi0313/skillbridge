@@ -17,7 +17,8 @@ import {
   Download,
   Palette,
   Minus,
-  MousePointer
+  MousePointer,
+  X
 } from 'lucide-react'
 
 interface WhiteboardProps {
@@ -339,141 +340,181 @@ export function Whiteboard({ sessionId, userRole, currentUser, isVisible, onClos
   if (!isVisible) return null
 
   return (
-    <div className="absolute inset-4 bg-slate-800 border border-slate-700 rounded-lg flex flex-col z-50">
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-slate-700">
+    <div className="absolute inset-4 bg-gray-900/95 backdrop-blur-xl border border-gray-700/50 rounded-2xl flex flex-col z-50 shadow-2xl">
+      {/* Modern Header */}
+      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-700/50 bg-gradient-to-r from-gray-800/50 to-gray-900/50">
         <div className="flex items-center space-x-4">
-          <h3 className="text-lg font-semibold text-white">Collaborative Whiteboard</h3>
-          <Badge variant="outline" className="text-green-400 border-green-400">
-            <div className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse" />
-            Live
-          </Badge>
+          <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center">
+            <Pen className="h-5 w-5 text-white" />
+          </div>
+          <div>
+            <h3 className="text-xl font-bold text-white">Collaborative Whiteboard</h3>
+            <div className="flex items-center space-x-2 mt-1">
+              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+              <span className="text-green-300 text-sm font-medium">Live Session</span>
+            </div>
+          </div>
         </div>
-        <Button variant="ghost" size="sm" onClick={onClose} className="text-slate-400 hover:text-white">
-          ×
+        <Button 
+          variant="ghost" 
+          size="sm" 
+          onClick={onClose} 
+          className="text-gray-400 hover:text-white hover:bg-gray-700/50 rounded-xl p-2 transition-all duration-200"
+        >
+          <X className="h-5 w-5" />
         </Button>
       </div>
 
-      {/* Toolbar */}
-      <div className="flex items-center justify-between p-4 border-b border-slate-700 bg-slate-750">
-        <div className="flex items-center space-x-2">
-          {/* Drawing Tools */}
-          <Button
-            variant={currentTool === 'select' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setCurrentTool('select')}
-            className="p-2"
-          >
-            <MousePointer className="h-4 w-4" />
-          </Button>
-          <Button
-            variant={currentTool === 'pen' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setCurrentTool('pen')}
-            className="p-2"
-          >
-            <Pen className="h-4 w-4" />
-          </Button>
-          <Button
-            variant={currentTool === 'eraser' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setCurrentTool('eraser')}
-            className="p-2"
-          >
-            <Eraser className="h-4 w-4" />
-          </Button>
-          <Button
-            variant={currentTool === 'line' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setCurrentTool('line')}
-            className="p-2"
-          >
-            <Minus className="h-4 w-4" />
-          </Button>
-          <Button
-            variant={currentTool === 'rectangle' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setCurrentTool('rectangle')}
-            className="p-2"
-          >
-            <Square className="h-4 w-4" />
-          </Button>
-          <Button
-            variant={currentTool === 'circle' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setCurrentTool('circle')}
-            className="p-2"
-          >
-            <Circle className="h-4 w-4" />
-          </Button>
-          <Button
-            variant={currentTool === 'text' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setCurrentTool('text')}
-            className="p-2"
-          >
-            <Type className="h-4 w-4" />
-          </Button>
+      {/* Modern Toolbar */}
+      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-700/50 bg-gray-800/30">
+        <div className="flex items-center space-x-3">
+          {/* Drawing Tools Group */}
+          <div className="flex items-center bg-gray-800/50 rounded-xl p-1 border border-gray-700/30">
+            <Button
+              onClick={() => setCurrentTool('select')}
+              className={`p-2.5 rounded-lg transition-all duration-200 ${
+                currentTool === 'select'
+                  ? 'bg-blue-600 text-white shadow-lg'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
+              }`}
+              title="Select"
+            >
+              <MousePointer className="h-4 w-4" />
+            </Button>
+            <Button
+              onClick={() => setCurrentTool('pen')}
+              className={`p-2.5 rounded-lg transition-all duration-200 ${
+                currentTool === 'pen'
+                  ? 'bg-blue-600 text-white shadow-lg'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
+              }`}
+              title="Pen"
+            >
+              <Pen className="h-4 w-4" />
+            </Button>
+            <Button
+              onClick={() => setCurrentTool('eraser')}
+              className={`p-2.5 rounded-lg transition-all duration-200 ${
+                currentTool === 'eraser'
+                  ? 'bg-red-600 text-white shadow-lg'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
+              }`}
+              title="Eraser"
+            >
+              <Eraser className="h-4 w-4" />
+            </Button>
+          </div>
+          
+          {/* Shapes Group */}
+          <div className="flex items-center bg-gray-800/50 rounded-xl p-1 border border-gray-700/30">
+            <Button
+              onClick={() => setCurrentTool('line')}
+              className={`p-2.5 rounded-lg transition-all duration-200 ${
+                currentTool === 'line'
+                  ? 'bg-blue-600 text-white shadow-lg'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
+              }`}
+              title="Line"
+            >
+              <Minus className="h-4 w-4" />
+            </Button>
+            <Button
+              onClick={() => setCurrentTool('rectangle')}
+              className={`p-2.5 rounded-lg transition-all duration-200 ${
+                currentTool === 'rectangle'
+                  ? 'bg-blue-600 text-white shadow-lg'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
+              }`}
+              title="Rectangle"
+            >
+              <Square className="h-4 w-4" />
+            </Button>
+            <Button
+              onClick={() => setCurrentTool('circle')}
+              className={`p-2.5 rounded-lg transition-all duration-200 ${
+                currentTool === 'circle'
+                  ? 'bg-blue-600 text-white shadow-lg'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
+              }`}
+              title="Circle"
+            >
+              <Circle className="h-4 w-4" />
+            </Button>
+            <Button
+              onClick={() => setCurrentTool('text')}
+              className={`p-2.5 rounded-lg transition-all duration-200 ${
+                currentTool === 'text'
+                  ? 'bg-blue-600 text-white shadow-lg'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
+              }`}
+              title="Text"
+            >
+              <Type className="h-4 w-4" />
+            </Button>
+          </div>
 
-          <Separator orientation="vertical" className="h-6 bg-slate-600" />
+          <div className="h-6 w-px bg-gray-600" />
 
-          {/* Color Picker */}
+          {/* Modern Color Picker */}
           <div className="relative">
             <Button
-              variant="outline"
-              size="sm"
               onClick={() => setShowColorPalette(!showColorPalette)}
-              className="p-2 flex items-center space-x-2"
+              className="bg-gray-800/50 border border-gray-700/30 rounded-xl p-2.5 flex items-center space-x-3 hover:bg-gray-700/50 transition-all duration-200"
+              title="Color Palette"
             >
-              <Palette className="h-4 w-4" />
+              <Palette className="h-4 w-4 text-gray-300" />
               <div 
-                className="w-4 h-4 rounded border border-slate-400"
+                className="w-6 h-6 rounded-lg border-2 border-gray-600/50 shadow-sm"
                 style={{ backgroundColor: currentColor }}
               />
             </Button>
             {showColorPalette && (
-              <Card className="absolute top-10 left-0 p-3 bg-slate-800 border-slate-700 z-10">
-                <div className="grid grid-cols-5 gap-2">
+              <div className="absolute top-12 left-0 bg-gray-800/95 backdrop-blur-lg border border-gray-700/50 rounded-xl p-4 shadow-2xl z-10">
+                <h4 className="text-white font-medium mb-3 text-sm">Color Palette</h4>
+                <div className="grid grid-cols-5 gap-2.5">
                   {COLORS.map(color => (
                     <button
                       key={color}
-                      className={`w-8 h-8 rounded border-2 ${
-                        currentColor === color ? 'border-blue-400' : 'border-slate-500'
+                      className={`w-10 h-10 rounded-xl border-2 transition-all duration-200 hover:scale-110 ${
+                        currentColor === color 
+                          ? 'border-blue-400 ring-2 ring-blue-400/30 shadow-lg' 
+                          : 'border-gray-600/50 hover:border-gray-500'
                       }`}
                       style={{ backgroundColor: color }}
                       onClick={() => {
                         setCurrentColor(color)
                         setShowColorPalette(false)
                       }}
+                      title={color === '#FFFFFF' ? 'White' : color === '#000000' ? 'Black' : color}
                     />
                   ))}
                 </div>
-              </Card>
+              </div>
             )}
           </div>
 
-          {/* Stroke Width */}
+          {/* Modern Stroke Width */}
           <div className="relative">
             <Button
-              variant="outline"
-              size="sm"
               onClick={() => setShowStrokeWidthPicker(!showStrokeWidthPicker)}
-              className="p-2 flex items-center space-x-2"
+              className="bg-gray-800/50 border border-gray-700/30 rounded-xl p-2.5 flex items-center space-x-3 hover:bg-gray-700/50 transition-all duration-200 min-w-[80px]"
+              title="Brush Size"
             >
               <div 
-                className="rounded-full bg-current"
-                style={{ width: `${Math.min(strokeWidth, 12)}px`, height: `${Math.min(strokeWidth, 12)}px` }}
+                className="rounded-full bg-gray-300 shadow-sm"
+                style={{ width: `${Math.min(strokeWidth + 2, 14)}px`, height: `${Math.min(strokeWidth + 2, 14)}px` }}
               />
-              <span className="text-xs">{strokeWidth}px</span>
+              <span className="text-xs text-gray-300 font-medium">{strokeWidth}px</span>
             </Button>
             {showStrokeWidthPicker && (
-              <Card className="absolute top-10 left-0 p-3 bg-slate-800 border-slate-700 z-10">
-                <div className="space-y-2">
+              <div className="absolute top-12 left-0 bg-gray-800/95 backdrop-blur-lg border border-gray-700/50 rounded-xl p-4 shadow-2xl z-10">
+                <h4 className="text-white font-medium mb-3 text-sm">Brush Size</h4>
+                <div className="space-y-3">
                   {STROKE_WIDTHS.map(width => (
                     <button
                       key={width}
-                      className={`flex items-center space-x-3 w-full p-2 rounded hover:bg-slate-700 ${
-                        strokeWidth === width ? 'bg-slate-600' : ''
+                      className={`flex items-center space-x-4 w-full px-3 py-2.5 rounded-lg transition-all duration-200 hover:bg-gray-700/50 ${
+                        strokeWidth === width ? 'bg-blue-600/20 border border-blue-600/30' : 'hover:bg-gray-700/30'
                       }`}
                       onClick={() => {
                         setStrokeWidth(width)
@@ -481,67 +522,104 @@ export function Whiteboard({ sessionId, userRole, currentUser, isVisible, onClos
                       }}
                     >
                       <div 
-                        className="rounded-full bg-white"
-                        style={{ width: `${width}px`, height: `${width}px` }}
+                        className={`rounded-full shadow-sm ${
+                          strokeWidth === width ? 'bg-blue-400' : 'bg-gray-300'
+                        }`}
+                        style={{ width: `${width + 2}px`, height: `${width + 2}px` }}
                       />
-                      <span className="text-sm text-white">{width}px</span>
+                      <span className={`text-sm font-medium ${
+                        strokeWidth === width ? 'text-blue-300' : 'text-gray-300'
+                      }`}>
+                        {width}px {width <= 2 ? '(Fine)' : width <= 6 ? '(Medium)' : '(Bold)'}
+                      </span>
                     </button>
                   ))}
                 </div>
-              </Card>
+              </div>
             )}
           </div>
         </div>
 
-        <div className="flex items-center space-x-2">
-          {/* Action buttons */}
+        {/* Modern Action Buttons */}
+        <div className="flex items-center space-x-3">
+          <div className="flex items-center bg-gray-800/50 rounded-xl p-1 border border-gray-700/30">
+            <Button
+              onClick={handleUndo}
+              disabled={undoStack.length === 0}
+              className={`p-2.5 rounded-lg transition-all duration-200 ${
+                undoStack.length === 0
+                  ? 'text-gray-600 cursor-not-allowed'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
+              }`}
+              title="Undo"
+            >
+              <Undo className="h-4 w-4" />
+            </Button>
+            <Button
+              onClick={handleRedo}
+              disabled={redoStack.length === 0}
+              className={`p-2.5 rounded-lg transition-all duration-200 ${
+                redoStack.length === 0
+                  ? 'text-gray-600 cursor-not-allowed'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
+              }`}
+              title="Redo"
+            >
+              <Redo className="h-4 w-4" />
+            </Button>
+          </div>
+          
           <Button
-            variant="outline"
-            size="sm"
-            onClick={handleUndo}
-            disabled={undoStack.length === 0}
-            className="p-2"
-          >
-            <Undo className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleRedo}
-            disabled={redoStack.length === 0}
-            className="p-2"
-          >
-            <Redo className="h-4 w-4" />
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
             onClick={handleClear}
-            className="p-2 text-red-400 hover:text-red-300"
+            className="bg-red-600/10 border border-red-600/30 text-red-400 hover:bg-red-600/20 hover:text-red-300 p-2.5 rounded-xl transition-all duration-200"
+            title="Clear All"
           >
             <Trash2 className="h-4 w-4" />
           </Button>
+          
           <Button
-            variant="outline"
-            size="sm"
             onClick={handleDownload}
-            className="p-2"
+            className="bg-gray-800/50 border border-gray-700/30 text-gray-400 hover:text-white hover:bg-gray-700/50 p-2.5 rounded-xl transition-all duration-200"
+            title="Download"
           >
             <Download className="h-4 w-4" />
           </Button>
         </div>
       </div>
 
-      {/* Canvas */}
-      <div className="flex-1 p-4">
-        <canvas
-          ref={canvasRef}
-          className="w-full h-full bg-white rounded border border-slate-600 cursor-crosshair"
-          onMouseDown={startDrawing}
-          onMouseMove={draw}
-          onMouseUp={stopDrawing}
-          onMouseLeave={stopDrawing}
-        />
+      {/* Modern Canvas */}
+      <div className="flex-1 p-6">
+        <div className="relative w-full h-full">
+          <canvas
+            ref={canvasRef}
+            className="w-full h-full bg-white rounded-2xl border-2 border-gray-300 shadow-xl cursor-crosshair"
+            onMouseDown={startDrawing}
+            onMouseMove={draw}
+            onMouseUp={stopDrawing}
+            onMouseLeave={stopDrawing}
+          />
+          
+          {/* Canvas Overlay Info */}
+          <div className="absolute top-4 right-4 bg-gray-900/80 backdrop-blur-sm text-white px-3 py-2 rounded-xl text-sm font-medium flex items-center space-x-2">
+            <div className={`w-2 h-2 rounded-full ${
+              currentTool === 'pen' ? 'bg-blue-400' :
+              currentTool === 'eraser' ? 'bg-red-400' :
+              currentTool === 'select' ? 'bg-gray-400' :
+              'bg-purple-400'
+            }`} />
+            <span className="capitalize">{currentTool}</span>
+          </div>
+          
+          {/* Loading State */}
+          {!canvasRef.current && (
+            <div className="absolute inset-0 bg-gray-100 rounded-2xl flex items-center justify-center">
+              <div className="text-center">
+                <div className="w-12 h-12 border-4 border-gray-300 border-t-blue-600 rounded-full animate-spin mx-auto mb-4" />
+                <p className="text-gray-600 font-medium">Loading whiteboard...</p>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )

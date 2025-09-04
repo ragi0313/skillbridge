@@ -575,6 +575,26 @@ export function VideoCallRoom({
       try {
         console.log("[VIDEO_CALL] Initializing Agora SDK...")
         
+        // Track video call entry in backend before starting Agora
+        try {
+          console.log("[VIDEO_CALL] Tracking video call entry...")
+          const response = await fetch(`/api/sessions/${sessionId}/enter-video`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+          })
+
+          if (response.ok) {
+            const data = await response.json()
+            console.log("[VIDEO_CALL] Video call entry tracked:", data.message)
+          } else {
+            console.warn("[VIDEO_CALL] Failed to track video call entry:", response.status)
+            // Don't throw error here - allow video call to continue even if tracking fails
+          }
+        } catch (error) {
+          console.error("[VIDEO_CALL] Error tracking video call entry:", error)
+          // Don't throw error here - allow video call to continue even if tracking fails
+        }
+        
         // Validate config before proceeding
         if (!agoraConfig.appId || !agoraConfig.channel || !agoraConfig.token || !agoraConfig.uid) {
           throw new Error("Invalid Agora configuration - missing required fields")
@@ -1429,64 +1449,89 @@ export function VideoCallRoom({
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col">
-      {/* Header */}
-      <div className="bg-slate-900/95 border-b border-slate-700/50 p-4">
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-slate-900 to-gray-800 flex flex-col">
+      {/* Modern Header */}
+      <div className="bg-gray-900/95 backdrop-blur-lg border-b border-gray-700/50 px-6 py-4">
         <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <Badge variant="outline" className="text-green-400 border-green-400">
-              <div className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse" />
-              LIVE SESSION
+          <div className="flex items-center space-x-6">
+            <Badge className="bg-red-600 hover:bg-red-600 text-white font-medium px-3 py-1">
+              <div className="w-2 h-2 bg-white rounded-full mr-2 animate-pulse" />
+              LIVE
             </Badge>
-            <div className="flex items-center space-x-2 text-sm text-slate-300">
+            <div className="flex items-center space-x-2 text-sm font-medium text-gray-300">
               <Clock className="h-4 w-4" />
-              <span>Time Remaining: {formatSessionTimeRemaining()}</span>
+              <span className="font-mono">{formatSessionTimeRemaining()}</span>
             </div>
-            <div className="flex items-center space-x-2 text-sm text-slate-400">
-              <span>Elapsed: {formatTimeElapsed()}</span>
+            <div className="h-4 w-px bg-gray-600" />
+            <div className="flex items-center space-x-2 text-sm text-gray-400">
+              <span>Elapsed: </span>
+              <span className="font-mono text-gray-300">{formatTimeElapsed()}</span>
             </div>
           </div>
           
-          <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-2">
-              <Users className="h-4 w-4 text-slate-400" />
-              <span className="text-sm text-slate-300">{participants}</span>
+          <div className="flex items-center space-x-6">
+            <div className="flex items-center space-x-2 text-sm">
+              <div className="flex items-center justify-center w-8 h-8 bg-gray-700 rounded-full">
+                <Users className="h-4 w-4 text-gray-300" />
+              </div>
+              <span className="text-gray-300 font-medium">{participants}</span>
             </div>
-            <Badge 
-              variant="outline" 
-              className={`${getConnectionStatusColor(connectionState)} border-current`}
-            >
-              {connectionState}
-              {connectionState === "reconnecting" && connectionRetryCount > 0 && 
-                ` (${connectionRetryCount}/3)`
-              }
-            </Badge>
-            <Badge 
-              variant="outline" 
-              className={`${getQualityColor(callQuality)} border-current`}
-            >
-              {callQuality}
-            </Badge>
+            <div className="flex items-center space-x-3">
+              <div className={`flex items-center space-x-2 px-3 py-1.5 rounded-full text-xs font-medium ${
+                connectionState === 'connected' ? 'bg-green-600/20 text-green-400 border border-green-600/30' :
+                connectionState === 'connecting' ? 'bg-yellow-600/20 text-yellow-400 border border-yellow-600/30' :
+                connectionState === 'reconnecting' ? 'bg-orange-600/20 text-orange-400 border border-orange-600/30' :
+                'bg-red-600/20 text-red-400 border border-red-600/30'
+              }`}>
+                <div className={`w-1.5 h-1.5 rounded-full ${
+                  connectionState === 'connected' ? 'bg-green-400' :
+                  connectionState === 'connecting' ? 'bg-yellow-400 animate-pulse' :
+                  connectionState === 'reconnecting' ? 'bg-orange-400 animate-pulse' :
+                  'bg-red-400'
+                }`} />
+                <span className="capitalize">{connectionState}</span>
+                {connectionState === "reconnecting" && connectionRetryCount > 0 && 
+                  <span className="ml-1">({connectionRetryCount}/3)</span>
+                }
+              </div>
+              <div className={`px-3 py-1.5 rounded-full text-xs font-medium ${
+                callQuality === 'excellent' ? 'bg-green-600/20 text-green-400 border border-green-600/30' :
+                callQuality === 'good' ? 'bg-blue-600/20 text-blue-400 border border-blue-600/30' :
+                callQuality === 'fair' ? 'bg-yellow-600/20 text-yellow-400 border border-yellow-600/30' :
+                callQuality === 'poor' ? 'bg-red-600/20 text-red-400 border border-red-600/30' :
+                'bg-gray-600/20 text-gray-400 border border-gray-600/30'
+              }`}>
+                {callQuality}
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
       {/* Main Content Area */}
       <div className="flex-1 flex relative">
-        {/* Video Area */}
-        <div className={`flex-1 relative bg-slate-900 ${showSidebar ? 'mr-80' : ''}`}>
+        {/* Modern Video Area */}
+        <div className={`flex-1 relative bg-gray-900 ${showSidebar ? 'mr-80' : ''}`}>
         {(connectionState === "connecting" || connectionState === "reconnecting") && (
-          <div className="absolute inset-0 flex items-center justify-center z-10">
-            <Card className="bg-slate-800/90 border-slate-600">
-              <CardContent className="p-6 text-center">
-                <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-4" />
-                <p className="text-slate-200">
-                  {connectionState === "connecting" ? "Connecting to video call..." : "Reconnecting..."}
+          <div className="absolute inset-0 flex items-center justify-center z-10 bg-gray-900/80 backdrop-blur-sm">
+            <Card className="bg-gray-800/95 border-gray-600/50 shadow-2xl">
+              <CardContent className="p-8 text-center">
+                <div className="relative mb-6">
+                  <div className="animate-spin w-10 h-10 border-3 border-blue-500/30 border-t-blue-500 rounded-full mx-auto" />
+                  <div className="absolute inset-0 animate-ping w-10 h-10 border-2 border-blue-500/20 rounded-full mx-auto" />
+                </div>
+                <h3 className="text-lg font-semibold text-white mb-2">
+                  {connectionState === "connecting" ? "Connecting..." : "Reconnecting..."}
+                </h3>
+                <p className="text-gray-300 text-sm">
+                  {connectionState === "connecting" ? "Joining the video call" : "Attempting to restore connection"}
                 </p>
                 {connectionRetryCount > 0 && (
-                  <p className="text-slate-400 text-sm mt-2">
-                    Attempt {connectionRetryCount}/3
-                  </p>
+                  <div className="mt-4 flex items-center justify-center space-x-2">
+                    <div className="text-orange-400 text-sm font-medium">
+                      Attempt {connectionRetryCount}/3
+                    </div>
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -1494,85 +1539,117 @@ export function VideoCallRoom({
         )}
 
         {connectionState === "failed" && (
-          <div className="absolute inset-0 flex items-center justify-center z-10">
-            <Alert className="bg-red-900/20 border-red-600/30 max-w-md">
-              <AlertTriangle className="h-4 w-4 text-red-400" />
-              <AlertDescription className="text-red-300">
-                Failed to connect to the video call. Please check your internet connection and try again.
+          <div className="absolute inset-0 flex items-center justify-center z-10 bg-gray-900/80 backdrop-blur-sm">
+            <Alert className="bg-red-900/30 border-red-500/50 shadow-2xl max-w-md backdrop-blur-sm">
+              <AlertTriangle className="h-5 w-5 text-red-400" />
+              <AlertDescription className="text-red-200 text-sm leading-relaxed">
+                <div className="font-semibold mb-1">Connection Failed</div>
+                Unable to connect to the video call. Please check your internet connection and try again.
               </AlertDescription>
             </Alert>
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 p-4 h-full">
-          {/* Remote Video */}
-          <div className="relative bg-slate-800 rounded-lg overflow-hidden">
-            <div ref={remoteVideoRef} className="w-full h-full min-h-[300px]" />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 p-6 h-full">
+          {/* Remote Video - Modern Design */}
+          <div className="relative bg-gradient-to-br from-gray-800 to-gray-900 rounded-2xl overflow-hidden shadow-2xl border border-gray-700/50">
+            <div ref={remoteVideoRef} className="w-full h-full min-h-[320px] rounded-2xl" />
             {!isRemoteVideoVisible && (
-              <div className="absolute inset-0 flex items-center justify-center">
+              <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-gray-800/50 to-gray-900/50">
                 <div className="text-center">
-                  <Avatar className="h-24 w-24 mx-auto mb-4">
-                    <AvatarImage src={otherParticipant.profilePictureUrl || ""} />
-                    <AvatarFallback className="bg-slate-700 text-slate-200 text-2xl">
-                      {getInitials(otherParticipant.firstName, otherParticipant.lastName)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <h3 className="text-xl font-semibold text-white mb-1">
+                  <div className="relative mb-6">
+                    <Avatar className="h-28 w-28 mx-auto border-4 border-white/10 shadow-2xl">
+                      <AvatarImage src={otherParticipant.profilePictureUrl || ""} className="object-cover" />
+                      <AvatarFallback className="bg-gradient-to-br from-blue-500 to-purple-600 text-white text-3xl font-bold">
+                        {getInitials(otherParticipant.firstName, otherParticipant.lastName)}
+                      </AvatarFallback>
+                    </Avatar>
+                    {participants === 1 && (
+                      <div className="absolute -bottom-1 -right-1 w-8 h-8 bg-yellow-500 rounded-full flex items-center justify-center">
+                        <div className="w-3 h-3 bg-yellow-300 rounded-full animate-pulse" />
+                      </div>
+                    )}
+                  </div>
+                  <h3 className="text-xl font-semibold text-white mb-2">
                     {otherParticipant.firstName} {otherParticipant.lastName}
                   </h3>
-                  <p className="text-slate-400">{otherParticipant.title}</p>
-                  <p className="text-sm text-slate-500 mt-2">
-                    {participants === 1 ? "Waiting to join..." : "Video disabled"}
-                  </p>
+                  <p className="text-gray-300 font-medium mb-3">{otherParticipant.title}</p>
+                  <div className={`inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium ${
+                    participants === 1 
+                      ? 'bg-yellow-600/20 text-yellow-300 border border-yellow-600/30' 
+                      : 'bg-gray-600/20 text-gray-300 border border-gray-600/30'
+                  }`}>
+                    {participants === 1 ? "Joining..." : "Camera off"}
+                  </div>
                 </div>
               </div>
             )}
             
-            {/* Screen share indicator */}
+            {/* Modern Screen Share Indicator */}
             {isRemoteScreenSharing && (
               <div className="absolute top-4 left-4">
-                <Badge className="bg-blue-600 text-white">
-                  <Monitor className="h-3 w-3 mr-1" />
-                  Screen Sharing
-                </Badge>
+                <div className="bg-blue-600/90 backdrop-blur-sm text-white px-3 py-2 rounded-xl font-medium text-sm flex items-center space-x-2 shadow-lg border border-blue-500/30">
+                  <Monitor className="h-4 w-4" />
+                  <span>Screen Share</span>
+                </div>
               </div>
             )}
             
+            {/* Modern Audio Indicator */}
             <div className="absolute bottom-4 left-4">
-              {isRemoteAudioEnabled ? (
-                <Volume2 className="h-5 w-5 text-green-400" />
-              ) : (
-                <VolumeX className="h-5 w-5 text-red-400" />
-              )}
+              <div className={`p-2.5 rounded-full backdrop-blur-sm shadow-lg border ${
+                isRemoteAudioEnabled 
+                  ? 'bg-green-600/20 border-green-500/30' 
+                  : 'bg-red-600/20 border-red-500/30'
+              }`}>
+                {isRemoteAudioEnabled ? (
+                  <Volume2 className="h-5 w-5 text-green-400" />
+                ) : (
+                  <VolumeX className="h-5 w-5 text-red-400" />
+                )}
+              </div>
+            </div>
+            
+            {/* Participant Name Overlay */}
+            <div className="absolute bottom-4 right-4">
+              <div className="bg-black/50 backdrop-blur-sm text-white px-3 py-1.5 rounded-lg text-sm font-medium">
+                {otherParticipant.firstName} {otherParticipant.lastName}
+              </div>
             </div>
           </div>
 
-          {/* Local Video */}
-          <div className="relative bg-slate-800 rounded-lg overflow-hidden">
-            <div ref={localVideoRef} className="w-full h-full min-h-[300px]" />
+          {/* Local Video - Modern Design */}
+          <div className="relative bg-gradient-to-br from-gray-800 to-gray-900 rounded-2xl overflow-hidden shadow-2xl border border-gray-700/50">
+            <div ref={localVideoRef} className="w-full h-full min-h-[320px] rounded-2xl" />
             {(!isVideoEnabled || !localTracksRef.current.videoTrack) && !isScreenSharing && (
-              <div className="absolute inset-0 flex items-center justify-center bg-slate-800">
+              <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-gray-800/50 to-gray-900/50">
                 <div className="text-center">
-                  <VideoOff className="h-12 w-12 text-slate-400 mx-auto mb-2" />
-                  <p className="text-slate-400">
-                    {!localTracksRef.current.videoTrack ? "Camera not available" : "Your video is disabled"}
+                  <div className="mb-6">
+                    <div className="w-20 h-20 bg-gray-700/50 rounded-full flex items-center justify-center mx-auto mb-4 border-2 border-gray-600/50">
+                      <VideoOff className="h-10 w-10 text-gray-400" />
+                    </div>
+                  </div>
+                  <h3 className="text-lg font-semibold text-white mb-2">
+                    {!localTracksRef.current.videoTrack ? "Camera Unavailable" : "Camera Off"}
+                  </h3>
+                  <p className="text-gray-300 text-sm mb-4">
+                    {!localTracksRef.current.videoTrack ? "Unable to access your camera" : "Your camera is currently disabled"}
                   </p>
                   {mediaError && !localTracksRef.current.videoTrack && (
                     <Button 
-                      variant="outline" 
-                      size="sm" 
-                      className="mt-2"
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl font-medium" 
+                      size="sm"
                       onClick={handleRetryMedia}
                       disabled={isRetryingMedia}
                     >
                       {isRetryingMedia ? (
                         <>
-                          <div className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin mr-2" />
+                          <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
                           Retrying...
                         </>
                       ) : (
                         <>
-                          <RefreshCw className="h-3 w-3 mr-2" />
+                          <RefreshCw className="h-4 w-4 mr-2" />
                           Retry Camera
                         </>
                       )}
@@ -1582,234 +1659,352 @@ export function VideoCallRoom({
               </div>
             )}
             
-            {/* Screen sharing indicator */}
+            {/* Modern Screen Share Indicator */}
             {isScreenSharing && (
               <div className="absolute top-4 left-4">
-                <Badge className="bg-green-600 text-white">
-                  <Monitor className="h-3 w-3 mr-1" />
-                  You're sharing
-                </Badge>
+                <div className="bg-green-600/90 backdrop-blur-sm text-white px-3 py-2 rounded-xl font-medium text-sm flex items-center space-x-2 shadow-lg border border-green-500/30">
+                  <Monitor className="h-4 w-4" />
+                  <span>You're presenting</span>
+                </div>
               </div>
             )}
             
+            {/* Modern User Badge */}
             <div className="absolute bottom-4 right-4">
-              <Badge variant="outline" className="text-blue-400 border-blue-400">
-                You ({userRole})
-              </Badge>
+              <div className="bg-black/50 backdrop-blur-sm text-white px-3 py-1.5 rounded-lg text-sm font-medium flex items-center space-x-2">
+                <div className="w-2 h-2 bg-blue-400 rounded-full" />
+                <span>You ({userRole})</span>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Controls */}
-      <div className="bg-slate-900/95 border-t border-slate-700/50 p-4">
-        <div className="flex items-center justify-center space-x-4">
-          <Button
-            variant={isVideoEnabled && localTracksRef.current.videoTrack ? "default" : "destructive"}
-            size="lg"
-            onClick={toggleVideo}
-            className="rounded-full w-12 h-12 p-0"
-            disabled={isCallEnding || isRetryingMedia || isScreenSharing}
-          >
-            {isVideoEnabled && localTracksRef.current.videoTrack ? (
-              <Video className="h-5 w-5" />
-            ) : (
-              <VideoOff className="h-5 w-5" />
-            )}
-          </Button>
+      {/* Modern Controls Bar */}
+      <div className="bg-gray-900/95 backdrop-blur-lg border-t border-gray-700/50 px-8 py-6">
+        <div className="flex items-center justify-center space-x-6">
+          {/* Video Control */}
+          <div className="relative group">
+            <Button
+              onClick={toggleVideo}
+              disabled={isCallEnding || isRetryingMedia || isScreenSharing}
+              className={`relative w-14 h-14 rounded-full transition-all duration-200 shadow-lg border-2 ${
+                isVideoEnabled && localTracksRef.current.videoTrack
+                  ? 'bg-gray-700 hover:bg-gray-600 border-gray-600 text-white'
+                  : 'bg-red-600 hover:bg-red-700 border-red-500 text-white'
+              } ${isCallEnding || isRetryingMedia || isScreenSharing ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'}`}
+            >
+              {isVideoEnabled && localTracksRef.current.videoTrack ? (
+                <Video className="h-6 w-6" />
+              ) : (
+                <VideoOff className="h-6 w-6" />
+              )}
+            </Button>
+            <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+              <div className="bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
+                {isVideoEnabled && localTracksRef.current.videoTrack ? 'Turn off camera' : 'Turn on camera'}
+              </div>
+            </div>
+          </div>
 
-          <Button
-            variant={isAudioEnabled ? "default" : "destructive"}
-            size="lg"
-            onClick={toggleAudio}
-            className="rounded-full w-12 h-12 p-0"
-            disabled={isCallEnding}
-          >
-            {isAudioEnabled ? (
-              <Mic className="h-5 w-5" />
-            ) : (
-              <MicOff className="h-5 w-5" />
-            )}
-          </Button>
+          {/* Audio Control */}
+          <div className="relative group">
+            <Button
+              onClick={toggleAudio}
+              disabled={isCallEnding}
+              className={`relative w-14 h-14 rounded-full transition-all duration-200 shadow-lg border-2 ${
+                isAudioEnabled
+                  ? 'bg-gray-700 hover:bg-gray-600 border-gray-600 text-white'
+                  : 'bg-red-600 hover:bg-red-700 border-red-500 text-white'
+              } ${isCallEnding ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'}`}
+            >
+              {isAudioEnabled ? (
+                <Mic className="h-6 w-6" />
+              ) : (
+                <MicOff className="h-6 w-6" />
+              )}
+            </Button>
+            <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+              <div className="bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
+                {isAudioEnabled ? 'Mute' : 'Unmute'}
+              </div>
+            </div>
+          </div>
 
-          <Button
-            variant={isScreenSharing ? "default" : "outline"}
-            size="lg"
-            onClick={toggleScreenShare}
-            className="rounded-full w-12 h-12 p-0"
-            disabled={isCallEnding || (!isScreenSharing && isRemoteScreenSharing)}
-            title={
-              isScreenSharing 
-                ? "Stop Screen Share" 
-                : isRemoteScreenSharing 
-                  ? "Other participant is sharing screen"
-                  : "Share Screen"
-            }
-          >
-            <Monitor className={`h-5 w-5 ${
-              isScreenSharing 
-                ? 'text-green-400' 
-                : isRemoteScreenSharing 
-                  ? 'text-orange-400' 
-                  : ''
-            }`} />
-          </Button>
+          {/* Screen Share Control */}
+          <div className="relative group">
+            <Button
+              onClick={toggleScreenShare}
+              disabled={isCallEnding || (!isScreenSharing && isRemoteScreenSharing)}
+              className={`relative w-14 h-14 rounded-full transition-all duration-200 shadow-lg border-2 ${
+                isScreenSharing
+                  ? 'bg-green-600 hover:bg-green-700 border-green-500 text-white'
+                  : isRemoteScreenSharing
+                    ? 'bg-orange-600 hover:bg-orange-700 border-orange-500 text-white opacity-50 cursor-not-allowed'
+                    : 'bg-gray-700 hover:bg-gray-600 border-gray-600 text-white hover:scale-105'
+              }`}
+            >
+              <Monitor className="h-6 w-6" />
+              {isScreenSharing && (
+                <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-400 rounded-full flex items-center justify-center">
+                  <div className="w-2 h-2 bg-white rounded-full" />
+                </div>
+              )}
+            </Button>
+            <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+              <div className="bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
+                {isScreenSharing
+                  ? 'Stop sharing'
+                  : isRemoteScreenSharing
+                    ? 'Other is sharing'
+                    : 'Share screen'
+                }
+              </div>
+            </div>
+          </div>
 
-          <Button
-            variant={showSidebar ? "default" : "outline"}
-            size="lg"
-            onClick={() => setShowSidebar(!showSidebar)}
-            className="rounded-full w-12 h-12 p-0 relative"
-            disabled={isCallEnding}
-            title="Toggle Chat"
-          >
-            <MessageSquare className={`h-5 w-5 ${showSidebar ? 'text-blue-400' : ''}`} />
-            {unreadCount > 0 && !showSidebar && (
-              <Badge className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full min-w-[20px] h-5 flex items-center justify-center p-1">
-                {unreadCount > 99 ? '99+' : unreadCount}
-              </Badge>
-            )}
-          </Button>
+          {/* Chat Control */}
+          <div className="relative group">
+            <Button
+              onClick={() => setShowSidebar(!showSidebar)}
+              disabled={isCallEnding}
+              className={`relative w-14 h-14 rounded-full transition-all duration-200 shadow-lg border-2 ${
+                showSidebar
+                  ? 'bg-blue-600 hover:bg-blue-700 border-blue-500 text-white'
+                  : 'bg-gray-700 hover:bg-gray-600 border-gray-600 text-white'
+              } ${isCallEnding ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'}`}
+            >
+              <MessageSquare className="h-6 w-6" />
+              {unreadCount > 0 && !showSidebar && (
+                <div className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full min-w-[18px] h-[18px] flex items-center justify-center font-bold">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </div>
+              )}
+            </Button>
+            <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+              <div className="bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
+                {showSidebar ? 'Hide chat' : 'Show chat'}
+              </div>
+            </div>
+          </div>
 
-          <Button
-            variant={showWhiteboard ? "default" : "outline"}
-            size="lg"
-            onClick={() => setShowWhiteboard(!showWhiteboard)}
-            className="rounded-full w-12 h-12 p-0"
-            disabled={isCallEnding}
-            title="Toggle Whiteboard"
-          >
-            <PenTool className={`h-5 w-5 ${showWhiteboard ? 'text-green-400' : ''}`} />
-          </Button>
+          {/* Whiteboard Control */}
+          <div className="relative group">
+            <Button
+              onClick={() => setShowWhiteboard(!showWhiteboard)}
+              disabled={isCallEnding}
+              className={`relative w-14 h-14 rounded-full transition-all duration-200 shadow-lg border-2 ${
+                showWhiteboard
+                  ? 'bg-purple-600 hover:bg-purple-700 border-purple-500 text-white'
+                  : 'bg-gray-700 hover:bg-gray-600 border-gray-600 text-white'
+              } ${isCallEnding ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'}`}
+            >
+              <PenTool className="h-6 w-6" />
+              {showWhiteboard && (
+                <div className="absolute -top-1 -right-1 w-4 h-4 bg-purple-400 rounded-full flex items-center justify-center">
+                  <div className="w-2 h-2 bg-white rounded-full" />
+                </div>
+              )}
+            </Button>
+            <div className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+              <div className="bg-gray-800 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
+                {showWhiteboard ? 'Hide whiteboard' : 'Show whiteboard'}
+              </div>
+            </div>
+          </div>
 
-          <Separator orientation="vertical" className="h-8 bg-slate-600" />
+          {/* Separator */}
+          <div className="h-8 w-px bg-gray-600" />
 
-          <Button
-            variant="destructive"
-            size="lg"
-            onClick={() => handleLeaveCall("user_action")}
-            className="rounded-full px-8"
-            disabled={isCallEnding}
-          >
-            <Phone className="h-5 w-5 mr-2 rotate-[135deg]" />
-            {isCallEnding ? "Leaving..." : "Leave Call"}
-          </Button>
+          {/* Leave Call Button */}
+          <div className="relative group">
+            <Button
+              onClick={() => handleLeaveCall("user_action")}
+              disabled={isCallEnding}
+              className={`relative bg-red-600 hover:bg-red-700 border-2 border-red-500 text-white px-6 py-3 rounded-full transition-all duration-200 shadow-lg font-medium ${
+                isCallEnding ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'
+              }`}
+            >
+              <Phone className="h-5 w-5 mr-2 rotate-[135deg]" />
+              <span className="text-sm font-medium">
+                {isCallEnding ? "Leaving..." : "End call"}
+              </span>
+            </Button>
+          </div>
         </div>
 
+        {/* Network Stats */}
         {networkStats.rtt > 0 && (
-          <div className="flex items-center justify-center space-x-6 mt-3 text-xs text-slate-400">
-            <span>RTT: {networkStats.rtt}ms</span>
-            <span>Upload Loss: {networkStats.uplinkLoss}%</span>
-            <span>Download Loss: {networkStats.downlinkLoss}%</span>
+          <div className="flex items-center justify-center space-x-8 mt-6 pt-4 border-t border-gray-700/50">
+            <div className="flex items-center space-x-2 text-xs">
+              <div className="w-2 h-2 bg-blue-400 rounded-full" />
+              <span className="text-gray-400">Latency:</span>
+              <span className="text-gray-300 font-mono">{networkStats.rtt}ms</span>
+            </div>
+            <div className="flex items-center space-x-2 text-xs">
+              <div className="w-2 h-2 bg-green-400 rounded-full" />
+              <span className="text-gray-400">Upload:</span>
+              <span className="text-gray-300 font-mono">{networkStats.uplinkLoss}% loss</span>
+            </div>
+            <div className="flex items-center space-x-2 text-xs">
+              <div className="w-2 h-2 bg-orange-400 rounded-full" />
+              <span className="text-gray-400">Download:</span>
+              <span className="text-gray-300 font-mono">{networkStats.downlinkLoss}% loss</span>
+            </div>
           </div>
         )}
       </div>
 
-      {/* Media Error Alert */}
+      {/* Modern Media Error Alert */}
       {mediaError && (
-        <div className="absolute top-20 left-1/2 transform -translate-x-1/2 z-50">
-          <Alert className="bg-orange-900/20 border-orange-600/30 max-w-md">
-            <AlertTriangle className="h-4 w-4 text-orange-400" />
-            <AlertDescription className="text-orange-300 flex items-center justify-between">
-              <span>{mediaError}</span>
+        <div className="absolute top-24 left-1/2 transform -translate-x-1/2 z-50">
+          <div className="bg-orange-900/30 backdrop-blur-lg border border-orange-500/50 rounded-xl shadow-2xl max-w-md">
+            <div className="p-4 flex items-start space-x-3">
+              <div className="flex-shrink-0">
+                <AlertTriangle className="h-5 w-5 text-orange-400 mt-0.5" />
+              </div>
+              <div className="flex-1">
+                <h4 className="text-orange-200 font-medium text-sm mb-1">Media Issue</h4>
+                <p className="text-orange-300/90 text-sm leading-relaxed">{mediaError}</p>
+              </div>
               <Button 
                 variant="ghost" 
                 size="sm" 
                 onClick={() => setMediaError("")}
-                className="ml-2 h-6 w-6 p-0"
+                className="flex-shrink-0 h-6 w-6 p-0 text-orange-400 hover:text-orange-300 hover:bg-orange-500/20"
               >
-                <X className="h-3 w-3" />
+                <X className="h-4 w-4" />
               </Button>
-            </AlertDescription>
-          </Alert>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* Low Time Warning */}
+      {/* Modern Low Time Warning */}
       {getTimeRemaining() <= 300 && getTimeRemaining() > 0 && (
-        <div className="absolute top-20 right-4">
-          <Alert className="bg-orange-900/20 border-orange-600/30">
-            <AlertTriangle className="h-4 w-4 text-orange-400" />
-            <AlertDescription className="text-orange-300">
-              Session ending in {formatSessionTimeRemaining()}
-            </AlertDescription>
-          </Alert>
+        <div className="absolute top-24 right-6">
+          <div className="bg-orange-900/30 backdrop-blur-lg border border-orange-500/50 rounded-xl shadow-2xl">
+            <div className="p-4 flex items-center space-x-3">
+              <div className="flex-shrink-0">
+                <div className="w-8 h-8 bg-orange-600/20 rounded-full flex items-center justify-center">
+                  <AlertTriangle className="h-4 w-4 text-orange-400" />
+                </div>
+              </div>
+              <div>
+                <h4 className="text-orange-200 font-medium text-sm mb-1">Session Ending Soon</h4>
+                <p className="text-orange-300/90 text-sm">
+                  <span className="font-mono font-bold">{formatSessionTimeRemaining()}</span> remaining
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* Connection Issues Alert */}
+      {/* Modern Connection Issues Alert */}
       {(connectionState === "reconnecting" || connectionState === "disconnected") && (
-        <div className="absolute top-20 left-4">
-          <Alert className="bg-yellow-900/20 border-yellow-600/30">
-            <AlertTriangle className="h-4 w-4 text-yellow-400" />
-            <AlertDescription className="text-yellow-300">
-              {connectionState === "reconnecting" 
-                ? `Reconnecting... (${connectionRetryCount}/3)`
-                : "Connection lost. Attempting to reconnect..."
-              }
-            </AlertDescription>
-          </Alert>
+        <div className="absolute top-24 left-6">
+          <div className="bg-yellow-900/30 backdrop-blur-lg border border-yellow-500/50 rounded-xl shadow-2xl">
+            <div className="p-4 flex items-center space-x-3">
+              <div className="flex-shrink-0">
+                <div className="w-8 h-8 bg-yellow-600/20 rounded-full flex items-center justify-center">
+                  <div className="w-3 h-3 bg-yellow-400 rounded-full animate-pulse" />
+                </div>
+              </div>
+              <div>
+                <h4 className="text-yellow-200 font-medium text-sm mb-1">
+                  {connectionState === "reconnecting" ? "Reconnecting" : "Connection Lost"}
+                </h4>
+                <p className="text-yellow-300/90 text-sm">
+                  {connectionState === "reconnecting" 
+                    ? `Attempt ${connectionRetryCount}/3`
+                    : "Attempting to restore connection..."
+                  }
+                </p>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
-        {/* Chat/Files Sidebar */}
+        {/* Modern Chat/Files Sidebar */}
         {showSidebar && (
-          <div className="absolute right-0 top-0 bottom-0 w-80 bg-slate-800 border-l border-slate-700 flex flex-col">
-            <div className="p-4 border-b border-slate-700 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-white">Chat & Files</h3>
+          <div className="absolute right-0 top-0 bottom-0 w-80 bg-gray-900/95 backdrop-blur-lg border-l border-gray-700/50 flex flex-col shadow-2xl">
+            <div className="p-6 border-b border-gray-700/50 flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 bg-blue-600/20 rounded-lg flex items-center justify-center">
+                  <MessageSquare className="h-4 w-4 text-blue-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-white">Chat & Files</h3>
+              </div>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => setShowSidebar(false)}
-                className="text-slate-400 hover:text-white"
+                className="text-gray-400 hover:text-white hover:bg-gray-700/50 rounded-lg p-2"
               >
                 <X className="h-4 w-4" />
               </Button>
             </div>
 
             <div className="flex-1 flex flex-col">
-              <div className="p-4 border-b border-slate-700">
-                <h4 className="text-sm font-medium text-slate-300">Session Chat</h4>
-                {!isChatInitialized && (
-                  <p className="text-xs text-slate-500 mt-1">Initializing chat...</p>
-                )}
+              <div className="px-6 py-4 border-b border-gray-700/50">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-medium text-gray-300">Messages</h4>
+                  {!isChatInitialized ? (
+                    <div className="flex items-center space-x-2">
+                      <div className="w-2 h-2 bg-yellow-400 rounded-full animate-pulse" />
+                      <span className="text-xs text-gray-400">Connecting...</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center space-x-2">
+                      <div className="w-2 h-2 bg-green-400 rounded-full" />
+                      <span className="text-xs text-gray-400">Connected</span>
+                    </div>
+                  )}
+                </div>
               </div>
 
-              {/* Chat Content */}
-              <div className="flex-1 flex flex-col m-0 p-0">
-                <ScrollArea className="flex-1 p-4">
-                  <div className="space-y-3">
+              {/* Modern Chat Content */}
+              <div className="flex-1 flex flex-col">
+                <ScrollArea className="flex-1 px-6 py-4">
+                  <div className="space-y-4">
                     {chatMessages.map((message) => {
                       const currentUserId = `${userRole}-${currentUser.firstName} ${currentUser.lastName}`
                       const isOwnMessage = message.senderId === currentUserId
                       return (
-                      <div key={message.id} className={`flex flex-col space-y-1 ${isOwnMessage ? 'items-end' : 'items-start'}`}>
-                        <div className="flex items-center space-x-2 text-xs text-slate-400">
-                          <span>{message.senderName}</span>
-                          <span>{new Date(message.timestamp).toLocaleTimeString()}</span>
+                      <div key={message.id} className={`flex flex-col space-y-2 ${isOwnMessage ? 'items-end' : 'items-start'}`}>
+                        <div className="flex items-center space-x-2 text-xs text-gray-500">
+                          <span className="font-medium">{message.senderName}</span>
+                          <span>•</span>
+                          <span>{new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                         </div>
                         {message.messageType === 'text' ? (
-                          <div className={`rounded-lg p-3 max-w-[90%] ${
+                          <div className={`rounded-2xl px-4 py-2.5 max-w-[85%] shadow-sm ${
                             isOwnMessage 
                               ? 'bg-blue-600 text-white' 
-                              : 'bg-slate-700 text-slate-200'
+                              : 'bg-gray-700/80 text-gray-100 border border-gray-600/50'
                           }`}>
-                            <p className="text-sm">{message.message}</p>
+                            <p className="text-sm leading-relaxed">{message.message}</p>
                           </div>
                         ) : (
-                          <div className={`rounded-lg p-3 max-w-[90%] flex items-center space-x-2 ${
+                          <div className={`rounded-2xl p-4 max-w-[85%] flex items-center space-x-3 shadow-sm border ${
                             isOwnMessage 
-                              ? 'bg-blue-600 text-white' 
-                              : 'bg-slate-700 text-slate-200'
+                              ? 'bg-blue-600 text-white border-blue-500/50' 
+                              : 'bg-gray-700/80 text-gray-100 border-gray-600/50'
                           }`}>
-                            {message.attachment?.fileType?.startsWith('image/') ? (
-                              <ImageIcon className="h-4 w-4 text-current" />
-                            ) : (
-                              <FileText className="h-4 w-4 text-current" />
-                            )}
-                            <div className="flex-1">
-                              <p className="text-sm">{message.attachment?.fileName}</p>
-                              <p className="text-xs opacity-70">
+                            <div className={`p-2 rounded-lg ${
+                              isOwnMessage ? 'bg-blue-500/30' : 'bg-gray-600/50'
+                            }`}>
+                              {message.attachment?.fileType?.startsWith('image/') ? (
+                                <ImageIcon className="h-5 w-5" />
+                              ) : (
+                                <FileText className="h-5 w-5" />
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{message.attachment?.fileName}</p>
+                              <p className="text-xs opacity-75 mt-1">
                                 {message.attachment?.fileSize ? `${(message.attachment.fileSize / 1024).toFixed(1)} KB` : 'Unknown size'}
                               </p>
                             </div>
@@ -1817,7 +2012,7 @@ export function VideoCallRoom({
                               size="sm"
                               variant="ghost"
                               onClick={() => message.attachment && downloadFile(message.attachment)}
-                              className="text-current hover:bg-white/20"
+                              className={`p-2 rounded-lg ${isOwnMessage ? 'hover:bg-blue-500/30' : 'hover:bg-gray-600/50'}`}
                             >
                               <Download className="h-4 w-4" />
                             </Button>
@@ -1830,12 +2025,12 @@ export function VideoCallRoom({
                   </div>
                 </ScrollArea>
 
-                {/* Chat Input with File Upload */}
-                <div className="p-4 border-t border-slate-700">
-                  <div className="space-y-2">
+                {/* Modern Chat Input */}
+                <div className="p-6 border-t border-gray-700/50 bg-gray-800/30">
+                  <div className="space-y-4">
                     {/* File upload area */}
                     <div 
-                      className="border-2 border-dashed border-slate-600 rounded-lg p-3 text-center hover:border-slate-500 transition-colors cursor-pointer"
+                      className="border-2 border-dashed border-gray-600/50 rounded-xl p-4 text-center hover:border-gray-500/70 hover:bg-gray-800/50 transition-all duration-200 cursor-pointer group"
                       onClick={() => fileInputRef.current?.click()}
                       onDrop={(e: React.DragEvent<HTMLDivElement>) => {
                         e.preventDefault()
@@ -1844,36 +2039,38 @@ export function VideoCallRoom({
                       }}
                       onDragOver={(e: React.DragEvent<HTMLDivElement>) => e.preventDefault()}
                     >
-                      <Upload className="h-5 w-5 text-slate-400 mx-auto mb-1" />
-                      <p className="text-xs text-slate-400">Click or drag files here to share</p>
-                      <p className="text-xs text-slate-500 mt-1">Max 10MB</p>
+                      <Upload className="h-6 w-6 text-gray-400 group-hover:text-gray-300 mx-auto mb-2 transition-colors" />
+                      <p className="text-sm text-gray-400 group-hover:text-gray-300 transition-colors">Drop files here or click to upload</p>
+                      <p className="text-xs text-gray-500 mt-1">Max 10MB • Images, documents, etc.</p>
                     </div>
                     
                     {/* Text input */}
-                    <div className="flex space-x-2">
-                      <Input
-                        value={newMessage}
-                        onChange={(e) => setNewMessage(e.target.value)}
-                        placeholder="Type a message..."
-                        className="bg-slate-700 border-slate-600 text-white placeholder-slate-400"
-                        onKeyPress={(e: React.KeyboardEvent<HTMLInputElement>) => {
-                          if (e.key === 'Enter' && !e.shiftKey) {
-                            e.preventDefault()
-                            handleSendMessage()
-                          }
-                        }}
-                        disabled={isCallEnding || isUploading || !isChatInitialized}
-                      />
+                    <div className="flex space-x-3">
+                      <div className="flex-1 relative">
+                        <Input
+                          value={newMessage}
+                          onChange={(e) => setNewMessage(e.target.value)}
+                          placeholder="Type a message..."
+                          className="bg-gray-700/50 border-gray-600/50 text-white placeholder-gray-400 rounded-xl pl-4 pr-4 py-3 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/25"
+                          onKeyPress={(e: React.KeyboardEvent<HTMLInputElement>) => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                              e.preventDefault()
+                              handleSendMessage()
+                            }
+                          }}
+                          disabled={isCallEnding || isUploading || !isChatInitialized}
+                        />
+                      </div>
                       <Button
                         size="sm"
                         onClick={handleSendMessage}
                         disabled={!newMessage.trim() || isCallEnding || isUploading || !isChatInitialized}
-                        className="bg-blue-600 hover:bg-blue-700"
+                        className="bg-blue-600 hover:bg-blue-700 px-4 py-3 rounded-xl shadow-lg transition-all duration-200 hover:scale-105 disabled:opacity-50 disabled:hover:scale-100"
                       >
                         {isUploading ? (
-                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                         ) : (
-                          <Send className="h-4 w-4" />
+                          <Send className="h-5 w-5" />
                         )}
                       </Button>
                     </div>

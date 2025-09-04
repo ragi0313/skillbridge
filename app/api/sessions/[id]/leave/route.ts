@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth/getSession'
 import { db } from '@/db'
 import { bookingSessions, learners, mentors } from '@/db/schema'
-import { eq } from 'drizzle-orm'
+import { eq, and, isNull } from 'drizzle-orm'
 
 export async function POST(
   request: NextRequest,
@@ -69,10 +69,20 @@ export async function POST(
         throw new Error('Unauthorized')
       }
 
-      // CRITICAL FIX: Don't update leave timestamp for page refreshes
-      // This prevents the session from being marked as "both users left" prematurely
-      if (isPageRefresh || reason === 'page_refresh' || reason === 'beforeunload' || reason === 'navigation') {
-        console.log(`[LEAVE_API] Skipping leave timestamp update for session ${sessionId} due to: ${reason}`)
+      // Always update lastActiveAt for any leave event (including beforeunload)
+      // This helps SessionMonitorService detect genuine disconnections
+      const lastActiveUpdate: any = {}
+      lastActiveUpdate[isLearner ? 'learnerLastActiveAt' : 'mentorLastActiveAt'] = now
+      
+      // For page refresh/navigation events, only update lastActiveAt, don't set leave timestamp
+      if (isPageRefresh || reason === 'page_refresh' || reason === 'navigation' || reason === 'beforeunload') {
+        console.log(`[LEAVE_API] ${reason} detected for session ${sessionId} - updating lastActiveAt only`)
+        
+        await tx
+          .update(bookingSessions)
+          .set(lastActiveUpdate)
+          .where(eq(bookingSessions.id, sessionId))
+
         leaveResult.skipLeaveForRefresh = true
         return
       }
@@ -133,6 +143,13 @@ export async function POST(
       // Check if both users have now left the ongoing session
       const otherUserStillInSession = otherUserJoinedAt && !otherUserLeftAt
       leaveResult.bothUsersNowLeft = !otherUserStillInSession && sessionData.status === 'ongoing'
+
+      // Update last active timestamp for session monitoring
+      if (isLearner) {
+        updateData.learnerLastActiveAt = now
+      } else {
+        updateData.mentorLastActiveAt = now
+      }
 
       // CRITICAL FIX: Don't auto-complete sessions when users leave
       // Let the SessionMonitorService handle completion based on more sophisticated logic

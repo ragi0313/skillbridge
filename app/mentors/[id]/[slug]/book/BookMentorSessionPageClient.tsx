@@ -480,10 +480,14 @@ export default function BookMentorSessionPageClient({ session }: Props) {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex justify-center items-center">
-          <div className="flex items-center space-x-3">
-            <Loader2 className="animate-spin w-6 h-6 text-teal-600" />
-            <span className="text-gray-700 font-medium">Loading mentor information...</span>
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex justify-center items-center">
+          <div className="flex flex-col items-center space-y-4 p-8 bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-white/20">
+            <div className="relative">
+              <Loader2 className="animate-spin w-8 h-8 text-indigo-600" />
+              <div className="absolute inset-0 w-8 h-8 border-2 border-indigo-200 rounded-full animate-pulse"></div>
+            </div>
+            <span className="text-slate-700 font-medium text-lg">Loading mentor information...</span>
+            <div className="w-24 h-1 bg-gradient-to-r from-indigo-300 via-purple-300 to-pink-300 rounded-full animate-pulse"></div>
           </div>
       </div>
     )
@@ -491,17 +495,22 @@ export default function BookMentorSessionPageClient({ session }: Props) {
 
   if (error || !mentor) {
     return (
-      <div className="min-h-screen bg-gray-50 flex justify-center items-center">
-        <Card className="p-8 text-center max-w-md">
-          <div className="text-red-600 mb-4">
-            <h2 className="text-xl font-semibold">Unable to load mentor information</h2>
-            {error && <p className="text-sm text-gray-500 mt-2">{error}</p>}
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex justify-center items-center">
+        <Card className="p-8 text-center max-w-md bg-white/90 backdrop-blur-sm shadow-xl border-0 rounded-2xl">
+          <div className="text-red-500 mb-6">
+            <div className="w-16 h-16 mx-auto mb-4 bg-red-50 rounded-full flex items-center justify-center">
+              <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+            </div>
+            <h2 className="text-xl font-semibold text-slate-800">Unable to load mentor information</h2>
+            {error && <p className="text-sm text-slate-500 mt-2">{error}</p>}
           </div>
           <div className="space-y-3">
-            <Button onClick={fetchMentor} variant="outline" className="w-full">
+            <Button onClick={fetchMentor} className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white border-0 rounded-xl py-3 transition-all duration-200 hover:scale-102">
               Try Again
             </Button>
-            <Button onClick={() => router.back()} variant="ghost" className="w-full">
+            <Button onClick={() => router.back()} variant="ghost" className="w-full text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-xl py-3 transition-all duration-200">
               Go Back
             </Button>
           </div>
@@ -513,7 +522,7 @@ export default function BookMentorSessionPageClient({ session }: Props) {
   const selectedSkill = mentor.skills.find((s) => s.id === selectedSkillId)
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
       {/* Header */}
       <UnifiedHeader />
 
@@ -522,15 +531,23 @@ export default function BookMentorSessionPageClient({ session }: Props) {
           {/* Left Column - Session Details */}
           <div className="lg:col-span-2 space-y-8">
             {/* Date & Time Selection */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg font-semibold">Select Date & Time</CardTitle>
+            <Card className="bg-white/80 backdrop-blur-sm shadow-xl border-0 rounded-2xl overflow-hidden">
+              <CardHeader className="bg-gradient-to-r from-indigo-500/10 to-purple-500/10 border-b border-indigo-100/50">
+                <CardTitle className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                  <div className="w-2 h-2 bg-indigo-500 rounded-full"></div>
+                  Select Date & Time
+                </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <CardContent className="space-y-6 p-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div>
-                    <Label className="text-sm font-medium mb-3 block">Choose Date</Label>
-                    <div className="border rounded-lg p-4">
+                    <Label className="text-sm font-semibold mb-4 text-slate-700 flex items-center gap-2">
+                      <svg className="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      Choose Date
+                    </Label>
+                    <div className="border border-indigo-100 rounded-xl p-4 bg-gradient-to-br from-white to-indigo-50/30">
                       <DayPicker
                         mode="single"
                         selected={selectedDate}
@@ -550,7 +567,10 @@ export default function BookMentorSessionPageClient({ session }: Props) {
                       />
                     </div>
                     {mentor?.blockedDates && mentor.blockedDates.length > 0 && (
-                      <p className="text-xs text-gray-500 mt-2">
+                      <p className="text-xs text-slate-500 mt-3 flex items-center gap-1 bg-red-50 p-2 rounded-lg">
+                        <svg className="w-3 h-3 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                        </svg>
                         Red strikethrough dates are blocked by the mentor
                       </p>
                     )}
@@ -558,47 +578,58 @@ export default function BookMentorSessionPageClient({ session }: Props) {
 
                   {selectedDate && (
                     <div>
-                      <Label className="text-sm font-medium mb-3 block">
-                        Available Times - {format(selectedDate, "MMM d, yyyy")}
-                        {mentor?.timezone && (
-                          <span className="text-xs text-gray-500 block">
-                            Times shown in mentor's timezone: {mentor.timezone}
-                          </span>
-                        )}
+                      <Label className="text-sm font-semibold mb-4 text-slate-700 flex items-center gap-2">
+                        <svg className="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <div>
+                          <div>Available Times - {format(selectedDate, "MMM d, yyyy")}</div>
+                          {mentor?.timezone && (
+                            <span className="text-xs text-slate-500 font-normal block mt-1">
+                              Times shown in mentor's timezone: {mentor.timezone}
+                            </span>
+                          )}
+                        </div>
                       </Label>
                       
                       {isDateBlocked(selectedDate) ? (
-                        <div className="text-center py-8 text-red-500">
-                          <Clock className="w-8 h-8 mx-auto mb-2" />
-                          <p className="font-medium">The mentor is not available on this date</p>
+                        <div className="text-center py-8 bg-red-50 rounded-xl border border-red-100">
+                          <div className="w-16 h-16 mx-auto mb-4 bg-red-100 rounded-full flex items-center justify-center">
+                            <Clock className="w-8 h-8 text-red-500" />
+                          </div>
+                          <p className="font-semibold text-red-600">The mentor is not available on this date</p>
                         </div>
                       ) : availableTimeSlotsForSelectedDay.length === 0 ? (
-                        <div className="text-center py-8 text-gray-500">
-                          <Clock className="w-8 h-8 mx-auto mb-2" />
-                          <p>No availability for this date</p>
+                        <div className="text-center py-8 bg-slate-50 rounded-xl border border-slate-100">
+                          <div className="w-16 h-16 mx-auto mb-4 bg-slate-100 rounded-full flex items-center justify-center">
+                            <Clock className="w-8 h-8 text-slate-400" />
+                          </div>
+                          <p className="font-medium text-slate-500">No availability for this date</p>
                         </div>
                       ) : (
-                        <div className="grid gap-2 max-h-64 overflow-y-auto">
+                        <div className="grid gap-3 max-h-72 overflow-y-auto custom-scrollbar pr-2">
                           {availableTimeSlotsForSelectedDay.map((slot, index) => (
                             <button
                               key={`${slot.startTime}-${index}`}
                               className={cn(
-                                "p-3 rounded-lg border text-left transition-all relative",
+                                "p-4 rounded-xl border text-left transition-all duration-200 relative group hover:scale-102",
                                 !slot.available
-                                  ? "border-gray-200 bg-red-50 text-gray-400 cursor-not-allowed"
+                                  ? "border-red-200 bg-red-50/50 text-red-400 cursor-not-allowed"
                                   : selectedTimeSlot?.startTime === slot.startTime
-                                    ? "border-teal-600 bg-teal-50 text-teal-800"
-                                    : "border-gray-200 bg-white hover:border-teal-300",
+                                    ? "border-indigo-300 bg-gradient-to-r from-indigo-50 to-purple-50 text-indigo-800 shadow-lg"
+                                    : "border-slate-200 bg-white hover:border-indigo-300 hover:shadow-md hover:bg-gradient-to-r hover:from-indigo-50/30 hover:to-purple-50/30",
                               )}
                               onClick={() => slot.available && setSelectedTimeSlot(slot)}
                               disabled={!slot.available}
                               title={slot.conflictReason || (slot.available ? "Available" : "Unavailable")}
                             >
-                              <div className="font-medium">
+                              <div className="font-semibold">
                                 {slot.startTime} – {slot.endTime}
                               </div>
                               {slot.available && selectedTimeSlot?.startTime === slot.startTime && (
-                                <CheckCircle className="w-4 h-4 text-teal-600 absolute top-3 right-3" />
+                                <div className="absolute -top-1 -right-1 w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center">
+                                  <CheckCircle className="w-4 h-4 text-white" />
+                                </div>
                               )}
                             </button>
                           ))}
@@ -607,46 +638,56 @@ export default function BookMentorSessionPageClient({ session }: Props) {
 
                       {selectedTimeSlot && selectedTimeSlot.available && !isDateBlocked(selectedDate) && (
                         <>
-                          <div className="flex justify-between mt-4">
-                            <span className="text-gray-600">Duration</span>
-                            <div className="flex items-center space-x-2">
-                              <Select
-                                value={durationHours.toString()}
-                                onValueChange={(value) => handleDurationChange(Number(value), durationMinutes)}
-                              >
-                                <SelectTrigger className="w-20 h-8">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {Array.from({ length: Math.floor(maxDuration / 60) + 1 }, (_, i) => i).map(
-                                    (hour) => (
-                                      <SelectItem key={hour} value={hour.toString()}>
-                                        {hour}h
-                                      </SelectItem>
-                                    ),
-                                  )}
-                                </SelectContent>
-                              </Select>
-                              <Select
-                                value={durationMinutes.toString()}
-                                onValueChange={(value) => handleDurationChange(durationHours, Number(value))}
-                              >
-                                <SelectTrigger className="w-20 h-8">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="0">0m</SelectItem>
-                                  <SelectItem value="30">30m</SelectItem>
-                                </SelectContent>
-                              </Select>
+                          <div className="mt-6 p-4 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl border border-indigo-100">
+                            <div className="flex justify-between items-center mb-3">
+                              <span className="text-slate-700 font-semibold flex items-center gap-2">
+                                <svg className="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                Duration
+                              </span>
+                              <div className="flex items-center space-x-3">
+                                <Select
+                                  value={durationHours.toString()}
+                                  onValueChange={(value) => handleDurationChange(Number(value), durationMinutes)}
+                                >
+                                  <SelectTrigger className="w-20 h-10 border-indigo-200 rounded-xl bg-white shadow-sm">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {Array.from({ length: Math.floor(maxDuration / 60) + 1 }, (_, i) => i).map(
+                                      (hour) => (
+                                        <SelectItem key={hour} value={hour.toString()}>
+                                          {hour}h
+                                        </SelectItem>
+                                      ),
+                                    )}
+                                  </SelectContent>
+                                </Select>
+                                <Select
+                                  value={durationMinutes.toString()}
+                                  onValueChange={(value) => handleDurationChange(durationHours, Number(value))}
+                                >
+                                  <SelectTrigger className="w-20 h-10 border-indigo-200 rounded-xl bg-white shadow-sm">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="0">0m</SelectItem>
+                                    <SelectItem value="30">30m</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
                             </div>
-                          </div>
 
-                          {maxDuration > 0 && (
-                            <div className="mt-4 text-sm text-gray-600 bg-gray-50 p-2 rounded">
-                              Maximum duration for this slot: {Math.floor(maxDuration / 60)}h {maxDuration % 60}m
-                            </div>
-                          )}
+                            {maxDuration > 0 && (
+                              <div className="text-sm text-slate-600 bg-white p-3 rounded-lg border border-indigo-100 flex items-center gap-2">
+                                <svg className="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                Maximum duration for this slot: {Math.floor(maxDuration / 60)}h {maxDuration % 60}m
+                              </div>
+                            )}
+                          </div>
                         </>
                       )}
                     </div>
@@ -656,19 +697,30 @@ export default function BookMentorSessionPageClient({ session }: Props) {
             </Card>
 
             {/* Session Notes */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="ml-1 text-lg font-semibold">Session Notes</CardTitle>
+            <Card className="bg-white/80 backdrop-blur-sm shadow-xl border-0 rounded-2xl overflow-hidden">
+              <CardHeader className="bg-gradient-to-r from-purple-500/10 to-pink-500/10 border-b border-purple-100/50">
+                <CardTitle className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                  <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
+                  Session Notes
+                </CardTitle>
               </CardHeader>
-              <CardContent>
-                <Textarea
-                  value={sessionNotes}
-                  onChange={(e) => setSessionNotes(e.target.value)}
-                  placeholder="Tell the mentor what you'd like to focus on during this session..."
-                  rows={4}
-                  className="resize-none h-30"
-                />
-                <p className="text-xs text-gray-500 mt-2">
+              <CardContent className="p-6">
+                <div className="relative">
+                  <Textarea
+                    value={sessionNotes}
+                    onChange={(e) => setSessionNotes(e.target.value)}
+                    placeholder="Tell the mentor what you'd like to focus on during this session..."
+                    rows={4}
+                    className="resize-none border-purple-200 rounded-xl bg-gradient-to-br from-white to-purple-50/30 focus:border-purple-400 focus:ring-purple-300 transition-all duration-200"
+                  />
+                  <div className="absolute bottom-3 right-3 text-xs text-slate-400">
+                    {sessionNotes.length}/500
+                  </div>
+                </div>
+                <p className="text-xs text-slate-500 mt-3 flex items-center gap-1 bg-purple-50 p-2 rounded-lg">
+                  <svg className="w-3 h-3 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
                   Tell the mentor what you'd like to focus on during this session
                 </p>
               </CardContent>
@@ -678,46 +730,64 @@ export default function BookMentorSessionPageClient({ session }: Props) {
           {/* Right Column - Booking Summary */}
           <div className="lg:col-span-1">
             <div className="sticky top-8">
-              <Card>
-                <CardContent className="p-6">
-                  {/* Session Header */}
-                  <div className="flex items-start space-x-4 mb-6">
-                    <img
-                      src={mentor.profilePicture || "/placeholder.svg?height=60&width=60"}
-                      alt={mentor.fullName}
-                      className="w-15 h-15 rounded-lg object-cover"
-                    />
-                    <div>
-                      <h3 className="font-semibold text-gray-900">
-                        {durationHours > 0 && `${durationHours} Hour`}
-                        {durationMinutes > 0 && ` ${durationMinutes} Minute`} Session
-                      </h3>
-                      <p className="text-sm text-gray-600">Carried out by {mentor.fullName}</p>
-                      {selectedSkill && <p className="text-sm text-gray-600 mt-1">Focus: {selectedSkill.skillName}</p>}
+              <Card className="bg-white/90 backdrop-blur-sm shadow-xl border-0 rounded-2xl overflow-hidden">
+                <CardContent className="p-0">
+                  <div className="bg-gradient-to-r from-indigo-500 to-purple-600 p-6 text-white">
+                    <div className="flex items-start space-x-4">
+                      <div className="relative">
+                        <img
+                          src={mentor.profilePicture || "/placeholder.svg?height=60&width=60"}
+                          alt={mentor.fullName}
+                          className="w-16 h-16 rounded-lg object-cover border-2 border-white/20"
+                        />
+                        <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-400 rounded-full border-2 border-white"></div>
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="font-bold text-lg">
+                          {durationHours > 0 && `${durationHours} Hour`}
+                          {durationMinutes > 0 && ` ${durationMinutes} Minute`} Session
+                        </h3>
+                        <p className="text-indigo-100 opacity-90">with {mentor.fullName}</p>
+                        {selectedSkill && <p className="text-indigo-100 text-sm mt-1 opacity-80">Focus: {selectedSkill.skillName}</p>}
+                      </div>
                     </div>
                   </div>
 
+                  <div className="p-6">
+
                   {/* Skill Selection Grid */}
                   <div className="mb-6">
-                    <Label className="text-sm font-medium mb-3 block">Select</Label>
-                    <div className="grid gap-2">
+                    <Label className="text-sm font-bold mb-4 text-slate-700 flex items-center gap-2">
+                      <svg className="w-4 h-4 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                      </svg>
+                      Select Skill
+                    </Label>
+                    <div className="grid gap-3">
                       {mentor.skills.map((skill) => (
                         <button
                           key={skill.id}
                           className={cn(
-                            "p-3 rounded-lg border text-left transition-all",
+                            "p-4 rounded-xl border text-left transition-all duration-200 relative group hover:scale-102",
                             selectedSkillId === skill.id
-                              ? "border-teal-600 bg-teal-50 text-teal-800"
-                              : "border-gray-200 bg-white hover:border-teal-300",
+                              ? "border-indigo-300 bg-gradient-to-r from-indigo-50 to-purple-50 text-indigo-800 shadow-lg"
+                              : "border-slate-200 bg-white hover:border-indigo-300 hover:shadow-md hover:bg-gradient-to-r hover:from-indigo-50/30 hover:to-purple-50/30",
                           )}
                           onClick={() => setSelectedSkillId(skill.id)}
                         >
                           <div className="flex justify-between items-center">
-                            <div>
-                              <div className="font-medium text-sm">{skill.skillName}</div>
-                              <div className="text-xs text-gray-600">{skill.ratePerHour} credits/hour</div>
+                            <div className="flex-1">
+                              <div className="font-semibold text-sm flex items-center gap-2">
+                                <div className={cn("w-2 h-2 rounded-full", selectedSkillId === skill.id ? "bg-indigo-500" : "bg-slate-300")}></div>
+                                {skill.skillName}
+                              </div>
+                              <div className="text-xs text-slate-600 mt-1 ml-4">{skill.ratePerHour} credits/hour</div>
                             </div>
-                            {selectedSkillId === skill.id && <CheckCircle className="w-4 h-4 text-teal-600" />}
+                            {selectedSkillId === skill.id && (
+                              <div className="absolute -top-1 -right-1 w-6 h-6 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full flex items-center justify-center">
+                                <CheckCircle className="w-4 h-4 text-white" />
+                              </div>
+                            )}
                           </div>
                         </button>
                       ))}
@@ -727,10 +797,15 @@ export default function BookMentorSessionPageClient({ session }: Props) {
                   {/* Session Details */}
                   <div className="space-y-4 mb-6">
                     {estimatedCost !== null && (
-                      <div className="p-4 bg-purple-50 rounded-lg">
+                      <div className="p-4 bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl border border-purple-100 shadow-sm">
                         <div className="flex items-center justify-between">
-                          <span className="text-purple-800 font-medium">Estimated Cost:</span>
-                          <span className="text-purple-900 font-bold text-lg">{estimatedCost} credits</span>
+                          <span className="text-purple-800 font-semibold flex items-center gap-2">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                            </svg>
+                            Estimated Cost:
+                          </span>
+                          <span className="text-purple-900 font-bold text-xl bg-white px-3 py-1 rounded-lg shadow-sm">{estimatedCost} credits</span>
                         </div>
                       </div>
                     )}
@@ -740,32 +815,36 @@ export default function BookMentorSessionPageClient({ session }: Props) {
                   <Button
                     onClick={handleBooking}
                     disabled={submitting || !selectedDate || !selectedTimeSlot || !sessionNotes.trim() || (selectedDate && isDateBlocked(selectedDate))}
-                    className="w-full gradient-bg text-white py-3"
+                    className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white py-4 rounded-xl font-bold text-lg shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-102 border-0"
                   >
                     {submitting ? (
                       <>
-                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                        <Loader2 className="w-5 h-5 animate-spin mr-2" />
                         Booking...
                       </>
                     ) : (
                       <>
+                        <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
                         Confirm & Book Session
-                        <ArrowRight className="w-4 h-4 ml-2" />
+                        <ArrowRight className="w-5 h-5 ml-2" />
                       </>
                     )}
                   </Button>
 
                   {/* Terms */}
-                  <div className="mt-4 text-xs text-gray-500 text-center">
+                  <div className="mt-4 text-xs text-slate-500 text-center bg-slate-50 p-3 rounded-lg">
                     By clicking "Confirm & Book Session", you agree to our{" "}
-                    <a href="#" className="text-teal-600 hover:underline">
+                    <a href="#" className="text-indigo-600 hover:text-indigo-800 hover:underline font-medium">
                       Terms of Service
                     </a>{" "}
                     and{" "}
-                    <a href="#" className="text-teal-600 hover:underline">
+                    <a href="#" className="text-indigo-600 hover:text-indigo-800 hover:underline font-medium">
                       Cancellation Policy
                     </a>
                     .
+                  </div>
                   </div>
                 </CardContent>
               </Card>

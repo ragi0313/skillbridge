@@ -90,12 +90,14 @@ export async function GET(
     const mentorData = { mentor: sessionData.mentor, mentorUser: sessionData.mentorUser }
 
     // Check if user is authorized (either learner or mentor)
+    // SECURITY: Return 404 instead of 403 to prevent information leakage
     const userId = session.id
     const isLearner = sessionData.learner?.userId === userId
     const isMentor = mentorData?.mentor?.userId === userId
     
     if (!isLearner && !isMentor) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
+      // Return 404 to hide session existence from unauthorized users
+      return NextResponse.json({ error: 'Session not found' }, { status: 404 })
     }
 
     // Calculate session timing information

@@ -15,10 +15,10 @@ export const users = pgTable("users", {
   hashedPassword: varchar("hashed_password", { length: 255 }).notNull(),
   role: varchar("role", { length: 20 }).notNull(),
   status: varchar("status", { length: 20 }).default("offline").notNull(),
-  stripeCustomerId: varchar("stripe_customer_id", { length: 255 }),
-  // ADD THESE NEW FIELDS:
-  stripeAccountId: varchar("stripe_account_id", { length: 255 }),
-  stripeAccountStatus: varchar("stripe_account_status", { length: 50 }).default("none"),
+  // Payment Provider Fields
+  xenditAccountId: varchar("xendit_account_id", { length: 255 }),
+  xenditAccountStatus: varchar("xendit_account_status", { length: 50 }).default("none"),
+  preferredPaymentProvider: varchar("preferred_payment_provider", { length: 20 }).default("xendit"),
   suspendedAt: timestamp("suspended_at", { withTimezone: true }),
   suspensionEndsAt: timestamp("suspension_ends_at", { withTimezone: true }),
   suspensionReason: text("suspension_reason"),
@@ -115,6 +115,8 @@ export const creditPurchases = pgTable("credit_purchases", {
   localAmount: numeric("local_amount", { precision: 10, scale: 2 }),
   localCurrency: varchar("local_currency", { length: 10 }),
   provider: varchar("provider", { length: 50 }).notNull(), // 'xendit', 'stripe'
+  xenditInvoiceId: varchar("xendit_invoice_id", { length: 255 }),
+  xenditPaymentId: varchar("xendit_payment_id", { length: 255 }),
   paymentStatus: varchar("payment_status", { length: 20 }).default("pending"), // 'pending', 'completed', 'failed', 'cancelled'
   paymentReference: varchar("payment_reference", { length: 255 }),
   externalId: varchar("external_id", { length: 255 }),
@@ -212,47 +214,27 @@ export const mentorPayouts = pgTable("mentor_payouts", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 })
 
-export const withdrawalRequests = pgTable("withdrawal_requests", {
+// CREDIT WITHDRAWALS
+export const creditWithdrawals = pgTable("credit_withdrawals", {
   id: serial("id").primaryKey(),
-  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }), // Changed from mentorId
-  requestedCredits: integer("requested_credits").notNull(),
-  requestedAmountUsd: numeric("requested_amount_usd", { precision: 10, scale: 2 }).notNull(),
-  feeAmount: numeric("fee_amount", { precision: 10, scale: 2 }).default("0").notNull(),
-  netAmount: numeric("net_amount", { precision: 10, scale: 2 }).notNull(),
-  localAmount: numeric("local_amount", { precision: 10, scale: 2 }),
-  localCurrency: varchar("local_currency", { length: 10 }),
-  status: varchar("status", { length: 20 }).default("pending"),
-  payoutMethod: varchar("payout_method", { length: 50 }).notNull(),
-  payoutDetails: json("payout_details"),
-  stripeAccountId: varchar("stripe_account_id", { length: 255 }),
-  stripeTransferId: varchar("stripe_transfer_id", { length: 255 }),
-  adminNotes: text("admin_notes"),
-  processedBy: integer("processed_by").references(() => users.id),
+  mentorId: integer("mentor_id").notNull().references(() => mentors.id, { onDelete: "cascade" }),
+  creditsAmount: integer("credits_amount").notNull(), // Credits being withdrawn
+  usdAmount: numeric("usd_amount", { precision: 10, scale: 2 }).notNull(), // USD equivalent
+  platformFee: numeric("platform_fee", { precision: 10, scale: 2 }).default("0").notNull(), // Platform fee in USD
+  netAmount: numeric("net_amount", { precision: 10, scale: 2 }).notNull(), // Amount after fees
+  status: varchar("status", { length: 20 }).default("pending"), // 'pending', 'processing', 'completed', 'failed', 'cancelled'
+  payoutMethod: varchar("payout_method", { length: 50 }).notNull(), // 'xendit_transfer', 'bank_account', etc.
+  xenditDisbursementId: varchar("xendit_disbursement_id", { length: 255 }), // Xendit disbursement ID
+  xenditChannelCode: varchar("xendit_channel_code", { length: 50 }), // Xendit channel (e.g., BPI, BDO)
+  bankDetails: json("bank_details"), // Store bank account info if needed
+  failureReason: text("failure_reason"), // If withdrawal fails
   processedAt: timestamp("processed_at", { withTimezone: true }),
   completedAt: timestamp("completed_at", { withTimezone: true }),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+  metadata: json("metadata"), // Additional data
+  ...timestamps,
 })
 
-// WITHDRAWAL REQUESTS
-export const withdrawalFees = pgTable("withdrawal_fees", {
-  id: serial("id").primaryKey(),
-  withdrawalId: integer("withdrawal_id").notNull().references(() => withdrawalRequests.id, { onDelete: "cascade" }),
-  feePercentage: numeric("fee_percentage", { precision: 5, scale: 3 }).notNull(),
-  feeAmount: numeric("fee_amount", { precision: 10, scale: 2 }).notNull(),
-  feeType: varchar("fee_type", { length: 50 }).default("platform_fee"),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-})
-
-export const withdrawalSecurityEvents = pgTable("withdrawal_security_events", {
-  id: serial("id").primaryKey(),
-  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  withdrawalId: integer("withdrawal_id").references(() => withdrawalRequests.id, { onDelete: "cascade" }),
-  eventType: varchar("event_type", { length: 100 }).notNull(),
-  riskLevel: varchar("risk_level", { length: 20 }).notNull(),
-  eventData: json("event_data"),
-  description: text("description"),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-})
 
 // NOTIFICATIONS
 export const notifications = pgTable("notifications", {
@@ -377,40 +359,123 @@ export const sessionVisibility = pgTable("session_visibility", {
   ...timestamps,
 })
 
+// CHAT SYSTEM TABLES
+export const conversations = pgTable("conversations", {
+  id: serial("id").primaryKey(),
+  mentorId: integer("mentor_id").notNull().references(() => mentors.id, { onDelete: "cascade" }),
+  learnerId: integer("learner_id").notNull().references(() => learners.id, { onDelete: "cascade" }),
+  lastMessageAt: timestamp("last_message_at", { withTimezone: true }),
+  mentorLastReadAt: timestamp("mentor_last_read_at", { withTimezone: true }),
+  learnerLastReadAt: timestamp("learner_last_read_at", { withTimezone: true }),
+  isActive: boolean("is_active").default(true).notNull(),
+  ...timestamps,
+})
+
+export const messages = pgTable("messages", {
+  id: serial("id").primaryKey(),
+  conversationId: integer("conversation_id").notNull().references(() => conversations.id, { onDelete: "cascade" }),
+  senderId: integer("sender_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  content: text("content"),
+  messageType: varchar("message_type", { length: 20 }).default("text").notNull(),
+  isEdited: boolean("is_edited").default(false).notNull(),
+  editedAt: timestamp("edited_at", { withTimezone: true }),
+  isDeleted: boolean("is_deleted").default(false).notNull(),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  replyToMessageId: integer("reply_to_message_id"), // Re move the reference here
+  ...timestamps,
+})
+export const messageAttachments = pgTable("message_attachments", {
+  id: serial("id").primaryKey(),
+  messageId: integer("message_id").notNull().references(() => messages.id, { onDelete: "cascade" }),
+  fileName: varchar("file_name", { length: 255 }).notNull(),
+  originalFileName: varchar("original_file_name", { length: 255 }).notNull(),
+  fileUrl: varchar("file_url", { length: 1024 }).notNull(), // Increased for blob URLs
+  fileSize: integer("file_size").notNull(), // in bytes
+  mimeType: varchar("mime_type", { length: 100 }).notNull(),
+  blobPathname: varchar("blob_pathname", { length: 512 }), // For cleanup purposes
+  ...timestamps,
+})
+
+// Per-user message deletions (soft delete per user)
+export const messageUserDeletions = pgTable("message_user_deletions", {
+  id: serial("id").primaryKey(),
+  messageId: integer("message_id").notNull().references(() => messages.id, { onDelete: "cascade" }),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }).notNull().defaultNow(),
+})
+
+// Per-user conversation deletions (soft delete per user)
+export const conversationUserDeletions = pgTable("conversation_user_deletions", {
+  id: serial("id").primaryKey(),
+  conversationId: integer("conversation_id").notNull().references(() => conversations.id, { onDelete: "cascade" }),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  deletedAt: timestamp("deleted_at", { withTimezone: true }).notNull().defaultNow(),
+})
+
+// CHAT RELATIONS
+export const conversationsRelations = relations(conversations, ({ one, many }) => ({
+  mentor: one(mentors, {
+    fields: [conversations.mentorId],
+    references: [mentors.id],
+  }),
+  learner: one(learners, {
+    fields: [conversations.learnerId],
+    references: [learners.id],
+  }),
+  messages: many(messages),
+  userDeletions: many(conversationUserDeletions),
+}))
+
+export const messagesRelations = relations(messages, ({ one, many }) => ({
+  conversation: one(conversations, {
+    fields: [messages.conversationId],
+    references: [conversations.id],
+  }),
+  sender: one(users, {
+    fields: [messages.senderId],
+    references: [users.id],
+  }),
+  replyToMessage: one(messages, {
+    fields: [messages.replyToMessageId],
+    references: [messages.id],
+  }),
+  attachments: many(messageAttachments),
+  userDeletions: many(messageUserDeletions),
+}))
+
+export const messageAttachmentsRelations = relations(messageAttachments, ({ one }) => ({
+  message: one(messages, {
+    fields: [messageAttachments.messageId],
+    references: [messages.id],
+  }),
+}))
+
+export const messageUserDeletionsRelations = relations(messageUserDeletions, ({ one }) => ({
+  message: one(messages, {
+    fields: [messageUserDeletions.messageId],
+    references: [messages.id],
+  }),
+  user: one(users, {
+    fields: [messageUserDeletions.userId],
+    references: [users.id],
+  }),
+}))
+
+export const conversationUserDeletionsRelations = relations(conversationUserDeletions, ({ one }) => ({
+  conversation: one(conversations, {
+    fields: [conversationUserDeletions.conversationId],
+    references: [conversations.id],
+  }),
+  user: one(users, {
+    fields: [conversationUserDeletions.userId],
+    references: [users.id],
+  }),
+}))
+
 export const usersRelations = relations(users, ({ many }) => ({
-  withdrawalRequests: many(withdrawalRequests),
-  withdrawalSecurityEvents: many(withdrawalSecurityEvents),
-}))
-
-export const withdrawalRequestsRelations = relations(withdrawalRequests, ({ one, many }) => ({
-  user: one(users, {
-    fields: [withdrawalRequests.userId],
-    references: [users.id],
-  }),
-  processedByUser: one(users, {
-    fields: [withdrawalRequests.processedBy],
-    references: [users.id],
-  }),
-  fees: many(withdrawalFees),
-  securityEvents: many(withdrawalSecurityEvents),
-}))
-
-export const withdrawalFeesRelations = relations(withdrawalFees, ({ one }) => ({
-  withdrawal: one(withdrawalRequests, {
-    fields: [withdrawalFees.withdrawalId],
-    references: [withdrawalRequests.id],
-  }),
-}))
-
-export const withdrawalSecurityEventsRelations = relations(withdrawalSecurityEvents, ({ one }) => ({
-  user: one(users, {
-    fields: [withdrawalSecurityEvents.userId],
-    references: [users.id],
-  }),
-  withdrawal: one(withdrawalRequests, {
-    fields: [withdrawalSecurityEvents.withdrawalId],
-    references: [withdrawalRequests.id],
-  }),
+  sentMessages: many(messages),
+  deletedMessages: many(messageUserDeletions),
+  deletedConversations: many(conversationUserDeletions),
 }))
 
 

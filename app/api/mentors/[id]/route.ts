@@ -85,6 +85,7 @@ export async function GET(
 
   return NextResponse.json({
     id: mentorId,
+    userId: mentorData.userId,
     firstName: userData.firstName,
     lastName: userData.lastName,
     profilePictureUrl: mentorData.profilePictureUrl,

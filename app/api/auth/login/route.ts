@@ -1,4 +1,4 @@
-// app/api/login/route.ts
+
 
 import { NextRequest, NextResponse } from "next/server"
 import { cookies } from "next/headers"
@@ -10,7 +10,7 @@ import { compare } from "bcryptjs"
 import { sign } from "jsonwebtoken"
 import { sendBlacklistNotificationEmail, sendSuspensionNotificationEmail } from "@/lib/email/userRestrictionMail"
 
-// Helper function to add timeout to promises
+
 const withTimeout = <T>(promise: Promise<T>, ms: number): Promise<T> => {
   return Promise.race([
     promise,

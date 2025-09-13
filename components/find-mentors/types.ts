@@ -1,5 +1,6 @@
 export interface Mentor {
   id: string
+  userId: number
   name: string
   title: string
   avatar: string

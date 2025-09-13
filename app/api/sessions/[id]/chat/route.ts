@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSession } from "@/lib/auth/getSession"
+import { withRateLimit } from "@/lib/middleware/rate-limit"
 
-// In-memory chat storage (in production, use a database)
 const sessionMessages: Record<string, any[]> = {}
 
-export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+async function handleGetChatMessages(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getSession()
     if (!session?.id) {
@@ -13,13 +13,19 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
     const { id } = await params
     const messages = sessionMessages[id] || []
-    
-    console.log(`[CHAT_API] GET /api/sessions/${id}/chat - returning ${messages.length} messages`)
+  
     return NextResponse.json({ messages })
   } catch (error) {
     console.error("[CHAT_API] Error fetching messages:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
+}
+
+// Apply rate limiting to GET requests (20 per minute max)
+export async function GET(request: NextRequest, context: any) {
+  return withRateLimit("chat", async (req: NextRequest) => {
+    return handleGetChatMessages(req, context)
+  })(request)
 }
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -54,7 +60,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     sessionMessages[id].push(newMessage)
     
-    console.log(`[CHAT_API] POST /api/sessions/${id}/chat - added message from ${senderName}. Total messages: ${sessionMessages[id].length}`)
     return NextResponse.json({ message: newMessage, success: true })
   } catch (error) {
     console.error("[CHAT_API] Error posting message:", error)

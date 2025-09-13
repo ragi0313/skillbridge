@@ -55,6 +55,7 @@ export async function GET(request: NextRequest) {
     // Select fields with conditional search score
     const selectFields = {
       id: mentors.id,
+      userId: users.id,
       name: sql<string>`CONCAT(${users.firstName}, ' ', ${users.lastName})`.as("name"),
       title: mentors.professionalTitle,
       bio: mentors.bio,
@@ -65,8 +66,8 @@ export async function GET(request: NextRequest) {
       languagesSpoken: sql<string>`MIN((${mentors.languagesSpoken})::text)`.as("languagesSpoken"),
       rating: sql<number>`COALESCE(AVG(${mentorReviews.rating}), 0)`.as("rating"),
       reviewCount: sql<number>`COUNT(${mentorReviews.id})`.as("reviewCount"),
-      skills: sql<string[]>`ARRAY_AGG(DISTINCT ${mentorSkills.skillName})`.as("skills"),
-      hourlyRate: sql<number>`ROUND(AVG(${mentorSkills.ratePerHour}))`.as("hourlyRate"),
+      skills: sql<string[]>`ARRAY_AGG(DISTINCT ${mentorSkills.skillName}) FILTER (WHERE ${mentorSkills.skillName} IS NOT NULL)`.as("skills"),
+      hourlyRate: sql<number>`COALESCE(ROUND(AVG(${mentorSkills.ratePerHour})), 0)`.as("hourlyRate"),
       // Always include search score, but it will be 0 when no search
       searchScore: search ? sql<number>`
         CASE 
@@ -136,6 +137,7 @@ export async function GET(request: NextRequest) {
       mentorsData = await finalQueryWithCategories
         .groupBy(
           mentors.id,
+          users.id,
           users.firstName,
           users.lastName,
           mentors.professionalTitle,
@@ -145,7 +147,8 @@ export async function GET(request: NextRequest) {
           mentors.timezone,
           mentors.yearsOfExperience
         )
-        .having(sql`COUNT(${mentorSkills.id}) > 0`)
+        // Remove HAVING clause to include mentors without skills
+        // .having(sql`COUNT(${mentorSkills.id}) > 0`)
     } else {
       // Query without category joins
       const queryWithoutCategories = db
@@ -165,6 +168,7 @@ export async function GET(request: NextRequest) {
       mentorsData = await finalQueryWithoutCategories
         .groupBy(
           mentors.id,
+          users.id,
           users.firstName,
           users.lastName,
           mentors.professionalTitle,
@@ -174,7 +178,8 @@ export async function GET(request: NextRequest) {
           mentors.timezone,
           mentors.yearsOfExperience
         )
-        .having(sql`COUNT(${mentorSkills.id}) > 0`)
+        // Remove HAVING clause to include mentors without skills
+        // .having(sql`COUNT(${mentorSkills.id}) > 0`)
     }
 
     console.log("API: Found mentors:", mentorsData.length)
@@ -214,13 +219,22 @@ export async function GET(request: NextRequest) {
         languages = []
       }
 
+      // Split the name for messages page compatibility
+      const nameParts = mentor.name.split(' ')
+      const firstName = nameParts[0] || ''
+      const lastName = nameParts.slice(1).join(' ') || ''
+
       const result = {
         id: mentor.id.toString(),
+        userId: mentor.userId, // Add userId for messages page
+        firstName, // Add firstName for messages page
+        lastName, // Add lastName for messages page
         name: mentor.name,
         title: mentor.title,
         bio: mentor.bio || "",
         avatar: mentor.profilePictureUrl,
-        profilePictureUrl: mentor.profilePictureUrl, 
+        profilePictureUrl: mentor.profilePictureUrl,
+        professionalTitle: mentor.title, // Add professionalTitle for messages page
         country: mentor.country,
         timezone: mentor.timezone,
         experience: mentor.experience,

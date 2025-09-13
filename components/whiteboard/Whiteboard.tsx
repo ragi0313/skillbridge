@@ -1,25 +1,24 @@
 "use client"
 
-import React, { useRef, useEffect, useState, useCallback } from 'react'
+import type React from "react"
+import { useRef, useEffect, useState, useCallback } from "react"
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
-import { 
-  Pen, 
-  Eraser, 
-  Square, 
-  Circle, 
-  Type, 
-  Undo, 
-  Redo, 
-  Trash2, 
+import Logo from "@/components/ui/logo"
+import {
+  Pen,
+  Eraser,
+  Square,
+  Circle,
+  Type,
+  Undo,
+  Redo,
+  Trash2,
   Download,
   Palette,
   Minus,
   MousePointer,
-  X
-} from 'lucide-react'
+  X,
+} from "lucide-react"
 
 interface WhiteboardProps {
   sessionId: string
@@ -43,25 +42,35 @@ interface DrawingPath {
 }
 
 interface DrawingAction {
-  type: 'draw' | 'erase' | 'clear'
+  type: "draw" | "erase" | "clear"
   path?: DrawingPath
   timestamp: number
   userId: string
 }
 
-type DrawingTool = 'pen' | 'eraser' | 'rectangle' | 'circle' | 'line' | 'text' | 'select'
+type DrawingTool = "pen" | "eraser" | "rectangle" | "circle" | "line" | "text" | "select"
 
 const COLORS = [
-  '#000000', // Black
-  '#FF0000', // Red  
-  '#00FF00', // Green
-  '#0000FF', // Blue
-  '#FFFF00', // Yellow
-  '#FF00FF', // Magenta
-  '#00FFFF', // Cyan
-  '#FFA500', // Orange
-  '#800080', // Purple
-  '#FFFFFF'  // White
+  "#000000", // Black
+  "#FFFFFF", // White
+  "#FF0000", // Red
+  "#00FF00", // Lime
+  "#0000FF", // Blue
+  "#FFFF00", // Yellow
+  "#FF00FF", // Magenta
+  "#00FFFF", // Cyan
+  "#800000", // Maroon
+  "#008000", // Green
+  "#000080", // Navy
+  "#808000", // Olive
+  "#800080", // Purple
+  "#008080", // Teal
+  "#C0C0C0", // Silver
+  "#808080", // Gray
+  "#FFA500", // Orange
+  "#FFC0CB", // Pink
+  "#A52A2A", // Brown
+  "#DDA0DD", // Plum
 ]
 
 const STROKE_WIDTHS = [2, 4, 6, 8, 12]
@@ -70,51 +79,51 @@ export function Whiteboard({ sessionId, userRole, currentUser, isVisible, onClos
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const contextRef = useRef<CanvasRenderingContext2D | null>(null)
   const [isDrawing, setIsDrawing] = useState(false)
-  const [currentTool, setCurrentTool] = useState<DrawingTool>('pen')
-  const [currentColor, setCurrentColor] = useState('#000000')
+  const [currentTool, setCurrentTool] = useState<DrawingTool>("pen")
+  const [currentColor, setCurrentColor] = useState("#000000")
   const [strokeWidth, setStrokeWidth] = useState(4)
   const [showColorPalette, setShowColorPalette] = useState(false)
   const [showStrokeWidthPicker, setShowStrokeWidthPicker] = useState(false)
-  
+
   // Drawing state
   const [paths, setPaths] = useState<DrawingPath[]>([])
   const [currentPath, setCurrentPath] = useState<DrawingPath | null>(null)
   const [undoStack, setUndoStack] = useState<DrawingPath[][]>([])
   const [redoStack, setRedoStack] = useState<DrawingPath[][]>([])
-  
+
   // Real-time sync
   const syncIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const lastSyncTime = useRef<number>(0)
-  
+
   const userId = `${userRole}-${currentUser.firstName} ${currentUser.lastName}`
 
   // Initialize canvas
   useEffect(() => {
     if (!isVisible) return
-    
+
     const canvas = canvasRef.current
     if (!canvas) return
 
-    const context = canvas.getContext('2d')
+    const context = canvas.getContext("2d")
     if (!context) return
 
     // Set canvas size
     const rect = canvas.getBoundingClientRect()
     canvas.width = rect.width * window.devicePixelRatio
     canvas.height = rect.height * window.devicePixelRatio
-    
+
     context.scale(window.devicePixelRatio, window.devicePixelRatio)
-    context.lineCap = 'round'
-    context.lineJoin = 'round'
-    
+    context.lineCap = "round"
+    context.lineJoin = "round"
+
     contextRef.current = context
-    
+
     // Load existing drawings
     loadWhiteboardData()
-    
+
     // Start sync interval
     syncIntervalRef.current = setInterval(syncWhiteboardData, 2000)
-    
+
     return () => {
       if (syncIntervalRef.current) {
         clearInterval(syncIntervalRef.current)
@@ -134,7 +143,7 @@ export function Whiteboard({ sessionId, userRole, currentUser, isVisible, onClos
         lastSyncTime.current = Date.now()
       }
     } catch (error) {
-      console.error('[WHITEBOARD] Failed to load whiteboard data:', error)
+      console.error("[WHITEBOARD] Failed to load whiteboard data:", error)
     }
   }, [sessionId])
 
@@ -145,12 +154,12 @@ export function Whiteboard({ sessionId, userRole, currentUser, isVisible, onClos
       if (response.ok) {
         const data = await response.json()
         const newPaths = data.paths || []
-        
+
         if (newPaths.length > 0) {
-          setPaths(prevPaths => {
+          setPaths((prevPaths) => {
             const updatedPaths = [...prevPaths]
             newPaths.forEach((newPath: DrawingPath) => {
-              const existingIndex = updatedPaths.findIndex(p => p.id === newPath.id)
+              const existingIndex = updatedPaths.findIndex((p) => p.id === newPath.id)
               if (existingIndex === -1) {
                 updatedPaths.push(newPath)
               }
@@ -162,7 +171,7 @@ export function Whiteboard({ sessionId, userRole, currentUser, isVisible, onClos
         }
       }
     } catch (error) {
-      console.error('[WHITEBOARD] Failed to sync whiteboard data:', error)
+      console.error("[WHITEBOARD] Failed to sync whiteboard data:", error)
     }
   }, [sessionId])
 
@@ -174,164 +183,173 @@ export function Whiteboard({ sessionId, userRole, currentUser, isVisible, onClos
 
     // Clear canvas
     context.clearRect(0, 0, canvas.width, canvas.height)
-    
+
     // Draw all paths
-    pathsToRedraw.forEach(path => {
+    pathsToRedraw.forEach((path) => {
       if (path.points.length < 2) return
-      
+
       context.beginPath()
       context.strokeStyle = path.color
       context.lineWidth = path.strokeWidth
-      context.globalCompositeOperation = path.tool === 'eraser' ? 'destination-out' : 'source-over'
-      
+      context.globalCompositeOperation = path.tool === "eraser" ? "destination-out" : "source-over"
+
       context.moveTo(path.points[0].x, path.points[0].y)
-      path.points.forEach(point => {
+      path.points.forEach((point) => {
         context.lineTo(point.x, point.y)
       })
       context.stroke()
     })
-    
+
     // Reset composite operation
-    context.globalCompositeOperation = 'source-over'
+    context.globalCompositeOperation = "source-over"
   }, [])
 
   // Save drawing action to API
-  const saveDrawingAction = useCallback(async (action: DrawingAction) => {
-    try {
-      await fetch(`/api/sessions/${sessionId}/whiteboard`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(action)
-      })
-    } catch (error) {
-      console.error('[WHITEBOARD] Failed to save drawing action:', error)
-    }
-  }, [sessionId])
+  const saveDrawingAction = useCallback(
+    async (action: DrawingAction) => {
+      try {
+        await fetch(`/api/sessions/${sessionId}/whiteboard`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(action),
+        })
+      } catch (error) {
+        console.error("[WHITEBOARD] Failed to save drawing action:", error)
+      }
+    },
+    [sessionId],
+  )
 
   // Mouse event handlers
-  const startDrawing = useCallback((event: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!contextRef.current || !canvasRef.current) return
-    
-    const rect = canvasRef.current.getBoundingClientRect()
-    const x = event.clientX - rect.left
-    const y = event.clientY - rect.top
-    
-    setIsDrawing(true)
-    
-    const newPath: DrawingPath = {
-      id: `${userId}-${Date.now()}`,
-      tool: currentTool,
-      points: [{ x, y }],
-      color: currentColor,
-      strokeWidth: strokeWidth,
-      timestamp: Date.now(),
-      userId: userId
-    }
-    
-    setCurrentPath(newPath)
-    
-    // Start drawing
-    const context = contextRef.current
-    context.beginPath()
-    context.strokeStyle = currentColor
-    context.lineWidth = strokeWidth
-    context.globalCompositeOperation = currentTool === 'eraser' ? 'destination-out' : 'source-over'
-    context.moveTo(x, y)
-  }, [currentTool, currentColor, strokeWidth, userId])
+  const startDrawing = useCallback(
+    (event: React.MouseEvent<HTMLCanvasElement>) => {
+      if (!contextRef.current || !canvasRef.current) return
 
-  const draw = useCallback((event: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isDrawing || !contextRef.current || !canvasRef.current || !currentPath) return
-    
-    const rect = canvasRef.current.getBoundingClientRect()
-    const x = event.clientX - rect.left
-    const y = event.clientY - rect.top
-    
-    // Add point to current path
-    const updatedPath = {
-      ...currentPath,
-      points: [...currentPath.points, { x, y }]
-    }
-    setCurrentPath(updatedPath)
-    
-    // Draw line
-    const context = contextRef.current
-    context.lineTo(x, y)
-    context.stroke()
-  }, [isDrawing, currentPath])
+      const rect = canvasRef.current.getBoundingClientRect()
+      const x = event.clientX - rect.left
+      const y = event.clientY - rect.top
+
+      setIsDrawing(true)
+
+      const newPath: DrawingPath = {
+        id: `${userId}-${Date.now()}`,
+        tool: currentTool,
+        points: [{ x, y }],
+        color: currentColor,
+        strokeWidth: strokeWidth,
+        timestamp: Date.now(),
+        userId: userId,
+      }
+
+      setCurrentPath(newPath)
+
+      // Start drawing
+      const context = contextRef.current
+      context.beginPath()
+      context.strokeStyle = currentColor
+      context.lineWidth = strokeWidth
+      context.globalCompositeOperation = currentTool === "eraser" ? "destination-out" : "source-over"
+      context.moveTo(x, y)
+    },
+    [currentTool, currentColor, strokeWidth, userId],
+  )
+
+  const draw = useCallback(
+    (event: React.MouseEvent<HTMLCanvasElement>) => {
+      if (!isDrawing || !contextRef.current || !canvasRef.current || !currentPath) return
+
+      const rect = canvasRef.current.getBoundingClientRect()
+      const x = event.clientX - rect.left
+      const y = event.clientY - rect.top
+
+      // Add point to current path
+      const updatedPath = {
+        ...currentPath,
+        points: [...currentPath.points, { x, y }],
+      }
+      setCurrentPath(updatedPath)
+
+      // Draw line
+      const context = contextRef.current
+      context.lineTo(x, y)
+      context.stroke()
+    },
+    [isDrawing, currentPath],
+  )
 
   const stopDrawing = useCallback(() => {
     if (!isDrawing || !currentPath) return
-    
+
     setIsDrawing(false)
-    
+
     // Add completed path to paths array
-    setPaths(prevPaths => {
+    setPaths((prevPaths) => {
       const newPaths = [...prevPaths, currentPath]
       // Save to history for undo/redo
-      setUndoStack(prevUndo => [...prevUndo, prevPaths])
+      setUndoStack((prevUndo) => [...prevUndo, prevPaths])
       setRedoStack([]) // Clear redo stack
       return newPaths
     })
-    
+
     // Save to API
     saveDrawingAction({
-      type: 'draw',
+      type: "draw",
       path: currentPath,
       timestamp: Date.now(),
-      userId: userId
+      userId: userId,
     })
-    
+
     setCurrentPath(null)
-    
+
     // Reset context
     if (contextRef.current) {
-      contextRef.current.globalCompositeOperation = 'source-over'
+      contextRef.current.globalCompositeOperation = "source-over"
     }
   }, [isDrawing, currentPath, saveDrawingAction, userId])
 
   // Tool handlers
   const handleUndo = useCallback(() => {
     if (undoStack.length === 0) return
-    
+
     const previousState = undoStack[undoStack.length - 1]
-    setUndoStack(prev => prev.slice(0, -1))
-    setRedoStack(prev => [...prev, paths])
+    setUndoStack((prev) => prev.slice(0, -1))
+    setRedoStack((prev) => [...prev, paths])
     setPaths(previousState)
     redrawCanvas(previousState)
   }, [undoStack, paths, redrawCanvas])
 
   const handleRedo = useCallback(() => {
     if (redoStack.length === 0) return
-    
+
     const nextState = redoStack[redoStack.length - 1]
-    setRedoStack(prev => prev.slice(0, -1))
-    setUndoStack(prev => [...prev, paths])
+    setRedoStack((prev) => prev.slice(0, -1))
+    setUndoStack((prev) => [...prev, paths])
     setPaths(nextState)
     redrawCanvas(nextState)
   }, [redoStack, paths, redrawCanvas])
 
   const handleClear = useCallback(async () => {
-    setUndoStack(prev => [...prev, paths])
+    setUndoStack((prev) => [...prev, paths])
     setRedoStack([])
     setPaths([])
-    
+
     if (contextRef.current && canvasRef.current) {
       contextRef.current.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height)
     }
-    
+
     // Save clear action to API
     await saveDrawingAction({
-      type: 'clear',
+      type: "clear",
       timestamp: Date.now(),
-      userId: userId
+      userId: userId,
     })
   }, [paths, saveDrawingAction, userId])
 
   const handleDownload = useCallback(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-    
-    const link = document.createElement('a')
+
+    const link = document.createElement("a")
     link.download = `whiteboard-session-${sessionId}.png`
     link.href = canvas.toDataURL()
     link.click()
@@ -340,25 +358,27 @@ export function Whiteboard({ sessionId, userRole, currentUser, isVisible, onClos
   if (!isVisible) return null
 
   return (
-    <div className="absolute inset-4 bg-gray-900/95 backdrop-blur-xl border border-gray-700/50 rounded-2xl flex flex-col z-50 shadow-2xl">
+    <div className="absolute inset-0 bg-gray-900/95 backdrop-blur-xl border border-gray-700/50 rounded-2xl flex flex-col z-50 shadow-2xl overflow-hidden">
       {/* Modern Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-700/50 bg-gradient-to-r from-gray-800/50 to-gray-900/50">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-700/50 bg-gradient-to-r from-gray-800/50 to-gray-900/50 flex-shrink-0">
         <div className="flex items-center space-x-4">
           <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center">
             <Pen className="h-5 w-5 text-white" />
           </div>
           <div>
-            <h3 className="text-xl font-bold text-white">Collaborative Whiteboard</h3>
+            <div className="pointer-events-none">
+              <Logo textColor="text-white" fontSize="text-lg" imageWidth={24} imageHeight={24} />
+            </div>
             <div className="flex items-center space-x-2 mt-1">
               <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
               <span className="text-green-300 text-sm font-medium">Live Session</span>
             </div>
           </div>
         </div>
-        <Button 
-          variant="ghost" 
-          size="sm" 
-          onClick={onClose} 
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onClose}
           className="text-gray-400 hover:text-white hover:bg-gray-700/50 rounded-xl p-2 transition-all duration-200"
         >
           <X className="h-5 w-5" />
@@ -366,86 +386,86 @@ export function Whiteboard({ sessionId, userRole, currentUser, isVisible, onClos
       </div>
 
       {/* Modern Toolbar */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-700/50 bg-gray-800/30">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-700/50 bg-gray-800/30 flex-shrink-0">
         <div className="flex items-center space-x-3">
           {/* Drawing Tools Group */}
           <div className="flex items-center bg-gray-800/50 rounded-xl p-1 border border-gray-700/30">
             <Button
-              onClick={() => setCurrentTool('select')}
+              onClick={() => setCurrentTool("select")}
               className={`p-2.5 rounded-lg transition-all duration-200 ${
-                currentTool === 'select'
-                  ? 'bg-blue-600 text-white shadow-lg'
-                  : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
+                currentTool === "select"
+                  ? "bg-blue-600 text-white shadow-lg"
+                  : "text-gray-400 hover:text-white hover:bg-gray-700/50"
               }`}
               title="Select"
             >
               <MousePointer className="h-4 w-4" />
             </Button>
             <Button
-              onClick={() => setCurrentTool('pen')}
+              onClick={() => setCurrentTool("pen")}
               className={`p-2.5 rounded-lg transition-all duration-200 ${
-                currentTool === 'pen'
-                  ? 'bg-blue-600 text-white shadow-lg'
-                  : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
+                currentTool === "pen"
+                  ? "bg-blue-600 text-white shadow-lg"
+                  : "text-gray-400 hover:text-white hover:bg-gray-700/50"
               }`}
               title="Pen"
             >
               <Pen className="h-4 w-4" />
             </Button>
             <Button
-              onClick={() => setCurrentTool('eraser')}
+              onClick={() => setCurrentTool("eraser")}
               className={`p-2.5 rounded-lg transition-all duration-200 ${
-                currentTool === 'eraser'
-                  ? 'bg-red-600 text-white shadow-lg'
-                  : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
+                currentTool === "eraser"
+                  ? "bg-red-600 text-white shadow-lg"
+                  : "text-gray-400 hover:text-white hover:bg-gray-700/50"
               }`}
               title="Eraser"
             >
               <Eraser className="h-4 w-4" />
             </Button>
           </div>
-          
+
           {/* Shapes Group */}
           <div className="flex items-center bg-gray-800/50 rounded-xl p-1 border border-gray-700/30">
             <Button
-              onClick={() => setCurrentTool('line')}
+              onClick={() => setCurrentTool("line")}
               className={`p-2.5 rounded-lg transition-all duration-200 ${
-                currentTool === 'line'
-                  ? 'bg-blue-600 text-white shadow-lg'
-                  : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
+                currentTool === "line"
+                  ? "bg-blue-600 text-white shadow-lg"
+                  : "text-gray-400 hover:text-white hover:bg-gray-700/50"
               }`}
               title="Line"
             >
               <Minus className="h-4 w-4" />
             </Button>
             <Button
-              onClick={() => setCurrentTool('rectangle')}
+              onClick={() => setCurrentTool("rectangle")}
               className={`p-2.5 rounded-lg transition-all duration-200 ${
-                currentTool === 'rectangle'
-                  ? 'bg-blue-600 text-white shadow-lg'
-                  : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
+                currentTool === "rectangle"
+                  ? "bg-blue-600 text-white shadow-lg"
+                  : "text-gray-400 hover:text-white hover:bg-gray-700/50"
               }`}
               title="Rectangle"
             >
               <Square className="h-4 w-4" />
             </Button>
             <Button
-              onClick={() => setCurrentTool('circle')}
+              onClick={() => setCurrentTool("circle")}
               className={`p-2.5 rounded-lg transition-all duration-200 ${
-                currentTool === 'circle'
-                  ? 'bg-blue-600 text-white shadow-lg'
-                  : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
+                currentTool === "circle"
+                  ? "bg-blue-600 text-white shadow-lg"
+                  : "text-gray-400 hover:text-white hover:bg-gray-700/50"
               }`}
               title="Circle"
             >
               <Circle className="h-4 w-4" />
             </Button>
             <Button
-              onClick={() => setCurrentTool('text')}
+              onClick={() => setCurrentTool("text")}
               className={`p-2.5 rounded-lg transition-all duration-200 ${
-                currentTool === 'text'
-                  ? 'bg-blue-600 text-white shadow-lg'
-                  : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
+                currentTool === "text"
+                  ? "bg-blue-600 text-white shadow-lg"
+                  : "text-gray-400 hover:text-white hover:bg-gray-700/50"
               }`}
               title="Text"
             >
@@ -463,31 +483,37 @@ export function Whiteboard({ sessionId, userRole, currentUser, isVisible, onClos
               title="Color Palette"
             >
               <Palette className="h-4 w-4 text-gray-300" />
-              <div 
+              <div
                 className="w-6 h-6 rounded-lg border-2 border-gray-600/50 shadow-sm"
                 style={{ backgroundColor: currentColor }}
               />
             </Button>
             {showColorPalette && (
-              <div className="absolute top-12 left-0 bg-gray-800/95 backdrop-blur-lg border border-gray-700/50 rounded-xl p-4 shadow-2xl z-10">
-                <h4 className="text-white font-medium mb-3 text-sm">Color Palette</h4>
-                <div className="grid grid-cols-5 gap-2.5">
-                  {COLORS.map(color => (
+              <div className="absolute top-12 left-0 bg-white border border-gray-300 rounded-xl p-4 shadow-2xl z-10 min-w-[280px]">
+                <h4 className="text-gray-800 font-medium mb-3 text-sm">Colors</h4>
+                <div className="grid grid-cols-10 gap-1 mb-3">
+                  {COLORS.map((color) => (
                     <button
                       key={color}
-                      className={`w-10 h-10 rounded-xl border-2 transition-all duration-200 hover:scale-110 ${
-                        currentColor === color 
-                          ? 'border-blue-400 ring-2 ring-blue-400/30 shadow-lg' 
-                          : 'border-gray-600/50 hover:border-gray-500'
-                      }`}
+                      className={`w-7 h-7 border transition-all duration-200 hover:scale-110 ${
+                        currentColor === color
+                          ? "border-2 border-blue-500 ring-2 ring-blue-200 shadow-lg"
+                          : "border border-gray-400 hover:border-gray-600"
+                      } ${color === "#FFFFFF" ? "border-gray-400" : ""}`}
                       style={{ backgroundColor: color }}
                       onClick={() => {
                         setCurrentColor(color)
                         setShowColorPalette(false)
                       }}
-                      title={color === '#FFFFFF' ? 'White' : color === '#000000' ? 'Black' : color}
+                      title={color}
                     />
                   ))}
+                </div>
+                <div className="flex items-center justify-between pt-2 border-t border-gray-200">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-8 h-8 border border-gray-400 rounded" style={{ backgroundColor: currentColor }} />
+                    <span className="text-xs text-gray-600 font-mono">{currentColor.toUpperCase()}</span>
+                  </div>
                 </div>
               </div>
             )}
@@ -500,7 +526,7 @@ export function Whiteboard({ sessionId, userRole, currentUser, isVisible, onClos
               className="bg-gray-800/50 border border-gray-700/30 rounded-xl p-2.5 flex items-center space-x-3 hover:bg-gray-700/50 transition-all duration-200 min-w-[80px]"
               title="Brush Size"
             >
-              <div 
+              <div
                 className="rounded-full bg-gray-300 shadow-sm"
                 style={{ width: `${Math.min(strokeWidth + 2, 14)}px`, height: `${Math.min(strokeWidth + 2, 14)}px` }}
               />
@@ -510,27 +536,25 @@ export function Whiteboard({ sessionId, userRole, currentUser, isVisible, onClos
               <div className="absolute top-12 left-0 bg-gray-800/95 backdrop-blur-lg border border-gray-700/50 rounded-xl p-4 shadow-2xl z-10">
                 <h4 className="text-white font-medium mb-3 text-sm">Brush Size</h4>
                 <div className="space-y-3">
-                  {STROKE_WIDTHS.map(width => (
+                  {STROKE_WIDTHS.map((width) => (
                     <button
                       key={width}
                       className={`flex items-center space-x-4 w-full px-3 py-2.5 rounded-lg transition-all duration-200 hover:bg-gray-700/50 ${
-                        strokeWidth === width ? 'bg-blue-600/20 border border-blue-600/30' : 'hover:bg-gray-700/30'
+                        strokeWidth === width ? "bg-blue-600/20 border border-blue-600/30" : "hover:bg-gray-700/30"
                       }`}
                       onClick={() => {
                         setStrokeWidth(width)
                         setShowStrokeWidthPicker(false)
                       }}
                     >
-                      <div 
-                        className={`rounded-full shadow-sm ${
-                          strokeWidth === width ? 'bg-blue-400' : 'bg-gray-300'
-                        }`}
+                      <div
+                        className={`rounded-full shadow-sm ${strokeWidth === width ? "bg-blue-400" : "bg-gray-300"}`}
                         style={{ width: `${width + 2}px`, height: `${width + 2}px` }}
                       />
-                      <span className={`text-sm font-medium ${
-                        strokeWidth === width ? 'text-blue-300' : 'text-gray-300'
-                      }`}>
-                        {width}px {width <= 2 ? '(Fine)' : width <= 6 ? '(Medium)' : '(Bold)'}
+                      <span
+                        className={`text-sm font-medium ${strokeWidth === width ? "text-blue-300" : "text-gray-300"}`}
+                      >
+                        {width}px {width <= 2 ? "(Fine)" : width <= 6 ? "(Medium)" : "(Bold)"}
                       </span>
                     </button>
                   ))}
@@ -548,8 +572,8 @@ export function Whiteboard({ sessionId, userRole, currentUser, isVisible, onClos
               disabled={undoStack.length === 0}
               className={`p-2.5 rounded-lg transition-all duration-200 ${
                 undoStack.length === 0
-                  ? 'text-gray-600 cursor-not-allowed'
-                  : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
+                  ? "text-gray-600 cursor-not-allowed"
+                  : "text-gray-400 hover:text-white hover:bg-gray-700/50"
               }`}
               title="Undo"
             >
@@ -560,15 +584,15 @@ export function Whiteboard({ sessionId, userRole, currentUser, isVisible, onClos
               disabled={redoStack.length === 0}
               className={`p-2.5 rounded-lg transition-all duration-200 ${
                 redoStack.length === 0
-                  ? 'text-gray-600 cursor-not-allowed'
-                  : 'text-gray-400 hover:text-white hover:bg-gray-700/50'
+                  ? "text-gray-600 cursor-not-allowed"
+                  : "text-gray-400 hover:text-white hover:bg-gray-700/50"
               }`}
               title="Redo"
             >
               <Redo className="h-4 w-4" />
             </Button>
           </div>
-          
+
           <Button
             onClick={handleClear}
             className="bg-red-600/10 border border-red-600/30 text-red-400 hover:bg-red-600/20 hover:text-red-300 p-2.5 rounded-xl transition-all duration-200"
@@ -576,10 +600,10 @@ export function Whiteboard({ sessionId, userRole, currentUser, isVisible, onClos
           >
             <Trash2 className="h-4 w-4" />
           </Button>
-          
+
           <Button
             onClick={handleDownload}
-            className="bg-gray-800/50 border border-gray-700/30 text-gray-400 hover:text-white hover:bg-gray-700/50 p-2.5 rounded-xl transition-all duration-200"
+            className="bg-gray-800/50 border border-gray-700/50 text-gray-400 hover:text-white hover:bg-gray-700/50 p-2.5 rounded-xl transition-all duration-200"
             title="Download"
           >
             <Download className="h-4 w-4" />
@@ -588,7 +612,7 @@ export function Whiteboard({ sessionId, userRole, currentUser, isVisible, onClos
       </div>
 
       {/* Modern Canvas */}
-      <div className="flex-1 p-6">
+      <div className="flex-1 p-6 min-h-0">
         <div className="relative w-full h-full">
           <canvas
             ref={canvasRef}
@@ -598,18 +622,23 @@ export function Whiteboard({ sessionId, userRole, currentUser, isVisible, onClos
             onMouseUp={stopDrawing}
             onMouseLeave={stopDrawing}
           />
-          
+
           {/* Canvas Overlay Info */}
           <div className="absolute top-4 right-4 bg-gray-900/80 backdrop-blur-sm text-white px-3 py-2 rounded-xl text-sm font-medium flex items-center space-x-2">
-            <div className={`w-2 h-2 rounded-full ${
-              currentTool === 'pen' ? 'bg-blue-400' :
-              currentTool === 'eraser' ? 'bg-red-400' :
-              currentTool === 'select' ? 'bg-gray-400' :
-              'bg-purple-400'
-            }`} />
+            <div
+              className={`w-2 h-2 rounded-full ${
+                currentTool === "pen"
+                  ? "bg-blue-400"
+                  : currentTool === "eraser"
+                    ? "bg-red-400"
+                    : currentTool === "select"
+                      ? "bg-gray-400"
+                      : "bg-purple-400"
+              }`}
+            />
             <span className="capitalize">{currentTool}</span>
           </div>
-          
+
           {/* Loading State */}
           {!canvasRef.current && (
             <div className="absolute inset-0 bg-gray-100 rounded-2xl flex items-center justify-center">

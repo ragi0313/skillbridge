@@ -46,7 +46,8 @@ export async function POST(
     const isMentor = mentor?.userId === userId
     
     if (!isLearner && !isMentor) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
+      // SECURITY: Return 404 to hide session existence from unauthorized users
+      return NextResponse.json({ error: 'Session not found' }, { status: 404 })
     }
 
     // Check if session can be joined

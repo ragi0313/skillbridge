@@ -39,6 +39,8 @@ export async function POST(
       skipLeaveForRefresh: false
     }
 
+    const now = new Date()
+
     // Update leave timestamp and connection duration with atomic transaction
     await db.transaction(async (tx) => {
       // Get session and verify user authorization
@@ -92,8 +94,6 @@ export async function POST(
         console.log(`[LEAVE_API] Session ${sessionId} is already in terminal state: ${sessionData.status}`)
         return
       }
-
-      const now = new Date()
       const updateData: any = {}
 
       // Get current join/leave timestamps

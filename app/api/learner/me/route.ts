@@ -37,7 +37,7 @@ export async function GET() {
     return NextResponse.json({ error: "Learner not found" }, { status: 404 })
   }
 
-  return NextResponse.json({ learner: result })
+  return NextResponse.json(result)
 }
 
 export async function PATCH(req: Request) {

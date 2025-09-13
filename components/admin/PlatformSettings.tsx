@@ -24,10 +24,8 @@ export default function PlatformSettings() {
 
     // Financial Settings
     commissionRate: 15,
-    minimumWithdrawal: 50,
-    withdrawalFee: 2.5,
-    supportedCurrencies: ["USD", "EUR", "GBP"],
-    creditToUSDRate: 0.33,
+    supportedCurrencies: ["PHP", "USD", "EUR"],
+    creditToPHPRate: 11.2,
 
     // Feature Toggles
     groupSessionsEnabled: true,
@@ -229,39 +227,18 @@ export default function PlatformSettings() {
                   <p className="text-xs text-gray-500 mt-1">Percentage taken from mentor earnings</p>
                 </div>
                 <div>
-                  <Label htmlFor="credit-rate">Credit to USD Rate</Label>
+                  <Label htmlFor="credit-rate">Credit to PHP Rate</Label>
                   <Input
                     id="credit-rate"
                     type="number"
-                    step="0.01"
-                    value={settings.creditToUSDRate}
-                    onChange={(e) => handleSettingChange("creditToUSDRate", Number.parseFloat(e.target.value))}
+                    step="0.1"
+                    value={settings.creditToPHPRate}
+                    onChange={(e) => handleSettingChange("creditToPHPRate", Number.parseFloat(e.target.value))}
                   />
-                  <p className="text-xs text-gray-500 mt-1">1 credit = ${settings.creditToUSDRate} USD</p>
+                  <p className="text-xs text-gray-500 mt-1">1 credit = ₱{settings.creditToPHPRate} PHP</p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="min-withdrawal">Minimum Withdrawal ($)</Label>
-                  <Input
-                    id="min-withdrawal"
-                    type="number"
-                    value={settings.minimumWithdrawal}
-                    onChange={(e) => handleSettingChange("minimumWithdrawal", Number.parseFloat(e.target.value))}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="withdrawal-fee">Withdrawal Fee (%)</Label>
-                  <Input
-                    id="withdrawal-fee"
-                    type="number"
-                    step="0.1"
-                    value={settings.withdrawalFee}
-                    onChange={(e) => handleSettingChange("withdrawalFee", Number.parseFloat(e.target.value))}
-                  />
-                </div>
-              </div>
 
               <div>
                 <Label>Supported Currencies</Label>

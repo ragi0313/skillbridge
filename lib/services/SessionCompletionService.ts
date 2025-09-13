@@ -1,12 +1,20 @@
 import { db } from '@/db'
-import { bookingSessions, learners, mentors, creditTransactions, mentorPayouts, notifications } from '@/db/schema'
+import { bookingSessions, learners, mentors, creditTransactions, mentorPayouts, notifications, creditPurchases } from '@/db/schema'
 import { eq } from 'drizzle-orm'
+import { Xendit } from 'xendit-node'
+
+const xendit = new Xendit({ 
+  secretKey: process.env.XENDIT_SECRET_KEY! 
+})
+
+// Use the correct way to access Payout API (Xendit calls disbursements "Payouts")
+const Payout = xendit.Payout
 
 export interface SessionCompletionOptions {
   sessionId: number
   reason: 'completed' | 'cancelled' | 'technical_issues' | 'time_expired' | 'user_ended'
   completedBy: 'user' | 'system_timer' | 'admin'
-  userId?: number // User who initiated completion (if applicable)
+  userId?: number
 }
 
 export interface SessionCompletionResult {
@@ -16,12 +24,14 @@ export interface SessionCompletionResult {
   paymentProcessed: boolean
   refundProcessed: boolean
   mentorEarnings: number
+  platformFeePhp: number
   alreadyCompleted: boolean
 }
 
 class SessionCompletionService {
   private readonly MIN_DURATION_FOR_PAYMENT = 5 * 60 * 1000 // 5 minutes
   private readonly MENTOR_FEE_PERCENTAGE = 0.8 // 80% to mentor, 20% platform fee
+  private readonly CREDITS_TO_PHP_RATE = 11.2 // 1 credit = ₱11.2
 
   async completeSession(options: SessionCompletionOptions): Promise<SessionCompletionResult> {
     const { sessionId, reason, completedBy } = options
@@ -72,6 +82,7 @@ class SessionCompletionService {
           paymentProcessed: false,
           refundProcessed: false,
           mentorEarnings: 0,
+          platformFeePhp: 0,
           alreadyCompleted: true
         }
       }
@@ -112,14 +123,75 @@ class SessionCompletionService {
         .where(eq(bookingSessions.id, sessionId))
 
       let mentorEarnings = 0
+      let platformFeePhp = 0
+      let platformFeeChargeId: string | null = null
       const notificationData = []
 
-      // Process mentor payment
+      // Process mentor payment AND platform fee capture
       if (shouldProcessPayment && sessionRecord.totalCostCredits > 0) {
         mentorEarnings = Math.floor(sessionRecord.totalCostCredits * this.MENTOR_FEE_PERCENTAGE)
-        const platformFee = sessionRecord.totalCostCredits - mentorEarnings
+        const platformFeeCredits = sessionRecord.totalCostCredits - mentorEarnings
+        platformFeePhp = platformFeeCredits * this.CREDITS_TO_PHP_RATE
 
-        // Add credits to mentor balance
+        // PLATFORM FEE COLLECTION: Transfer platform fee to Xendit account
+        console.log(`[PLATFORM_FEE] Creating Xendit payout for ₱${platformFeePhp} platform fee from session ${sessionId}`)
+        
+        try {
+          // Create a payout to transfer platform fee to your business account
+          const platformFeePayout = await Payout.createPayout({
+            idempotencyKey: `platform_fee_${sessionId}_${Date.now()}`,
+            data: {
+              referenceId: `platform_fee_${sessionId}_${Date.now()}`,
+              channelCode: `PH_${process.env.XENDIT_PLATFORM_BANK_CODE || 'BPI'}`,
+              channelProperties: {
+                accountHolderName: process.env.XENDIT_PLATFORM_ACCOUNT_NAME || 'SkillBridge Inc',
+                accountNumber: process.env.XENDIT_PLATFORM_ACCOUNT_NUMBER!,
+              },
+              description: `Platform fee - Session ${sessionId} (${platformFeeCredits} credits)`,
+              amount: Math.round(platformFeePhp * 100) / 100,
+              currency: 'PHP',
+              metadata: {
+                sessionId: sessionId.toString(),
+                platformFeeCredits: platformFeeCredits.toString(),
+                platformFeePhp: platformFeePhp.toString(),
+                type: 'platform_fee',
+                learnerUserId: sessionRecord.learner_user_id.toString(),
+                mentorUserId: sessionRecord.mentor_user_id.toString(),
+              }
+            }
+          })
+          
+          console.log(`[PLATFORM_FEE] Platform fee payout created: ${platformFeePayout.id} for ₱${platformFeePhp}`)
+          
+          // Record the Xendit payout ID for reference
+          platformFeeChargeId = platformFeePayout.id
+        } catch (xenditError) {
+          console.error(`[PLATFORM_FEE] Failed to create Xendit payout for platform fee:`, xenditError)
+          // Continue processing - don't fail the session completion
+        }
+        
+        // Record platform fee capture for accounting purposes
+        await tx.insert(creditTransactions).values({
+          userId: 1, // Platform/admin user ID  
+          type: 'platform_fee_collected',
+          direction: 'debit', // Credits leaving the system, converted to cash
+          amount: platformFeeCredits,
+          balanceBefore: 0,
+          balanceAfter: 0, 
+          relatedSessionId: sessionId,
+          description: `Platform fee collected: ₱${platformFeePhp} from session ${sessionId}${platformFeeChargeId ? ` (Xendit: ${platformFeeChargeId})` : ''}`,
+          metadata: {
+            platformFeePhp,
+            mentorEarnings,
+            originalAmount: sessionRecord.totalCostCredits,
+            feePercentage: 20,
+            xenditPayoutId: platformFeeChargeId,
+            xenditAmountPhp: Math.round(platformFeePhp), // PHP amount
+            note: platformFeeChargeId ? 'Platform fee transferred via Xendit' : 'Platform fee recorded (Xendit payout failed)'
+          },
+        })
+
+        // Add credits to mentor balance (unchanged)
         await tx
           .update(mentors)
           .set({
@@ -127,18 +199,18 @@ class SessionCompletionService {
           })
           .where(eq(mentors.id, sessionRecord.mentor_id))
 
-        // Record mentor payout
+        // Record mentor payout (unchanged)
         await tx.insert(mentorPayouts).values({
           mentorId: sessionRecord.mentor_id,
           sessionId: sessionId,
           earnedCredits: mentorEarnings,
-          platformFeeCredits: platformFee,
+          platformFeeCredits: platformFeeCredits,
           feePercentage: 20,
           status: 'released',
           releasedAt: now,
         })
 
-        // Record credit transaction
+        // Record credit transaction for mentor (unchanged)
         await tx.insert(creditTransactions).values({
           userId: sessionRecord.mentor_user_id,
           type: 'session_payment',
@@ -149,7 +221,8 @@ class SessionCompletionService {
           relatedSessionId: sessionId,
           description: `Payment for ${finalStatus} session ${sessionId} (${Math.round(Math.min(learnerDuration, mentorDuration) / 60000)} minutes)`,
           metadata: { 
-            platformFee, 
+            platformFeeCredits,
+            platformFeePhp,
             originalAmount: sessionRecord.totalCostCredits,
             completedBy,
             learnerDurationMs: learnerDuration,
@@ -157,6 +230,7 @@ class SessionCompletionService {
             completionReason: reason
           },
         })
+
 
         notificationData.push({
           userId: sessionRecord.mentor_user_id,
@@ -168,7 +242,7 @@ class SessionCompletionService {
         })
       }
 
-      // Process refund
+      // Process refund (unchanged)
       if (shouldRefundLearner && sessionRecord.escrowCredits > 0) {
         await tx
           .update(learners)
@@ -236,6 +310,7 @@ class SessionCompletionService {
         paymentProcessed: shouldProcessPayment,
         refundProcessed: shouldRefundLearner,
         mentorEarnings,
+        platformFeePhp,
         alreadyCompleted: false
       }
     })

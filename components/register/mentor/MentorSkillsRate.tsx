@@ -75,7 +75,7 @@ export default function MentorSkillsRates({ formData, setFormData, nextStep, pre
                 />
                 {newRate && (
                   <div className="absolute -bottom-6 left-0 text-sm text-green-600 font-medium">
-                    ≈ ${(Number.parseInt(newRate) / 5).toFixed(2)} USD
+                    ≈ ₱{(Number.parseInt(newRate) * 11.2).toFixed(0)} PHP
                   </div>
                 )}
               </div>
@@ -117,7 +117,7 @@ export default function MentorSkillsRates({ formData, setFormData, nextStep, pre
                         {skill.rate} credits/hour
                       </span>
                       <span className="flex items-center text-green-600 font-medium">
-                        <DollarSign className="w-4 h-4 mr-1" />${(skill.rate / 5).toFixed(2)} USD
+                        <DollarSign className="w-4 h-4 mr-1" />₱{(skill.rate * 11.2).toFixed(0)} PHP
                       </span>
                     </div>
                   </div>

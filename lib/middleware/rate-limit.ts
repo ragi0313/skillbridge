@@ -131,11 +131,10 @@ function defaultKeyGenerator(req: NextRequest): string {
 
 // Predefined rate limit configurations
 export const rateLimitConfigs = {
-  // Very strict for auth endpoints
   auth: {
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    maxRequests: 5, // 5 attempts per 15 minutes
-    message: "Too many authentication attempts. Please try again in 15 minutes."
+    windowMs: 10 * 60 * 1000, 
+    maxRequests: 7, 
+    message: "Too many authentication attempts. Please try again in 10 minutes."
   },
   
   // Strict for password reset
@@ -178,6 +177,13 @@ export const rateLimitConfigs = {
     windowMs: 10 * 60 * 1000, // 10 minutes
     maxRequests: 50, // 50 admin operations per 10 minutes
     message: "Admin operation rate limit exceeded."
+  },
+
+  // Chat polling rate limit - allow frequent polling for real-time chat
+  chat: {
+    windowMs: 60 * 1000, // 1 minute
+    maxRequests: 120, // 120 requests per minute (1 every 500ms)
+    message: "Chat polling too frequent. Please slow down."
   }
 }
 
@@ -189,6 +195,7 @@ export const createGeneralRateLimit = () => createRateLimit(rateLimitConfigs.gen
 export const createUploadRateLimit = () => createRateLimit(rateLimitConfigs.upload)
 export const createBookingRateLimit = () => createRateLimit(rateLimitConfigs.booking)
 export const createAdminRateLimit = () => createRateLimit(rateLimitConfigs.admin)
+export const createChatRateLimit = () => createRateLimit(rateLimitConfigs.chat)
 
 // Wrapper function to easily apply rate limiting to API routes
 export function withRateLimit(

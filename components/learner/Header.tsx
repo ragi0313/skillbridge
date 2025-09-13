@@ -76,7 +76,7 @@ export function LearnerHeader() {
           }
           
           const learnerData = await safeJsonParse(learnerRes)
-          setLearner(learnerData.learner)
+          setLearner(learnerData)
   
           if (!notificationsRes.ok) {
             throw new Error(`Failed to fetch notifications: ${notificationsRes.status}`)
@@ -296,6 +296,16 @@ export function LearnerHeader() {
                 Browse Mentors
               </Link>
               <Link
+                href="/learner/messages"
+                className={`px-3 py-2 rounded-md text-md font-medium transition-colors ${
+                  pathname === "/learner/messages"
+                    ? "bg-blue-600 text-white"
+                    : "text-gray-300 hover:text-white hover:bg-gray-800"
+                }`}
+              >
+                Messages
+              </Link>
+              <Link
                 href="/pricing"
                 className={`px-3 py-2 rounded-md text-md font-medium transition-colors ${
                   pathname === "/pricing"
@@ -495,12 +505,6 @@ export function LearnerHeader() {
                   <Link href="/learner/settings">
                     <Settings className="mr-2 h-4 w-4" />
                     Settings
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild className="text-gray-300 hover:bg-gray-700 hover:text-white cursor-pointer">
-                  <Link href="/learner/withdrawals">
-                    <CreditCard className="mr-2 h-4 w-4" />
-                    Withdrawals
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator className="bg-gray-700" />

@@ -25,9 +25,11 @@ import {
 } from "@/components/ui/select"
 import BookingWidget from "@/components/mentors/BookingWidget"
 import UnifiedHeader from "@/components/UnifiedHeader"
+import { MessageMentorButtonWrapper as MessageMentorButton } from "@/components/mentors/MessageMentorButtonWrapper"
 
 interface MentorData {
   id: number
+  userId: number
   firstName: string
   lastName: string
   profilePictureUrl: string
@@ -220,9 +222,12 @@ export default async function MentorProfilePage({
                         </p>
                       </div>
                     </div>
-                    <Button variant="outline" className="cursor-pointer bg-transparent">
-                      Message
-                    </Button>
+                    <MessageMentorButton
+                      mentorUserId={mentor.userId}
+                      mentorName={`${mentor.firstName} ${mentor.lastName}`}
+                      mentorAvatar={mentor.profilePictureUrl}
+                      className="cursor-pointer bg-transparent"
+                    />
                   </div>
                 </CardContent>
               </Card>

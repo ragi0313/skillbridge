@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react"
 import { Card, CardHeader, CardContent } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
-import { Clock, User, VideoIcon, AlertCircle, Users, CheckCircle, Camera, Mic, MicOff, CameraOff, Volume2 } from "lucide-react"
+import { Clock, User, VideoIcon, AlertCircle, Users, CheckCircle, Camera, Mic, MicOff, CameraOff } from "lucide-react"
 import { SessionCountdown } from "@/components/session/SessionCountdown"
 import { useRealTimeTimer, formatTimeRemaining } from "@/lib/hooks/useRealTimeTimer"
 
@@ -53,7 +53,6 @@ export function WaitingRoom({
   // Media testing state
   const [cameraEnabled, setCameraEnabled] = useState(false)
   const [microphoneEnabled, setMicrophoneEnabled] = useState(false)
-  const [audioPlaybackEnabled, setAudioPlaybackEnabled] = useState(false)
   const [mediaError, setMediaError] = useState<string>("")
   const [audioLevel, setAudioLevel] = useState(0)
   
@@ -108,7 +107,6 @@ export function WaitingRoom({
         microphoneStreamRef.current = null
         setMicrophoneEnabled(false)
         setAudioLevel(0)
-        setAudioPlaybackEnabled(false)
       }
       
       if (audioContextRef.current) {
@@ -261,11 +259,19 @@ export function WaitingRoom({
       setMediaError("")
       
       if (microphoneEnabled) {
-        // Turn off microphone
+        // Turn off microphone and audio playback
         if (microphoneStreamRef.current) {
           microphoneStreamRef.current.getAudioTracks().forEach(track => track.stop())
         }
         if (audioContextRef.current) {
+          // Disconnect from speakers before closing
+          try {
+            if (gainNodeRef.current) {
+              gainNodeRef.current.disconnect(audioContextRef.current.destination)
+            }
+          } catch (disconnectError) {
+            console.log("Node already disconnected")
+          }
           audioContextRef.current.close()
         }
         setMicrophoneEnabled(false)
@@ -273,6 +279,7 @@ export function WaitingRoom({
         microphoneStreamRef.current = null
         audioContextRef.current = null
         analyserRef.current = null
+        gainNodeRef.current = null
       } else {
         // Turn on microphone
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -318,6 +325,26 @@ export function WaitingRoom({
         
         setMicrophoneEnabled(true)
         
+        // Automatically enable audio playback for testing (brief duration)
+        try {
+          gainNode.connect(audioContext.destination)
+          setMediaError("Audio playback enabled briefly for testing. Use headphones to avoid feedback.")
+          
+          // Automatically disconnect after 3 seconds to prevent feedback
+          setTimeout(() => {
+            try {
+              if (gainNodeRef.current && audioContextRef.current) {
+                gainNodeRef.current.disconnect(audioContextRef.current.destination)
+                setMediaError("")
+              }
+            } catch (disconnectError) {
+              console.log("Node already disconnected")
+            }
+          }, 3000)
+        } catch (playbackError) {
+          console.log("Audio playback setup failed:", playbackError)
+        }
+        
         const updateAudioLevel = () => {
           if (analyserRef.current && microphoneStreamRef.current) {
             const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount)
@@ -345,43 +372,6 @@ export function WaitingRoom({
     }
   }, [microphoneEnabled])
 
-  // Audio playback toggle
-  const toggleAudioPlayback = useCallback(() => {
-    if (!microphoneEnabled || !gainNodeRef.current || !audioContextRef.current) {
-      setMediaError("Please enable microphone first to test audio playback.")
-      return
-    }
-
-    try {
-      if (audioPlaybackEnabled) {
-        try {
-          gainNodeRef.current.disconnect(audioContextRef.current.destination)
-        } catch (disconnectError) {
-          console.log("Node already disconnected")
-        }
-        setAudioPlaybackEnabled(false)
-      } else {
-        gainNodeRef.current.connect(audioContextRef.current.destination)
-        setAudioPlaybackEnabled(true)
-        setMediaError("Audio playback enabled. Use headphones to avoid feedback.")
-        setTimeout(() => {
-          if (gainNodeRef.current && audioContextRef.current) {
-            try {
-              gainNodeRef.current.disconnect(audioContextRef.current.destination)
-            } catch (disconnectError) {
-              console.log("Node already disconnected")
-            }
-            setAudioPlaybackEnabled(false)
-            setMediaError("")
-          }
-        }, 5000)
-      }
-    } catch (error) {
-      console.error("Audio playback error:", error)
-      setMediaError("Unable to control audio playback.")
-      setAudioPlaybackEnabled(false)
-    }
-  }, [microphoneEnabled, audioPlaybackEnabled])
 
   // Session status polling with proper cleanup
   useEffect(() => {
@@ -734,7 +724,7 @@ export function WaitingRoom({
                         {microphoneEnabled && (
                           <div className="flex items-center space-x-1">
                             <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse" />
-                            <Volume2 className="h-4 w-4 text-blue-400" />
+                            <span className="text-xs text-blue-400 font-medium">Active</span>
                           </div>
                         )}
                       </div>
@@ -776,18 +766,13 @@ export function WaitingRoom({
                       </div>
                     </div>
                     
-                    <div className="flex items-center justify-between pt-2 border-t border-slate-700/50">
-                      <span className="text-xs text-slate-300 font-medium">Audio playback test (use headphones)</span>
-                      <Button
-                        onClick={toggleAudioPlayback}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-300 transform hover:scale-105 ${
-                          audioPlaybackEnabled
-                            ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-600/25'
-                            : 'bg-slate-700 hover:bg-slate-600 text-white border border-slate-600 shadow-lg'
-                        }`}
-                      >
-                        {audioPlaybackEnabled ? 'Stop Playback' : 'Test Audio'}
-                      </Button>
+                    
+                    <div className="pt-2 border-t border-slate-700/50">
+                      <p className="text-xs text-slate-300 font-medium text-center">
+                        Audio playback is automatically tested for 3 seconds when microphone is enabled.
+                        <br />
+                        <span className="text-slate-400">Use headphones to avoid feedback.</span>
+                      </p>
                     </div>
                   </div>
                 )}

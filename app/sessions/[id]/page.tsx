@@ -24,6 +24,7 @@ interface CurrentUser {
   firstName: string
   lastName: string
   profilePictureUrl?: string | null
+  id: number
 }
 
 interface OtherParticipant {
@@ -31,6 +32,7 @@ interface OtherParticipant {
   lastName: string
   profilePictureUrl?: string | null
   title: string
+  id: number
 }
 
 interface AgoraConfig {
@@ -81,9 +83,14 @@ export default function SessionPage() {
       
       if (!response.ok) {
         if (response.status === 404) {
-          throw new Error("Session not found")
+          // Session doesn't exist or user is not authorized (returns same 404 for security)
+          throw new Error("Session not found or you don't have permission to access it")
         } else if (response.status === 403) {
-          throw new Error("You are not authorized to access this session")
+          throw new Error("You are not authorized to access this session") 
+        } else if (response.status === 401) {
+          // User not logged in - redirect to login
+          router.push("/login")
+          return
         } else {
           const errorData = await response.json().catch(() => ({}))
           throw new Error(errorData.error || "Failed to load session data")

@@ -3,12 +3,23 @@ import { sessionMonitorService } from '@/lib/services/SessionMonitorService'
 import { db } from '@/db'
 import { bookingSessions } from '@/db/schema'
 import { eq, and, or, lt, isNull, sql } from 'drizzle-orm'
+import { validateCronAuth, cronRateLimiter, createCronResponse } from '@/lib/middleware/rate-limit-cron'
 
 export async function GET(request: NextRequest) {
-  // Verify this is called from a cron job or authorized source
-  const authHeader = request.headers.get('authorization')
-  if (process.env.NODE_ENV === 'production' && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  // Validate authentication and rate limiting
+  const authResult = validateCronAuth(request)
+  if (!authResult.isValid) {
+    const rateLimit = cronRateLimiter.isRateLimited(request)
+    return new Response(JSON.stringify({ 
+      error: authResult.error,
+      timestamp: new Date().toISOString()
+    }), { 
+      status: 401,
+      headers: {
+        'X-RateLimit-Remaining': String(rateLimit.remaining),
+        'X-RateLimit-Reset': String(Math.ceil(rateLimit.resetTime / 1000))
+      }
+    })
   }
 
   try {
@@ -33,13 +44,14 @@ export async function GET(request: NextRequest) {
 
     console.log(`[SESSION_CLEANUP] Cleanup completed:`, processed)
 
-    return NextResponse.json({
+    const rateLimit = cronRateLimiter.isRateLimited(request)
+    return createCronResponse({
       success: true,
       message: 'Session cleanup completed successfully',
       processed,
       totalStats: afterStats,
       timestamp: new Date().toISOString()
-    })
+    }, rateLimit)
   } catch (error) {
     console.error('[SESSION_CLEANUP] Error running session cleanup:', error)
     return NextResponse.json({ 
@@ -98,11 +110,9 @@ async function runCompleteSessionCleanup(): Promise<void> {
   try {
     // Run all the monitoring processes in sequence
     await monitor['processExpiredBookings']?.()
-    await monitor['processPendingAtStartTime']?.()
-    await monitor['updateToUpcomingStatus']?.()
+    await monitor['updateToUpcoming']?.()
     await monitor['detectNoShows']?.()
-    await monitor['completeSessionsAtEndTime']?.()
-    await monitor['handleStuckSessions']?.()
+    await monitor['completeFinishedSessions']?.()
     
     console.log('[SESSION_CLEANUP] All monitoring processes completed')
   } catch (error) {

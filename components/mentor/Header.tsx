@@ -298,14 +298,24 @@ export default function MentorHeader() {
                 Sessions
               </Link>
               <Link
-                href="/mentor/settings"
+                href="/mentor/withdrawals"
                 className={`px-3 py-2 rounded-md text-md font-medium transition-colors ${
-                  pathname === "/mentor/settings"
+                  pathname === "/mentor/withdrawals"
                     ? "gradient-bg text-white"
                     : "text-gray-300 hover:text-white hover:bg-gray-800"
                 }`}
               >
-                Settings
+                Withdrawals
+              </Link>
+              <Link
+                href="/mentor/messages"
+                className={`px-3 py-2 rounded-md text-md font-medium transition-colors ${
+                  pathname === "/mentor/messages"
+                    ? "gradient-bg text-white"
+                    : "text-gray-300 hover:text-white hover:bg-gray-800"
+                }`}
+              >
+                Messages
               </Link>
             </nav>
           </div>
@@ -523,15 +533,6 @@ export default function MentorHeader() {
                     Settings
                   </Link>
                 </DropdownMenuItem>
-                <DropdownMenuItem
-                  asChild
-                  className="text-gray-300 hover:bg-gray-700 hover:text-white cursor-pointer"
-                >
-                  <Link href="/mentor/withdrawals">
-                    <CreditCard className="mr-2 h-4 w-4" />
-                    Withdrawals
-                  </Link>
-                </DropdownMenuItem>
                 <DropdownMenuSeparator className="bg-gray-700" />
                 <DropdownMenuItem
                   onClick={handleLogout}
@@ -582,6 +583,17 @@ export default function MentorHeader() {
                 onClick={() => setIsMenuOpen(false)}
               >
                 Sessions
+              </Link>
+              <Link
+                href="/mentor/withdrawals"
+                className={`block px-3 py-2 rounded-md text-base font-medium ${
+                  pathname === "/mentor/withdrawals"
+                    ? "bg-blue-600 text-white"
+                    : "text-gray-300 hover:text-white hover:bg-gray-800"
+                }`}
+                onClick={() => setIsMenuOpen(false)}
+              >
+                Withdrawals
               </Link>
               <Link
                 href="/mentor/settings"

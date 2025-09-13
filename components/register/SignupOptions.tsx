@@ -23,7 +23,6 @@ export default function SignupOptions() {
           "Monetize your expertise",
           "Set your own rates",
           "Mentor at your own pace and time",
-          "Easy and secure withdrawals",
         ]}
         icon={Users}
         gradient="bg-gradient-to-r from-purple-500 to-pink-500"

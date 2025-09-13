@@ -4,9 +4,10 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { CheckCircle, Star, Award, Users, MapPin, Languages, Coins } from "lucide-react"
+import { CheckCircle, Star, Award, Users, MapPin, Languages, Coins, MessageCircle } from "lucide-react"
 import type { Mentor } from "./types"
 import Link from "next/link"
+import { MessageMentorButtonWrapper as MessageMentorButton } from "@/components/mentors/MessageMentorButtonWrapper"
 
 interface MentorCardProps {
   mentor: Mentor
@@ -156,6 +157,13 @@ const formattedBio = mentor.bio
                     View Profile
                   </Button>
                 </Link>
+                
+                <MessageMentorButton
+                  mentorUserId={mentor.userId}
+                  mentorName={mentor.name}
+                  mentorAvatar={mentor.avatar}
+                  className="w-[80%] ml-6 bg-white text-purple-600 border-2 border-purple-600 font-semibold py-4 rounded-lg shadow-lg hover:shadow-xl hover:bg-purple-50 transition-all duration-200 transform hover:scale-105"
+                />
               </div>
             </div>
           </div>

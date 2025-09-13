@@ -48,7 +48,7 @@ export default function PricingPage() {
     setLoading(true)
     setSelectedPackage(packageId)
     try {
-      const res = await fetch("/api/stripe/checkout", {
+      const res = await fetch("/api/xendit/checkout", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -56,8 +56,8 @@ export default function PricingPage() {
         body: JSON.stringify({ packageId }),
       })
       const data = await res.json()
-      if (data.url) {
-        router.push(data.url)
+      if (data.invoiceUrl) {
+        router.push(data.invoiceUrl)
       } else {
         alert("Checkout failed.")
       }
@@ -166,14 +166,14 @@ export default function PricingPage() {
                             <span className="text-2xl text-gray-600 ml-2">Credits</span>
                           </div>
                           <div className="flex items-center justify-center space-x-3">
-                            <span className="text-4xl font-bold text-gray-900">${pack.price}</span>
+                            <span className="text-4xl font-bold text-gray-900">₱{pack.price}</span>
                             {pack.discount > 0 && (
-                              <span className="text-2xl text-gray-400 line-through">${pack.originalPrice}</span>
+                              <span className="text-2xl text-gray-400 line-through">₱{pack.originalPrice}</span>
                             )}
                           </div>
                           {pack.discount > 0 && (
                             <div className="text-lg text-green-600 font-semibold mt-2">
-                              Save ${pack.originalPrice - pack.price} ({pack.discount}% off)
+                              Save ₱{pack.originalPrice - pack.price} ({pack.discount}% off)
                             </div>
                           )}
                         </div>

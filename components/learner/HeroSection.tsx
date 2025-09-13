@@ -18,7 +18,7 @@ export default function HeroSection() {
         const res = await fetch("/api/learner/me")
         if (!res.ok) return
         const data = await res.json()
-        setLearnerName(data.learner.firstName)
+        setLearnerName(data.firstName)
       } catch (err) {
         console.error("Failed to load learner data", err)
       }

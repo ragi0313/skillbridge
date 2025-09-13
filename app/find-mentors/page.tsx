@@ -89,9 +89,12 @@ export default function FindMentorsPage() {
         const response = await fetch(url)
         if (response.ok) {
           const data = await response.json()
-          console.log("Frontend: Received mentors:", data.length)
-          setMentors(data)
-          setFilteredMentors(data)
+          console.log("Frontend: Received mentors:", data)
+          // Ensure data is an array
+          const mentorsArray = Array.isArray(data) ? data : []
+          console.log("Frontend: Mentor count:", mentorsArray.length)
+          setMentors(mentorsArray)
+          setFilteredMentors(mentorsArray)
         } else {
           console.error("Failed to fetch mentors:", response.status, response.statusText)
           setMentors([])
@@ -132,6 +135,11 @@ export default function FindMentorsPage() {
 
   // Client-side filtering for remaining filters (skills, languages, countries, etc.)
   useEffect(() => {
+    if (!Array.isArray(mentors)) {
+      setFilteredMentors([])
+      return
+    }
+    
     let filtered = mentors.filter((mentor) => {
       const skills = Array.isArray(mentor.skills) ? mentor.skills : []
       const languages = Array.isArray(mentor.languages) ? mentor.languages : []
@@ -183,21 +191,21 @@ export default function FindMentorsPage() {
     setCurrentPage(1)
   }, [mentors, selectedSkills, selectedLanguages, selectedCountries, experienceRange, rateRange, ratingRange, sortBy])
 
-  const totalPages = Math.ceil(filteredMentors.length / MENTORS_PER_PAGE)
+  const totalPages = Math.ceil((filteredMentors || []).length / MENTORS_PER_PAGE)
   const startIndex = (currentPage - 1) * MENTORS_PER_PAGE
-  const paginatedMentors = filteredMentors.slice(startIndex, startIndex + MENTORS_PER_PAGE)
+  const paginatedMentors = Array.isArray(filteredMentors) ? filteredMentors.slice(startIndex, startIndex + MENTORS_PER_PAGE) : []
   const handleLoadMore = () => setCurrentPage((prev) => prev + 1)
 
   // Extract unique values for filters from current mentors
-  const allSkills = Array.from(
+  const allSkills = Array.isArray(mentors) ? Array.from(
     new Set(mentors.flatMap((mentor) => (Array.isArray(mentor.skills) ? mentor.skills : []))),
-  ).filter(Boolean)
+  ).filter(Boolean) : []
 
-  const allLanguages = Array.from(
+  const allLanguages = Array.isArray(mentors) ? Array.from(
     new Set(mentors.flatMap((mentor) => (Array.isArray(mentor.languages) ? mentor.languages : []))),
-  ).filter(Boolean)
+  ).filter(Boolean) : []
 
-  const allCountries = Array.from(new Set(mentors.map((mentor) => mentor.country))).filter(Boolean)
+  const allCountries = Array.isArray(mentors) ? Array.from(new Set(mentors.map((mentor) => mentor.country))).filter(Boolean) : []
 
   const clearAllFilters = () => {
     setSearchQuery("")

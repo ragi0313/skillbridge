@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { getSafeCache, type SafeCacheStore } from "@/lib/cache/redis-safe"
 
 interface RateLimitConfig {
   windowMs: number // Time window in milliseconds
@@ -10,25 +11,10 @@ interface RateLimitConfig {
   message?: string // Custom error message
 }
 
-interface RateLimitStore {
-  [key: string]: {
-    count: number
-    resetTime: number
-  }
+interface RateLimitEntry {
+  count: number
+  resetTime: number
 }
-
-// Simple in-memory store (in production, use Redis or similar)
-const store: RateLimitStore = {}
-
-// Cleanup old entries every 5 minutes
-setInterval(() => {
-  const now = Date.now()
-  Object.keys(store).forEach(key => {
-    if (store[key].resetTime < now) {
-      delete store[key]
-    }
-  })
-}, 5 * 60 * 1000)
 
 export function createRateLimit(config: RateLimitConfig) {
   const {
@@ -41,75 +27,106 @@ export function createRateLimit(config: RateLimitConfig) {
     message = "Too many requests, please try again later."
   } = config
 
+  const cache = getSafeCache()
+
   return async function rateLimitMiddleware(
     req: NextRequest,
     handler: (req: NextRequest) => Promise<NextResponse>
   ): Promise<NextResponse> {
-    const key = keyGenerator(req)
+    const key = `rate_limit:${keyGenerator(req)}`
     const now = Date.now()
-    const windowStart = now - windowMs
-
-    // Initialize or get existing entry
-    if (!store[key] || store[key].resetTime < now) {
-      store[key] = {
-        count: 0,
-        resetTime: now + windowMs
-      }
-    }
-
-    const entry = store[key]
-
-    // Check if limit is exceeded
-    if (entry.count >= maxRequests) {
-      onLimitReached?.(req)
-      
-      const retryAfter = Math.ceil((entry.resetTime - now) / 1000)
-      
-      return NextResponse.json(
-        { 
-          error: message,
-          retryAfter: retryAfter
-        },
-        { 
-          status: 429,
-          headers: {
-            'X-RateLimit-Limit': maxRequests.toString(),
-            'X-RateLimit-Remaining': '0',
-            'X-RateLimit-Reset': entry.resetTime.toString(),
-            'Retry-After': retryAfter.toString()
-          }
-        }
-      )
-    }
-
-    // Increment counter before executing handler (unless configured otherwise)
-    if (!skipSuccessfulRequests && !skipFailedRequests) {
-      entry.count++
-    }
 
     try {
-      const response = await handler(req)
-      
-      // Handle conditional counting
-      if (skipSuccessfulRequests && response.status < 400) {
-        entry.count--
-      } else if (skipFailedRequests && response.status >= 400) {
-        entry.count--
+      // Get current entry from cache
+      const entryJson = await cache.get(key)
+      let entry: RateLimitEntry
+
+      if (entryJson) {
+        entry = JSON.parse(entryJson)
+        // Check if window has expired
+        if (entry.resetTime < now) {
+          entry = {
+            count: 0,
+            resetTime: now + windowMs
+          }
+        }
+      } else {
+        // Create new entry
+        entry = {
+          count: 0,
+          resetTime: now + windowMs
+        }
       }
 
-      // Add rate limit headers to response
-      const remaining = Math.max(0, maxRequests - entry.count)
-      response.headers.set('X-RateLimit-Limit', maxRequests.toString())
-      response.headers.set('X-RateLimit-Remaining', remaining.toString())
-      response.headers.set('X-RateLimit-Reset', entry.resetTime.toString())
+      // Check if limit is exceeded
+      if (entry.count >= maxRequests) {
+        onLimitReached?.(req)
 
-      return response
-    } catch (error) {
-      // If handler throws, decide whether to count this request
-      if (skipFailedRequests) {
-        entry.count--
+        const retryAfter = Math.ceil((entry.resetTime - now) / 1000)
+
+        return NextResponse.json(
+          {
+            error: message,
+            retryAfter: retryAfter
+          },
+          {
+            status: 429,
+            headers: {
+              'X-RateLimit-Limit': maxRequests.toString(),
+              'X-RateLimit-Remaining': '0',
+              'X-RateLimit-Reset': entry.resetTime.toString(),
+              'Retry-After': retryAfter.toString()
+            }
+          }
+        )
       }
-      throw error
+
+      // Increment counter before executing handler (unless configured otherwise)
+      if (!skipSuccessfulRequests && !skipFailedRequests) {
+        entry.count++
+        await cache.set(key, JSON.stringify(entry), entry.resetTime - now)
+      }
+
+      try {
+        const response = await handler(req)
+
+        // Handle conditional counting
+        if (skipSuccessfulRequests && response.status < 400) {
+          entry.count = Math.max(0, entry.count - 1)
+          await cache.set(key, JSON.stringify(entry), entry.resetTime - now)
+        } else if (skipFailedRequests && response.status >= 400) {
+          entry.count = Math.max(0, entry.count - 1)
+          await cache.set(key, JSON.stringify(entry), entry.resetTime - now)
+        } else if (skipSuccessfulRequests || skipFailedRequests) {
+          // Update count if we didn't increment earlier
+          entry.count++
+          await cache.set(key, JSON.stringify(entry), entry.resetTime - now)
+        }
+
+        // Add rate limit headers to response
+        const remaining = Math.max(0, maxRequests - entry.count)
+        response.headers.set('X-RateLimit-Limit', maxRequests.toString())
+        response.headers.set('X-RateLimit-Remaining', remaining.toString())
+        response.headers.set('X-RateLimit-Reset', entry.resetTime.toString())
+
+        return response
+      } catch (error) {
+        // If handler throws, decide whether to count this request
+        if (skipFailedRequests) {
+          entry.count = Math.max(0, entry.count - 1)
+          await cache.set(key, JSON.stringify(entry), entry.resetTime - now)
+        } else if (skipSuccessfulRequests || skipFailedRequests) {
+          // Update count if we didn't increment earlier
+          entry.count++
+          await cache.set(key, JSON.stringify(entry), entry.resetTime - now)
+        }
+        throw error
+      }
+    } catch (cacheError) {
+      // If cache fails, log error but don't block the request
+      console.error('Rate limit cache error:', cacheError)
+      // Proceed without rate limiting
+      return await handler(req)
     }
   }
 }
@@ -200,13 +217,13 @@ export const createChatRateLimit = () => createRateLimit(rateLimitConfigs.chat)
 // Wrapper function to easily apply rate limiting to API routes
 export function withRateLimit(
   config: RateLimitConfig | keyof typeof rateLimitConfigs,
-  handler: (req: NextRequest) => Promise<NextResponse>
+  handler: (req: NextRequest, context?: any) => Promise<NextResponse>
 ) {
-  const rateLimit = typeof config === 'string' 
+  const rateLimit = typeof config === 'string'
     ? createRateLimit(rateLimitConfigs[config])
     : createRateLimit(config)
 
-  return async function(req: NextRequest): Promise<NextResponse> {
-    return rateLimit(req, handler)
+  return async function(req: NextRequest, context?: any): Promise<NextResponse> {
+    return rateLimit(req, () => handler(req, context))
   }
 }

@@ -1,13 +1,57 @@
+import { z, type ZodIssue } from 'zod'
+
+// Environment validation schema
+const envSchema = z.object({
+  // Node environment
+  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+
+  // Database
+  DATABASE_URL: z.string().url('DATABASE_URL must be a valid database URL'),
+
+  // Authentication
+  JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters long'),
+
+  // Pusher (optional for real-time features like video session chat)
+  PUSHER_APP_ID: z.string().optional(),
+  PUSHER_KEY: z.string().optional(),
+  PUSHER_SECRET: z.string().optional(),
+  PUSHER_CLUSTER: z.string().optional(),
+  NEXT_PUBLIC_PUSHER_KEY: z.string().optional(),
+  NEXT_PUBLIC_PUSHER_CLUSTER: z.string().optional(),
+
+  // File storage
+  BLOB_READ_WRITE_TOKEN: z.string().min(1, 'BLOB_READ_WRITE_TOKEN is required for file uploads'),
+
+  // Cron jobs
+  CRON_SECRET: z.string().min(32, 'CRON_SECRET must be at least 32 characters long'),
+
+  // Payment providers
+  XENDIT_SECRET_KEY: z.string().min(1, 'XENDIT_SECRET_KEY is required'),
+  XENDIT_PLATFORM_ACCOUNT_NUMBER: z.string().min(1, 'XENDIT_PLATFORM_ACCOUNT_NUMBER is required'),
+  XENDIT_PLATFORM_BANK_CODE: z.string().default('BPI'),
+  XENDIT_PLATFORM_ACCOUNT_NAME: z.string().default('SkillBridge Inc'),
+  XENDIT_WEBHOOK_TOKEN: z.string().optional(),
+
+  // Agora (for video calls)
+  AGORA_APP_ID: z.string().optional(),
+  AGORA_APP_CERTIFICATE: z.string().optional(),
+
+  // Email (optional but recommended for production)
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.string().transform(val => val ? parseInt(val) : undefined).optional(),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  FROM_EMAIL: z.string().email().optional(),
+
+  // Redis/Cache (optional)
+  REDIS_URL: z.string().url().optional(),
+  KV_URL: z.string().url().optional(),
+})
+
+export type EnvConfig = z.infer<typeof envSchema>
+
 // Environment variable validation for production safety
 export class EnvironmentValidator {
-  private static readonly REQUIRED_VARS = [
-    'DATABASE_URL',
-    'NEXTAUTH_SECRET',
-    'CRON_SECRET',
-    'XENDIT_SECRET_KEY',
-    'XENDIT_PLATFORM_ACCOUNT_NUMBER'
-  ]
-
   private static readonly OPTIONAL_VARS_WITH_DEFAULTS = {
     'XENDIT_PLATFORM_BANK_CODE': 'BPI',
     'XENDIT_PLATFORM_ACCOUNT_NAME': 'SkillBridge Inc',
@@ -16,79 +60,231 @@ export class EnvironmentValidator {
 
   static validateEnvironment(): {
     isValid: boolean
-    missingVars: string[]
-    warnings: string[]
+    config?: EnvConfig
+    errors?: string[]
+    warnings?: string[]
   } {
-    const missingVars: string[] = []
     const warnings: string[] = []
 
-    // Check required variables
-    for (const varName of this.REQUIRED_VARS) {
-      if (!process.env[varName]) {
-        missingVars.push(varName)
-      }
-    }
+    try {
+      const config = envSchema.parse(process.env)
 
-    // Check production-specific requirements
-    if (process.env.NODE_ENV === 'production') {
-      // Ensure CRON_SECRET is strong in production
-      if (process.env.CRON_SECRET && process.env.CRON_SECRET.length < 32) {
-        warnings.push('CRON_SECRET should be at least 32 characters in production')
+      // Additional production checks
+      if (config.NODE_ENV === 'production') {
+        // Check for production-critical optional variables
+        if (!config.REDIS_URL && !config.KV_URL) {
+          warnings.push('No Redis/KV URL provided. Rate limiting will use memory store (not recommended for production)')
+        }
+
+        if (!config.SMTP_HOST) {
+          warnings.push('No SMTP configuration provided. Email functionality will be disabled')
+        }
+
+        if (!config.AGORA_APP_ID) {
+          warnings.push('No Agora configuration provided. Video call functionality will be disabled')
+        }
+
+        // Security checks
+        if (config.JWT_SECRET.length < 64) {
+          warnings.push('JWT_SECRET should be at least 64 characters in production')
+        }
+
+
+        // Check that we're not using default values in production
+        if (config.XENDIT_PLATFORM_ACCOUNT_NAME === 'SkillBridge Inc') {
+          warnings.push('Using default XENDIT_PLATFORM_ACCOUNT_NAME in production')
+        }
       }
 
-      // Validate Xendit configuration
-      if (!process.env.XENDIT_PLATFORM_ACCOUNT_NUMBER) {
-        missingVars.push('XENDIT_PLATFORM_ACCOUNT_NUMBER (required in production)')
+      return {
+        isValid: true,
+        config,
+        warnings: warnings.length > 0 ? warnings : undefined
+      }
+    } catch (error) {
+      console.error('[ENV_VALIDATION] Environment validation error:', error)
+
+      if (error instanceof z.ZodError) {
+        const errors = error.issues.map((err: ZodIssue) =>
+          `${err.path?.join('.') || 'unknown'}: ${err.message || 'Validation error'}`
+        )
+        return {
+          isValid: false,
+          errors: errors.length > 0 ? errors : ['Zod validation failed with no specific errors']
+        }
       }
 
-      // Check that we're not using default values in production
-      if (process.env.XENDIT_PLATFORM_ACCOUNT_NAME === 'SkillBridge Inc') {
-        warnings.push('Using default XENDIT_PLATFORM_ACCOUNT_NAME in production')
+      return {
+        isValid: false,
+        errors: [`Unknown environment validation error: ${error instanceof Error ? error.message : 'Unknown error'}`]
       }
-    }
-
-    return {
-      isValid: missingVars.length === 0,
-      missingVars,
-      warnings
     }
   }
 
   static logEnvironmentStatus(): void {
-    const { isValid, missingVars, warnings } = this.validateEnvironment()
+    const { isValid, config, errors, warnings } = this.validateEnvironment()
 
     console.log('[ENV_VALIDATION] Environment validation results:')
-    
-    if (isValid) {
+
+    if (isValid && config) {
       console.log('✅ All required environment variables are present')
+      console.log(`🏗️  Environment: ${config.NODE_ENV}`)
     } else {
-      console.error('❌ Missing required environment variables:', missingVars)
+      console.error('❌ Environment validation failed:')
+      errors?.forEach(error => console.error(`  - ${error}`))
     }
 
-    if (warnings.length > 0) {
-      console.warn('⚠️ Environment warnings:', warnings)
+    if (warnings && warnings.length > 0) {
+      console.warn('⚠️  Environment warnings:')
+      warnings.forEach(warning => console.warn(`  - ${warning}`))
     }
 
     // Log what optional variables are using defaults
-    for (const [varName, defaultValue] of Object.entries(this.OPTIONAL_VARS_WITH_DEFAULTS)) {
-      if (!process.env[varName]) {
-        console.log(`📝 Using default for ${varName}: ${defaultValue}`)
+    if (isValid && config) {
+      for (const [varName, defaultValue] of Object.entries(this.OPTIONAL_VARS_WITH_DEFAULTS)) {
+        if (!process.env[varName]) {
+          console.log(`📝 Using default for ${varName}: ${defaultValue}`)
+        }
       }
     }
   }
 
-  static ensureValidEnvironment(): void {
-    const { isValid, missingVars } = this.validateEnvironment()
-    
+  static ensureValidEnvironment(): EnvConfig {
+    const { isValid, config, errors } = this.validateEnvironment()
+
     if (!isValid) {
-      console.error('[ENV_VALIDATION] Critical environment variables missing:', missingVars)
+      console.error('[ENV_VALIDATION] Critical environment variables missing or invalid:')
+      errors?.forEach(error => console.error(`  - ${error}`))
       console.error('[ENV_VALIDATION] Application cannot start safely')
-      
+
       if (process.env.NODE_ENV === 'production') {
         process.exit(1)
       } else {
-        console.warn('[ENV_VALIDATION] Continuing in development mode with missing variables')
+        console.warn('[ENV_VALIDATION] Continuing in development mode with validation errors')
+        console.warn('[ENV_VALIDATION] Please check your .env file and ensure all required variables are set')
+
+        // In development, return a minimal config to allow the app to start
+        // This allows developers to see what's missing in the logs
+        return {
+          NODE_ENV: process.env.NODE_ENV || 'development',
+          DATABASE_URL: process.env.DATABASE_URL || '',
+          JWT_SECRET: process.env.JWT_SECRET || 'dev-secret-key-please-change-in-production',
+          PUSHER_APP_ID: process.env.PUSHER_APP_ID,
+          PUSHER_KEY: process.env.PUSHER_KEY,
+          PUSHER_SECRET: process.env.PUSHER_SECRET,
+          PUSHER_CLUSTER: process.env.PUSHER_CLUSTER,
+          NEXT_PUBLIC_PUSHER_KEY: process.env.NEXT_PUBLIC_PUSHER_KEY,
+          NEXT_PUBLIC_PUSHER_CLUSTER: process.env.NEXT_PUBLIC_PUSHER_CLUSTER,
+          BLOB_READ_WRITE_TOKEN: process.env.BLOB_READ_WRITE_TOKEN || '',
+          CRON_SECRET: process.env.CRON_SECRET || 'dev-cron-secret',
+          XENDIT_SECRET_KEY: process.env.XENDIT_SECRET_KEY || '',
+          XENDIT_PLATFORM_ACCOUNT_NUMBER: process.env.XENDIT_PLATFORM_ACCOUNT_NUMBER || '',
+          XENDIT_PLATFORM_BANK_CODE: process.env.XENDIT_PLATFORM_BANK_CODE || 'BPI',
+          XENDIT_PLATFORM_ACCOUNT_NAME: process.env.XENDIT_PLATFORM_ACCOUNT_NAME || 'SkillBridge Inc',
+          XENDIT_WEBHOOK_TOKEN: process.env.XENDIT_WEBHOOK_TOKEN,
+          AGORA_APP_ID: process.env.AGORA_APP_ID,
+          AGORA_APP_CERTIFICATE: process.env.AGORA_APP_CERTIFICATE,
+          SMTP_HOST: process.env.SMTP_HOST,
+          SMTP_PORT: process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT) : undefined,
+          SMTP_USER: process.env.SMTP_USER,
+          SMTP_PASS: process.env.SMTP_PASS,
+          FROM_EMAIL: process.env.FROM_EMAIL,
+          REDIS_URL: process.env.REDIS_URL,
+          KV_URL: process.env.KV_URL,
+        } as EnvConfig
       }
     }
+
+    return config!
   }
+
+  // Health check for required services
+  static async validateServiceHealth(): Promise<{
+    database: boolean
+    pusher: boolean
+    cache: boolean
+    email: boolean
+    storage: boolean
+    overall: boolean
+  }> {
+    const health = {
+      database: false,
+      pusher: false,
+      cache: false,
+      email: false,
+      storage: false,
+      overall: false
+    }
+
+    try {
+      // Database check
+      const { db } = await import('@/db')
+      await db.execute('SELECT 1')
+      health.database = true
+    } catch (error) {
+      console.error('Database health check failed:', error)
+    }
+
+    try {
+      // Pusher check
+      const { pusherServer } = await import('@/lib/pusher/config')
+      if (pusherServer) {
+        // Simple Pusher API call to verify credentials
+        await pusherServer.get({ path: '/channels' })
+        health.pusher = true
+      }
+    } catch (error) {
+      console.error('Pusher health check failed:', error)
+    }
+
+    try {
+      // Cache check
+      const { getSafeCache } = await import('@/lib/cache/redis-safe')
+      const cache = getSafeCache()
+      await cache.set('health_check', 'ok', 5000)
+      const result = await cache.get('health_check')
+      health.cache = result === 'ok'
+      await cache.del('health_check') // Cleanup
+    } catch (error) {
+      console.error('Cache health check failed:', error)
+    }
+
+    try {
+      // Storage check (Vercel Blob)
+      const config = this.ensureValidEnvironment()
+      if (config.BLOB_READ_WRITE_TOKEN) {
+        health.storage = true // Basic check - token exists
+      }
+    } catch (error) {
+      console.error('Storage health check failed:', error)
+    }
+
+    try {
+      // Email check (basic config validation)
+      const config = this.ensureValidEnvironment()
+      if (config.SMTP_HOST && config.SMTP_USER) {
+        health.email = true // Basic check - config exists
+      }
+    } catch (error) {
+      console.error('Email health check failed:', error)
+    }
+
+    // Overall health - database is critical, pusher is optional
+    health.overall = health.database
+
+    return health
+  }
+}
+
+// Convenience functions for easier import
+export function validateEnvironmentOrThrow(): EnvConfig {
+  return EnvironmentValidator.ensureValidEnvironment()
+}
+
+export function getEnvConfig(): EnvConfig {
+  return EnvironmentValidator.ensureValidEnvironment()
+}
+
+export async function validateServiceHealth() {
+  return EnvironmentValidator.validateServiceHealth()
 }

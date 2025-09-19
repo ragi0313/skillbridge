@@ -4,7 +4,8 @@
 
 import { useState, useEffect, useRef, useCallback } from "react"
 import { useRealTimeTimer } from "@/lib/hooks/useRealTimeTimer"
-// Simple REST-based chat - much more reliable than Agora Chat
+import PusherJS from 'pusher-js'
+import { getPusherConfig } from '@/lib/pusher/config'
 
 import { Whiteboard } from "../whiteboard/Whiteboard"
 
@@ -107,6 +108,10 @@ export function VideoCallRoom({
   const [unreadCount, setUnreadCount] = useState(0)
   const [isChatInitialized, setIsChatInitialized] = useState(false)
 
+  // Pusher states for session chat
+  const [pusher, setPusher] = useState<PusherJS | null>(null)
+  const [chatConnected, setChatConnected] = useState(false)
+
   // File sharing states
   const [isUploading, setIsUploading] = useState(false)
 
@@ -117,7 +122,6 @@ export function VideoCallRoom({
   const remoteVideoRef = useRef<HTMLDivElement>(null)
   const screenShareRef = useRef<HTMLDivElement>(null)
   const agoraClientRef = useRef<any>(null)
-  const chatPollIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const localTracksRef = useRef<{ videoTrack?: any; audioTrack?: any; screenTrack?: any }>({})
   const isInitializingRef = useRef<boolean>(false)
   const isCleaningUpRef = useRef<boolean>(false)
@@ -129,6 +133,10 @@ export function VideoCallRoom({
   const lastPingTimeRef = useRef<number>(Date.now())
   const fileInputRef = useRef<HTMLInputElement>(null)
   const chatEndRef = useRef<HTMLDivElement>(null)
+
+  // Pusher refs for session chat
+  const pusherRef = useRef<PusherJS | null>(null)
+  const sessionChatChannelRef = useRef<any>(null)
   const chatInitializedRef = useRef<boolean>(false)
 
   const sessionStart = new Date(sessionData.startTime)
@@ -297,75 +305,126 @@ export function VideoCallRoom({
     [cleanupLocalTracks],
   )
 
-  // Poll for new chat messages from REST API
-  const pollChatMessages = useCallback(async () => {
-    try {
-      const response = await fetch(`/api/sessions/${sessionId}/chat`)
-      if (response.ok) {
-        const data = await response.json()
-        const allMessages = data.messages || []
-
-        // Get current user identifier
-        const currentUserId = `${userRole}-${currentUser.firstName} ${currentUser.lastName}`
-
-        // Filter messages to only include ones from other users
-        const otherUserMessages = allMessages.filter((msg: ChatMessage) => msg.senderId !== currentUserId)
-
-        if (otherUserMessages.length > 0) {
-          setChatMessages((prev: ChatMessage[]) => {
-            // Get current message IDs to avoid duplicates
-            const existingIds = prev.map((msg) => msg.id)
-
-            // Filter out messages we already have
-            const newMessages = otherUserMessages.filter((msg: ChatMessage) => !existingIds.includes(msg.id))
-
-            if (newMessages.length > 0) {
-              console.log(`[VIDEO_CALL] Adding ${newMessages.length} new messages from other users`)
-
-              // Add the new messages from other users
-              const updatedMessages = [...prev]
-              newMessages.forEach((msg: ChatMessage) => {
-                updatedMessages.push({
-                  ...msg,
-                  senderId: msg.senderId, // Keep original senderId from API
-                })
-              })
-
-              // Sort by timestamp to maintain order
-              return updatedMessages.sort((a: ChatMessage, b: ChatMessage) => a.timestamp - b.timestamp)
-            }
-
-            return prev // No new messages
-          })
-        }
-      }
-    } catch (error) {
-      console.warn("[VIDEO_CALL] Chat API not available (demo mode):", error)
-    }
-  }, [sessionId, currentUser])
-
-  // Initialize REST-based chat polling
-  const initializeChat = useCallback(async () => {
-    if (chatInitializedRef.current) {
+  // Initialize Pusher for session chat
+  const initializeSessionChat = useCallback(async () => {
+    if (chatInitializedRef.current || isCleaningUpRef.current) {
       return
     }
 
     try {
-      console.log("[VIDEO_CALL] Initializing REST-based chat...")
+      console.log("[VIDEO_CALL] Initializing Pusher session chat...")
 
-      // Start polling for messages every 3 seconds to reduce API calls
-      chatPollIntervalRef.current = setInterval(pollChatMessages, 3000)
+      const config = getPusherConfig()
+      if (!config) {
+        console.warn("[VIDEO_CALL] Pusher config not available, chat will be disabled")
+        return
+      }
 
-      // Do an initial poll to get existing messages
-      await pollChatMessages()
-      chatInitializedRef.current = true
-      setIsChatInitialized(true)
+      // Clean up existing connection
+      if (pusherRef.current) {
+        pusherRef.current.disconnect()
+        pusherRef.current = null
+      }
 
-      console.log("[VIDEO_CALL] REST chat initialized successfully - polling every 3 seconds")
+      const pusherClient = new PusherJS(config.key, {
+        cluster: config.cluster,
+        forceTLS: true,
+        enabledTransports: ['ws', 'wss'],
+        disabledTransports: ['xhr_polling', 'xhr_streaming'],
+      })
+
+      pusherClient.connection.bind('connected', () => {
+        console.log("[VIDEO_CALL] Pusher chat connected successfully")
+        setChatConnected(true)
+        setIsChatInitialized(true)
+        chatInitializedRef.current = true
+      })
+
+      pusherClient.connection.bind('disconnected', () => {
+        console.log("[VIDEO_CALL] Pusher chat disconnected")
+        setChatConnected(false)
+      })
+
+      pusherClient.connection.bind('error', (error: any) => {
+        console.error("[VIDEO_CALL] Pusher chat connection error:", error)
+        setChatConnected(false)
+      })
+
+      // Subscribe to session-specific chat channel
+      const channelName = `session-chat-${sessionId}`
+      const channel = pusherClient.subscribe(channelName)
+
+      channel.bind('session-message', (message: ChatMessage) => {
+        console.log("[VIDEO_CALL] Received session chat message:", message)
+
+        // Only add messages from other users to avoid duplicates
+        const currentUserId = `${userRole}-${currentUser.firstName} ${currentUser.lastName}`
+        if (message.senderId !== currentUserId) {
+          setChatMessages((prev: ChatMessage[]) => {
+            // Check if message already exists
+            if (prev.some(msg => msg.id === message.id)) {
+              return prev
+            }
+            return [...prev, message].sort((a, b) => a.timestamp - b.timestamp)
+          })
+
+          // Update unread count if sidebar is closed
+          if (!showSidebar) {
+            setUnreadCount((prev: number) => prev + 1)
+          }
+        }
+      })
+
+      channel.bind('pusher:subscription_succeeded', () => {
+        console.log(`[VIDEO_CALL] Successfully subscribed to ${channelName}`)
+      })
+
+      channel.bind('pusher:subscription_error', (error: any) => {
+        console.error(`[VIDEO_CALL] Failed to subscribe to ${channelName}:`, error)
+      })
+
+      pusherRef.current = pusherClient
+      sessionChatChannelRef.current = channel
+      setPusher(pusherClient)
+
+      console.log("[VIDEO_CALL] Pusher session chat initialized successfully")
     } catch (error) {
-      console.error("[VIDEO_CALL] Failed to initialize chat:", error)
+      console.error("[VIDEO_CALL] Failed to initialize session chat:", error)
     }
-  }, [pollChatMessages])
+  }, [sessionId, userRole, currentUser, showSidebar])
+
+  // Cleanup session chat
+  const cleanupSessionChat = useCallback(() => {
+    console.log("[VIDEO_CALL] Cleaning up session chat...")
+
+    try {
+      // Unsubscribe from channel
+      if (sessionChatChannelRef.current) {
+        sessionChatChannelRef.current.unbind_all()
+        sessionChatChannelRef.current = null
+      }
+
+      // Disconnect Pusher
+      if (pusherRef.current) {
+        pusherRef.current.disconnect()
+        pusherRef.current = null
+      }
+
+      // Reset state
+      setPusher(null)
+      setChatConnected(false)
+      setIsChatInitialized(false)
+      chatInitializedRef.current = false
+
+      // Clear all chat messages (ephemeral session chat)
+      setChatMessages([])
+      setUnreadCount(0)
+
+      console.log("[VIDEO_CALL] Session chat cleanup completed")
+    } catch (error) {
+      console.error("[VIDEO_CALL] Error during session chat cleanup:", error)
+    }
+  }, [])
 
   // Comprehensive cleanup function
   const performCleanup = useCallback(
@@ -393,19 +452,8 @@ export function VideoCallRoom({
         // Clean up local tracks
         await cleanupLocalTracks()
 
-        // Clean up chat polling
-        if (chatPollIntervalRef.current) {
-          try {
-            console.log("[VIDEO_CALL] Stopping chat polling...")
-            clearInterval(chatPollIntervalRef.current)
-            chatPollIntervalRef.current = null
-            console.log("[VIDEO_CALL] Chat polling cleanup completed")
-          } catch (error) {
-            console.error("[VIDEO_CALL] Error during chat cleanup:", error)
-          }
-          chatInitializedRef.current = false
-          setIsChatInitialized(false)
-        }
+        // Clean up session chat
+        cleanupSessionChat()
 
         // Clean up Agora client
         if (agoraClientRef.current && hasJoinedChannelRef.current) {
@@ -429,7 +477,7 @@ export function VideoCallRoom({
         isCleaningUpRef.current = false
       }
     },
-    [cleanupLocalTracks],
+    [cleanupLocalTracks, cleanupSessionChat],
   )
 
   // Handle leaving the call
@@ -474,7 +522,12 @@ export function VideoCallRoom({
   const sessionTimer = useRealTimeTimer({
     startTime: sessionStart,
     endTime: sessionEnd,
-    onTimeExpired: () => handleLeaveCall("session_ended"),
+    onTimeExpired: () => {
+      // Clear chat messages when session ends
+      setChatMessages([])
+      setUnreadCount(0)
+      handleLeaveCall("session_ended")
+    },
   })
 
   // Connection retry logic
@@ -633,7 +686,7 @@ export function VideoCallRoom({
             // Initialize chat when first user joins
             if (currentRemoteUsersRef.current.size === 1 && !chatInitializedRef.current) {
               // Initialize chat immediately when other user joins
-              initializeChat()
+              initializeSessionChat()
             }
           } catch (error) {
             console.error("[VIDEO_CALL] Error handling user published:", error)
@@ -796,10 +849,10 @@ export function VideoCallRoom({
           else setCallQuality("unknown")
         })
 
-        // Initialize REST-based chat immediately after RTC connection
+        // Initialize session chat immediately after RTC connection
         setTimeout(() => {
           if (!isCleaningUpRef.current && !isCallEnding) {
-            initializeChat()
+            initializeSessionChat()
           }
         }, 1000) // Reduced delay
 
@@ -808,7 +861,7 @@ export function VideoCallRoom({
 
         // Always initialize chat after successful connection
         if (!chatInitializedRef.current) {
-          setTimeout(initializeChat, 500)
+          setTimeout(initializeSessionChat, 500)
         }
 
         // Start session tracking with proper cleanup handling
@@ -874,7 +927,7 @@ export function VideoCallRoom({
     isCallEnding,
     pingSession,
     retryMediaCreation,
-    initializeChat,
+    initializeSessionChat,
   ])
 
   // FIXED: Improved video toggle with better track management
@@ -1251,15 +1304,20 @@ export function VideoCallRoom({
     }
   }, [isScreenSharing, isVideoEnabled, isRetryingMedia])
 
-  // REST-based chat messaging - much more reliable!
+  // Pusher-based session chat messaging - real-time and ephemeral!
   const sendMessage = useCallback(
     async (message: string, file?: File) => {
       if (!message.trim() && !file) return
+      if (!pusherRef.current || !sessionChatChannelRef.current) {
+        console.warn("[VIDEO_CALL] Chat not initialized, cannot send message")
+        setMediaError("Chat not available")
+        return
+      }
 
       setIsUploading(!!file)
 
       try {
-        console.log("[VIDEO_CALL] Sending message via REST API...")
+        console.log("[VIDEO_CALL] Sending message via Pusher...")
 
         const currentUserName = `${currentUser.firstName} ${currentUser.lastName}`
 
@@ -1280,12 +1338,40 @@ export function VideoCallRoom({
           }
         }
 
+        // Create the message object
+        const sessionMessage: ChatMessage = {
+          id: Date.now().toString(),
+          message: file ? file.name : message.trim(),
+          messageType: file ? "file" : "text",
+          timestamp: Date.now(),
+          senderName: currentUserName,
+          senderRole: userRole,
+          senderId: `${userRole}-${currentUserName}`,
+          attachment: file
+            ? {
+                fileName: file.name,
+                fileSize: file.size,
+                fileType: file.type,
+                fileData: URL.createObjectURL(file),
+              }
+            : undefined,
+        }
+
+        // Add to local messages immediately for sender
+        setChatMessages((prev: ChatMessage[]) => {
+          // Check if message already exists to avoid duplicates
+          if (prev.some((msg) => msg.id === sessionMessage.id)) {
+            return prev
+          }
+          return [...prev, sessionMessage].sort((a, b) => a.timestamp - b.timestamp)
+        })
+
+        // Send via the session chat API (which will broadcast via Pusher)
         try {
-          // Send message to API
           const response = await fetch(`/api/sessions/${sessionId}/chat`, {
-            method: "POST",
+            method: 'POST',
             headers: {
-              "Content-Type": "application/json",
+              'Content-Type': 'application/json',
             },
             body: JSON.stringify({
               message: file ? file.name : message.trim(),
@@ -1297,45 +1383,16 @@ export function VideoCallRoom({
           })
 
           if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+            throw new Error(`Failed to send message: ${response.status}`)
           }
 
           const result = await response.json()
-          console.log("[VIDEO_CALL] Message sent successfully:", result)
+          console.log("[VIDEO_CALL] Message sent successfully via session chat API:", result)
         } catch (apiError) {
-          console.warn("[VIDEO_CALL] Chat API not available (demo mode), adding message locally:", apiError)
+          console.warn("[VIDEO_CALL] Session chat API failed, message only visible locally:", apiError)
         }
-
-        // Add to local messages (sender's copy)
-        const localMessage: ChatMessage = {
-          id: Date.now().toString(),
-          message: file ? file.name : message.trim(),
-          messageType: file ? "file" : "text",
-          timestamp: Date.now(),
-          senderName: currentUserName,
-          senderRole: userRole,
-          senderId: `${userRole}-${currentUserName}`, // Use same format as API
-          attachment: file
-            ? {
-                fileName: file.name,
-                fileSize: file.size,
-                fileType: file.type,
-                fileData: URL.createObjectURL(file),
-              }
-            : undefined,
-        }
-
-        setChatMessages((prev: ChatMessage[]) => {
-          // Check if message already exists to avoid duplicates
-          if (prev.some((msg) => msg.id === localMessage.id)) {
-            return prev
-          }
-          return [...prev, localMessage].sort((a, b) => a.timestamp - b.timestamp)
-        })
 
         setNewMessage("")
-
-        // Clear any previous errors
         setMediaError("")
       } catch (error) {
         console.error("[VIDEO_CALL] Failed to send message:", error)
@@ -1469,19 +1526,20 @@ export function VideoCallRoom({
     return "00:00"
   }
 
+
   return (
     <div className="h-screen w-full bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex flex-col overflow-hidden">
-      <div className="flex-shrink-0 bg-black/20 backdrop-blur-xl border-b border-white/10 px-6 py-4">
+      <div className="flex-shrink-0 bg-black/20 backdrop-blur-xl border-b border-white/10 px-3 sm:px-6 py-3 sm:py-4">
         <div className="flex items-center justify-between">
-          {/* Session Info */}
-          <div className="flex items-center space-x-6">
-            <div className="flex items-center space-x-3">
-              <div className="w-3 h-3 rounded-full bg-gradient-to-r from-green-400 to-emerald-500 animate-pulse shadow-lg shadow-green-400/50"></div>
+          {/* Session Info - Mobile Optimized */}
+          <div className="flex items-center space-x-2 sm:space-x-6">
+            <div className="flex items-center space-x-2 sm:space-x-3">
+              <div className="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-gradient-to-r from-green-400 to-emerald-500 animate-pulse shadow-lg shadow-green-400/50"></div>
               <div>
-                <h1 className="text-xl font-semibold text-white">
+                <h1 className="text-sm sm:text-xl font-semibold text-white">
                   {userRole === "learner" ? "Learning Session" : "Mentoring Session"}
                 </h1>
-                <p className={`text-sm font-medium ${getConnectionStatusColor(connectionState)}`}>
+                <p className={`text-xs sm:text-sm font-medium ${getConnectionStatusColor(connectionState)}`}>
                   {connectionState === "connected"
                     ? "Connected"
                     : connectionState === "connecting"
@@ -1493,7 +1551,8 @@ export function VideoCallRoom({
               </div>
             </div>
 
-            <div className="hidden md:flex items-center space-x-4 text-sm">
+            {/* Quality indicators - Hidden on mobile, shown on tablet+ */}
+            <div className="hidden lg:flex items-center space-x-4 text-sm">
               <div className="flex items-center space-x-2 bg-black/30 backdrop-blur-sm rounded-full px-3 py-1.5 border border-white/20">
                 <div className="w-2 h-2 rounded-full bg-blue-400"></div>
                 <span className="text-white font-medium">
@@ -1509,10 +1568,11 @@ export function VideoCallRoom({
             </div>
           </div>
 
-          <div className="flex items-center space-x-4">
+          {/* Timer - Mobile Optimized */}
+          <div className="flex items-center space-x-2 sm:space-x-4">
             <div className="text-right">
-              <div className="text-lg font-mono font-semibold text-white">{formatElapsedTime()}</div>
-              <div className="text-sm text-white/70">
+              <div className="text-sm sm:text-lg font-mono font-semibold text-white">{formatElapsedTime()}</div>
+              <div className="text-xs sm:text-sm text-white/70">
                 {getTimeRemaining() > 0 ? `${formatSessionTimeRemaining()} left` : "Session ended"}
               </div>
             </div>
@@ -1520,11 +1580,11 @@ export function VideoCallRoom({
         </div>
       </div>
 
-      {/* Main Content Area */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Video Area */}
-        <div className="flex-1 relative p-6">
-          <div className="h-full w-full relative rounded-3xl overflow-hidden bg-gradient-to-br from-slate-800 to-slate-900 shadow-2xl border border-white/10">
+      {/* Main Content Area - Mobile Optimized */}
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+        {/* Video Area - Full width on mobile */}
+        <div className="flex-1 relative p-2 sm:p-4 lg:p-6">
+          <div className="h-full w-full relative rounded-xl sm:rounded-2xl lg:rounded-3xl overflow-hidden bg-gradient-to-br from-slate-800 to-slate-900 shadow-2xl border border-white/10">
             {/* Remote Video */}
             <div className="absolute inset-0">
               <div ref={remoteVideoRef} className="w-full h-full bg-slate-800 rounded-3xl overflow-hidden" />
@@ -1559,38 +1619,39 @@ export function VideoCallRoom({
               )}
             </div>
 
-            <div className="absolute top-6 left-6">
-              <div className="flex items-center space-x-3 bg-black/40 backdrop-blur-xl rounded-2xl px-4 py-2 border border-white/20">
-                <div className="flex items-center space-x-2">
-                  <div className={`w-2 h-2 rounded-full ${isRemoteAudioEnabled ? "bg-green-400" : "bg-red-400"}`}></div>
-                  <span className="text-white/90 text-sm font-medium">
+            <div className="absolute top-3 left-3 sm:top-6 sm:left-6">
+              <div className="flex items-center space-x-2 sm:space-x-3 bg-black/40 backdrop-blur-xl rounded-xl sm:rounded-2xl px-2 sm:px-4 py-1.5 sm:py-2 border border-white/20">
+                <div className="flex items-center space-x-1 sm:space-x-2">
+                  <div className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${isRemoteAudioEnabled ? "bg-green-400" : "bg-red-400"}`}></div>
+                  <span className="text-white/90 text-xs sm:text-sm font-medium">
                     {isRemoteAudioEnabled ? "Audio On" : "Muted"}
                   </span>
                 </div>
-                {isRemoteVideoVisible && <div className="w-px h-4 bg-white/20"></div>}
-                <div className="flex items-center space-x-2">
-                  <div className="w-6 h-6 rounded-full bg-gradient-to-br from-slate-600 to-slate-700 flex items-center justify-center">
+                {isRemoteVideoVisible && <div className="w-px h-3 sm:h-4 bg-white/20"></div>}
+                <div className="flex items-center space-x-1 sm:space-x-2">
+                  <div className="w-4 h-4 sm:w-6 sm:h-6 rounded-full bg-gradient-to-br from-slate-600 to-slate-700 flex items-center justify-center">
                     <span className="text-xs font-semibold text-white">{otherParticipant.firstName.charAt(0)}</span>
                   </div>
-                  <div>
+                  <div className="hidden sm:block">
                     <div className="text-white/90 text-sm font-medium">
                       {otherParticipant.firstName} {otherParticipant.lastName}
                     </div>
                     <div className="text-white/60 text-xs">{otherParticipant.title}</div>
                   </div>
                 </div>
-                <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
-                <span className="text-white/70 text-xs">Online</span>
+                <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-green-400 animate-pulse"></div>
+                <span className="text-white/70 text-xs hidden sm:inline">Online</span>
               </div>
             </div>
 
-            <div className="absolute bottom-6 right-6 w-80 h-48 rounded-2xl overflow-hidden bg-gradient-to-br from-slate-700 to-slate-800 shadow-2xl border border-white/20 backdrop-blur-sm">
-              <div ref={localVideoRef} className="w-full h-full bg-slate-800 rounded-2xl overflow-hidden" />
+            {/* Local video - Responsive positioning and sizing */}
+            <div className="absolute bottom-3 right-3 sm:bottom-6 sm:right-6 w-24 h-18 sm:w-32 sm:h-24 md:w-48 md:h-32 lg:w-80 lg:h-48 rounded-lg sm:rounded-xl lg:rounded-2xl overflow-hidden bg-gradient-to-br from-slate-700 to-slate-800 shadow-2xl border border-white/20 backdrop-blur-sm">
+              <div ref={localVideoRef} className="w-full h-full bg-slate-800 rounded-lg sm:rounded-xl lg:rounded-2xl overflow-hidden" />
 
               {(!isVideoEnabled || !localTracksRef.current.videoTrack) && (
                 <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-slate-700/90 to-slate-800/90 backdrop-blur-sm">
                   <div className="text-center">
-                    <div className="relative w-16 h-16 mx-auto mb-3">
+                    <div className="relative w-8 h-8 sm:w-12 sm:h-12 lg:w-16 lg:h-16 mx-auto mb-1 sm:mb-3">
                       <div className="absolute inset-0 rounded-full border-4 border-white/20"></div>
                       <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-blue-400 animate-spin"></div>
                       <div className="absolute inset-2 rounded-full bg-gradient-to-br from-slate-600 to-slate-700 flex items-center justify-center">
@@ -1607,10 +1668,10 @@ export function VideoCallRoom({
                         )}
                       </div>
                     </div>
-                    <p className="text-white/90 text-sm font-medium mb-1">
+                    <p className="text-white/90 text-xs sm:text-sm font-medium mb-1">
                       {!localTracksRef.current.videoTrack ? "Camera Unavailable" : "Camera Off"}
                     </p>
-                    <p className="text-white/60 text-xs">
+                    <p className="text-white/60 text-xs hidden sm:block">
                       {!localTracksRef.current.videoTrack
                         ? "Unable to access your camera"
                         : "Your camera is currently disabled"}
@@ -1670,14 +1731,25 @@ export function VideoCallRoom({
         </div>
 
         {showSidebar && (
-          <div className="w-96 bg-black/20 backdrop-blur-xl border-l border-white/10 flex flex-col">
-            {/* Enhanced Sidebar Header */}
-            <div className="p-6 border-b border-white/10">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold text-white">Chat & Files</h2>
+          <div className="w-full md:w-96 bg-black/20 backdrop-blur-xl border-l border-white/10 flex flex-col md:relative absolute top-0 left-0 z-50 h-full">
+            {/* Enhanced Sidebar Header - Mobile Optimized */}
+            <div className="p-3 sm:p-6 border-b border-white/10">
+              <div className="flex items-center justify-between mb-2 sm:mb-4">
+                <h2 className="text-lg sm:text-xl font-semibold text-white">Chat & Files</h2>
                 <div className="flex items-center space-x-2">
-                  <div className={`w-2 h-2 rounded-full ${isChatInitialized ? "bg-green-400" : "bg-yellow-400"}`}></div>
-                  <span className="text-white/70 text-sm">{isChatInitialized ? "Connected" : "Connecting..."}</span>
+                  {/* Close button for mobile */}
+                  <button
+                    onClick={() => setShowSidebar(false)}
+                    className="md:hidden p-1 rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
+                  >
+                    <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                  <div className="flex items-center space-x-2">
+                    <div className={`w-2 h-2 rounded-full ${chatConnected ? "bg-green-400" : "bg-yellow-400"}`}></div>
+                    <span className="text-white/70 text-sm hidden sm:inline">{chatConnected ? "Chat Connected" : "Chat Connecting..."}</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1818,13 +1890,13 @@ export function VideoCallRoom({
         )}
       </div>
 
-      <div className="flex-shrink-0 bg-black/20 backdrop-blur-xl border-t border-white/10 px-6 py-4">
-        <div className="flex items-center justify-center space-x-4">
-          {/* Video Control */}
+      <div className="flex-shrink-0 bg-black/20 backdrop-blur-xl border-t border-white/10 px-3 sm:px-6 py-3 sm:py-4">
+        <div className="flex items-center justify-center space-x-2 sm:space-x-4">
+          {/* Video Control - Mobile Optimized */}
           <button
             onClick={toggleVideo}
             disabled={isCallEnding}
-            className={`group relative p-4 rounded-2xl transition-all duration-300 hover:scale-110 hover:shadow-2xl border backdrop-blur-sm ${
+            className={`group relative p-2 sm:p-3 lg:p-4 rounded-xl sm:rounded-2xl transition-all duration-300 hover:scale-110 hover:shadow-2xl border backdrop-blur-sm ${
               isVideoEnabled && localTracksRef.current.videoTrack
                 ? "bg-gray-700/80 hover:bg-gray-600/80 border-gray-600/50 text-white"
                 : "bg-red-600/90 hover:bg-red-700/90 border-red-500/50 text-white"
@@ -1832,7 +1904,7 @@ export function VideoCallRoom({
             title={isVideoEnabled && localTracksRef.current.videoTrack ? "Turn off camera" : "Turn on camera"}
           >
             {isVideoEnabled && localTracksRef.current.videoTrack ? (
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -1850,7 +1922,7 @@ export function VideoCallRoom({
                 />
               </svg>
             )}
-            <div className="absolute -top-12 left-1/2 transform -translate-x-1/2 bg-black/80 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+            <div className="absolute -top-8 sm:-top-12 left-1/2 transform -translate-x-1/2 bg-black/80 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
               {isVideoEnabled && localTracksRef.current.videoTrack ? "Turn off camera" : "Turn on camera"}
             </div>
           </button>
@@ -2094,6 +2166,7 @@ export function VideoCallRoom({
           onClose={() => setShowWhiteboard(false)}
         />
       )}
+
     </div>
   )
 }

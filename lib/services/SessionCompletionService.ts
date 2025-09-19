@@ -292,7 +292,7 @@ class SessionCompletionService {
           userId: sessionRecord.learner_user_id,
           type: 'session_completed',
           title: 'Session Completed!',
-          message: 'Your session has been completed. Please rate your mentor!',
+          message: 'Your session has been completed successfully. Share your feedback to help improve the platform!',
           relatedEntityType: 'session',
           relatedEntityId: sessionId,
         })

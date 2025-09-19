@@ -1,4 +1,4 @@
-import { pgTable, serial, varchar, text, timestamp, integer, json, numeric, boolean, time, date } from "drizzle-orm/pg-core"
+import { pgTable, serial, varchar, text, timestamp, integer, json, numeric, boolean, time, date, index } from "drizzle-orm/pg-core"
 import { relations } from "drizzle-orm"
 
 const timestamps = {
@@ -168,6 +168,11 @@ export const bookingSessions = pgTable("booking_sessions", {
   cancellationReason: text("cancellation_reason"),
   cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
   learnerRequestCount: integer("learner_request_count").default(1), // Track spam requests
+
+  // Session feedback tracking
+  learnerFeedbackSubmitted: boolean("learner_feedback_submitted").default(false),
+  mentorFeedbackSubmitted: boolean("mentor_feedback_submitted").default(false),
+
   ...timestamps,
 })
 
@@ -359,60 +364,97 @@ export const sessionVisibility = pgTable("session_visibility", {
   ...timestamps,
 })
 
-// CHAT SYSTEM TABLES
+
+// SESSION FEEDBACK TABLE
+export const sessionFeedback = pgTable("session_feedback", {
+  id: serial("id").primaryKey(),
+  sessionId: integer("session_id").notNull().references(() => bookingSessions.id, { onDelete: "cascade" }),
+  reviewerUserId: integer("reviewer_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  reviewerRole: varchar("reviewer_role", { length: 20 }).notNull(), // 'learner' or 'mentor'
+
+  // Rating fields (1-5 scale)
+  overallRating: integer("overall_rating").notNull(),
+  communicationRating: integer("communication_rating"),
+  knowledgeRating: integer("knowledge_rating"),
+  helpfulnessRating: integer("helpfulness_rating"),
+  punctualityRating: integer("punctuality_rating"),
+
+  // Text feedback
+  feedbackText: text("feedback_text").notNull(),
+  improvementSuggestions: text("improvement_suggestions"),
+  mostValuableAspect: text("most_valuable_aspect"),
+
+  // Structured feedback
+  sessionHighlights: text("session_highlights"), // JSON array of selected highlights
+  sessionPace: varchar("session_pace", { length: 20 }), // 'too_slow', 'just_right', 'too_fast'
+  wouldRecommend: boolean("would_recommend"),
+
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  sessionReviewerIdx: index("session_feedback_session_reviewer_idx").on(table.sessionId, table.reviewerRole),
+}))
+
+// CHAT TABLES
 export const conversations = pgTable("conversations", {
   id: serial("id").primaryKey(),
-  mentorId: integer("mentor_id").notNull().references(() => mentors.id, { onDelete: "cascade" }),
-  learnerId: integer("learner_id").notNull().references(() => learners.id, { onDelete: "cascade" }),
-  lastMessageAt: timestamp("last_message_at", { withTimezone: true }),
+  mentorId: integer("mentor_id").notNull().references(() => mentors.id),
+  learnerId: integer("learner_id").notNull().references(() => learners.id),
   mentorLastReadAt: timestamp("mentor_last_read_at", { withTimezone: true }),
   learnerLastReadAt: timestamp("learner_last_read_at", { withTimezone: true }),
+  lastMessageAt: timestamp("last_message_at", { withTimezone: true }),
   isActive: boolean("is_active").default(true).notNull(),
   ...timestamps,
-})
+}, (table) => ({
+  uniqueMentorLearner: index("conversations_mentor_learner_idx").on(table.mentorId, table.learnerId),
+}))
 
 export const messages = pgTable("messages", {
   id: serial("id").primaryKey(),
   conversationId: integer("conversation_id").notNull().references(() => conversations.id, { onDelete: "cascade" }),
-  senderId: integer("sender_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  content: text("content"),
+  senderId: integer("sender_id").notNull().references(() => users.id),
+  content: text("content").notNull(),
   messageType: varchar("message_type", { length: 20 }).default("text").notNull(),
-  isEdited: boolean("is_edited").default(false).notNull(),
   editedAt: timestamp("edited_at", { withTimezone: true }),
-  isDeleted: boolean("is_deleted").default(false).notNull(),
-  deletedAt: timestamp("deleted_at", { withTimezone: true }),
-  replyToMessageId: integer("reply_to_message_id"), // Re move the reference here
+  isGloballyDeleted: boolean("is_globally_deleted").default(false).notNull(),
+  globallyDeletedAt: timestamp("globally_deleted_at", { withTimezone: true }),
+  replyToMessageId: integer("reply_to_message_id").references(() => messages.id),
   ...timestamps,
-})
+}, (table) => ({
+  conversationIdx: index("messages_conversation_idx").on(table.conversationId),
+  senderIdx: index("messages_sender_idx").on(table.senderId),
+}))
+
 export const messageAttachments = pgTable("message_attachments", {
   id: serial("id").primaryKey(),
   messageId: integer("message_id").notNull().references(() => messages.id, { onDelete: "cascade" }),
-  fileName: varchar("file_name", { length: 255 }).notNull(),
-  originalFileName: varchar("original_file_name", { length: 255 }).notNull(),
-  fileUrl: varchar("file_url", { length: 1024 }).notNull(), // Increased for blob URLs
-  fileSize: integer("file_size").notNull(), // in bytes
+  originalFilename: varchar("original_filename", { length: 255 }).notNull(),
+  systemFilename: varchar("system_filename", { length: 255 }).notNull(),
+  fileUrl: varchar("file_url", { length: 512 }).notNull(),
+  fileSize: integer("file_size").notNull(),
   mimeType: varchar("mime_type", { length: 100 }).notNull(),
-  blobPathname: varchar("blob_pathname", { length: 512 }), // For cleanup purposes
+  storagePath: varchar("storage_path", { length: 512 }),
   ...timestamps,
 })
 
-// Per-user message deletions (soft delete per user)
 export const messageUserDeletions = pgTable("message_user_deletions", {
   id: serial("id").primaryKey(),
   messageId: integer("message_id").notNull().references(() => messages.id, { onDelete: "cascade" }),
   userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  deletedAt: timestamp("deleted_at", { withTimezone: true }).notNull().defaultNow(),
-})
+  deletedAt: timestamp("deleted_at", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  uniqueMessageUser: index("message_user_deletions_unique_idx").on(table.messageId, table.userId),
+}))
 
-// Per-user conversation deletions (soft delete per user)
 export const conversationUserDeletions = pgTable("conversation_user_deletions", {
   id: serial("id").primaryKey(),
   conversationId: integer("conversation_id").notNull().references(() => conversations.id, { onDelete: "cascade" }),
   userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  deletedAt: timestamp("deleted_at", { withTimezone: true }).notNull().defaultNow(),
-})
+  deletedAt: timestamp("deleted_at", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  uniqueConversationUser: index("conversation_user_deletions_unique_idx").on(table.conversationId, table.userId),
+}))
 
-// CHAT RELATIONS
+// RELATIONS
 export const conversationsRelations = relations(conversations, ({ one, many }) => ({
   mentor: one(mentors, {
     fields: [conversations.mentorId],
@@ -423,7 +465,6 @@ export const conversationsRelations = relations(conversations, ({ one, many }) =
     references: [learners.id],
   }),
   messages: many(messages),
-  userDeletions: many(conversationUserDeletions),
 }))
 
 export const messagesRelations = relations(messages, ({ one, many }) => ({
@@ -435,12 +476,11 @@ export const messagesRelations = relations(messages, ({ one, many }) => ({
     fields: [messages.senderId],
     references: [users.id],
   }),
-  replyToMessage: one(messages, {
+  attachments: many(messageAttachments),
+  replyTo: one(messages, {
     fields: [messages.replyToMessageId],
     references: [messages.id],
   }),
-  attachments: many(messageAttachments),
-  userDeletions: many(messageUserDeletions),
 }))
 
 export const messageAttachmentsRelations = relations(messageAttachments, ({ one }) => ({
@@ -450,32 +490,26 @@ export const messageAttachmentsRelations = relations(messageAttachments, ({ one 
   }),
 }))
 
-export const messageUserDeletionsRelations = relations(messageUserDeletions, ({ one }) => ({
-  message: one(messages, {
-    fields: [messageUserDeletions.messageId],
-    references: [messages.id],
-  }),
-  user: one(users, {
-    fields: [messageUserDeletions.userId],
-    references: [users.id],
-  }),
-}))
-
-export const conversationUserDeletionsRelations = relations(conversationUserDeletions, ({ one }) => ({
-  conversation: one(conversations, {
-    fields: [conversationUserDeletions.conversationId],
-    references: [conversations.id],
-  }),
-  user: one(users, {
-    fields: [conversationUserDeletions.userId],
-    references: [users.id],
-  }),
-}))
-
 export const usersRelations = relations(users, ({ many }) => ({
   sentMessages: many(messages),
-  deletedMessages: many(messageUserDeletions),
-  deletedConversations: many(conversationUserDeletions),
+  messageUserDeletions: many(messageUserDeletions),
+  conversationUserDeletions: many(conversationUserDeletions),
+}))
+
+export const mentorsRelations = relations(mentors, ({ one, many }) => ({
+  user: one(users, {
+    fields: [mentors.userId],
+    references: [users.id],
+  }),
+  conversations: many(conversations),
+}))
+
+export const learnersRelations = relations(learners, ({ one, many }) => ({
+  user: one(users, {
+    fields: [learners.userId],
+    references: [users.id],
+  }),
+  conversations: many(conversations),
 }))
 
 

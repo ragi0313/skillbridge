@@ -28,6 +28,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { motion } from "framer-motion"
+import { MessageLearnerButton } from "@/components/learners/MessageLearnerButton"
 
 interface DashboardStats {
   totalSessions: number
@@ -377,10 +378,11 @@ export default function MentorDashboardPage() {
                     </p>
 
                     <div className="flex items-center justify-end mt-auto">
-                      <Button className="gradient-bg">
-                        <MessageSquare className="w-4 h-4 mr-2" />
-                        Message
-                      </Button>
+                      <MessageLearnerButton
+                        learnerUserId={learner.id}
+                        learnerName={learner.name}
+                        learnerAvatar={learner.profilePicture}
+                      />
                     </div>
                   </div>
                 ))}

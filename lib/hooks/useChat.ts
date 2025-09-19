@@ -1,89 +1,160 @@
-'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { toast } from 'sonner'
 
-interface Message {
+export interface ChatMessage {
   id: number
   conversationId: number
   senderId: number
   content: string
-  messageType: 'text' | 'file' | 'image'
-  isEdited: boolean
-  editedAt: Date | null
-  replyToMessageId: number | null
-  createdAt: Date
-  updatedAt: Date
+  messageType: string
+  createdAt: string
+  editedAt?: string
   sender: {
     id: number
     firstName: string
     lastName: string
+    profilePictureUrl?: string
   }
+  attachments?: Array<{
+    id: number
+    originalFilename: string
+    fileUrl: string
+    fileSize: number
+    mimeType: string
+  }>
 }
 
-interface Conversation {
+export interface ConversationWithParticipants {
   id: number
   mentorId: number
   learnerId: number
-  lastMessageAt: Date | null
-  mentorLastReadAt: Date | null
-  learnerLastReadAt: Date | null
+  mentorLastReadAt: string | null
+  learnerLastReadAt: string | null
+  lastMessageAt: string | null
   isActive: boolean
-  createdAt: Date
-  updatedAt: Date
-  lastMessage?: {
+  createdAt: string
+  updatedAt: string
+  mentor: {
     id: number
-    content: string
-    senderId: number
-    messageType: string
-    createdAt: Date
-  }
-  otherUser: {
-    id: number
+    userId: number
     firstName: string
     lastName: string
     profilePictureUrl: string | null
   }
+  learner: {
+    id: number
+    userId: number
+    firstName: string
+    lastName: string
+    profilePictureUrl: string | null
+  }
+  lastMessage?: {
+    id: number
+    content: string
+    messageType: string
+    createdAt: string
+    senderName: string
+  }
+  unreadCount?: number
 }
 
-export function useChat() {
-  const [conversations, setConversations] = useState<Conversation[]>([])
-  const [messages, setMessages] = useState<Record<number, Message[]>>({})
+interface UseChatOptions {
+  conversationId?: number
+  userId?: number
+  onNewMessage?: (message: ChatMessage) => void
+  onError?: (error: string) => void
+}
+
+export const useChat = ({ conversationId, userId, onNewMessage, onError }: UseChatOptions = {}) => {
+  const [messages, setMessages] = useState<ChatMessage[]>([])
   const [loading, setLoading] = useState(false)
+  const [sending, setSending] = useState(false)
+  const [hasMore, setHasMore] = useState(true)
+  const [page, setPage] = useState(0)
 
-  const fetchConversations = useCallback(async () => {
-    try {
-      setLoading(true)
-      const response = await fetch('/api/chat/conversations')
-      const data = await response.json()
-      if (data.conversations) {
-        setConversations(data.conversations)
-      }
-    } catch (error) {
-      console.error('Error fetching conversations:', error)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const loadingRef = useRef(false)
 
-  const fetchMessages = useCallback(async (conversationId: number) => {
+  // Fetch messages for a conversation
+  const fetchMessages = useCallback(async (reset = false) => {
+    if (!conversationId || loadingRef.current) return
+
+    loadingRef.current = true
+    setLoading(true)
+
     try {
-      const response = await fetch(`/api/chat/conversations/${conversationId}/messages`)
-      const data = await response.json()
-      
-      if (data.messages) {
-        setMessages(prev => ({
-          ...prev,
-          [conversationId]: data.messages
-        }))
+      const currentPage = reset ? 0 : page
+      const response = await fetch(`/api/chat/conversations/${conversationId}?page=${currentPage}&limit=50`)
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch messages')
       }
-      
-      return data
+
+      const data = await response.json()
+
+      if (reset) {
+        setMessages(data.messages || [])
+        setPage(0)
+      } else {
+        setMessages(prev => [...data.messages, ...prev])
+      }
+
+      setHasMore(data.messages?.length === 50)
+      if (!reset) {
+        setPage(prev => prev + 1)
+      }
     } catch (error) {
       console.error('Error fetching messages:', error)
-      return null
+      onError?.('Failed to load messages')
+      toast.error('Failed to load messages')
+    } finally {
+      setLoading(false)
+      loadingRef.current = false
     }
-  }, [])
+  }, [conversationId, onError]) // Remove page dependency to avoid circular reference
 
-  const sendMessage = useCallback(async (conversationId: number, content: string) => {
+  // Send a message
+  const sendMessage = useCallback(async (
+    content: string,
+    messageType: string = 'text',
+    attachments?: Array<{
+      originalFilename: string
+      systemFilename: string
+      fileUrl: string
+      fileSize: number
+      mimeType: string
+      storagePath?: string
+    }>
+  ) => {
+    if (!conversationId || !content.trim()) return
+
+    setSending(true)
+
+    // Optimistic update
+    const tempId = `temp-${Date.now()}`
+    const optimisticMessage: ChatMessage = {
+      id: parseInt(tempId),
+      conversationId,
+      senderId: userId || 0,
+      content,
+      messageType,
+      createdAt: new Date().toISOString(),
+      sender: {
+        id: userId || 0,
+        firstName: 'You',
+        lastName: '',
+      },
+      attachments: attachments?.map((att, index) => ({
+        id: index,
+        originalFilename: att.originalFilename,
+        fileUrl: att.fileUrl,
+        fileSize: att.fileSize,
+        mimeType: att.mimeType,
+      })),
+    }
+
+    setMessages(prev => [...prev, optimisticMessage])
+
     try {
       const response = await fetch(`/api/chat/conversations/${conversationId}/messages`, {
         method: 'POST',
@@ -92,139 +163,136 @@ export function useChat() {
         },
         body: JSON.stringify({
           content,
-          messageType: 'text'
-        })
+          messageType,
+          attachments,
+        }),
       })
-      
+
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        console.error('Failed to send message:', errorData.error || 'Unknown error')
-        return null
+        throw new Error('Failed to send message')
       }
-      
+
       const data = await response.json()
-      
-      // Add message to local state for immediate feedback
-      if (data.message) {
-        setMessages(prev => ({
-          ...prev,
-          [conversationId]: [
-            ...(prev[conversationId] || []),
-            data.message
-          ]
-        }))
-        
-        // Update conversation last message time
-        setConversations(prev => prev.map(conv => 
-          conv.id === conversationId
-            ? { ...conv, lastMessageAt: new Date(data.message.createdAt) }
-            : conv
-        ))
-      }
-      
-      return data
+
+      // Replace optimistic message with real one
+      setMessages(prev => prev.map(msg =>
+        msg.id === parseInt(tempId) ? data.message : msg
+      ))
+
+      onNewMessage?.(data.message)
     } catch (error) {
       console.error('Error sending message:', error)
-      return null
-    }
-  }, [])
 
-  const createConversation = useCallback(async (otherUserId: number) => {
+      // Remove failed message
+      setMessages(prev => prev.filter(msg => msg.id !== parseInt(tempId)))
+
+      onError?.('Failed to send message')
+      toast.error('Failed to send message')
+    } finally {
+      setSending(false)
+    }
+  }, [conversationId, userId, onNewMessage, onError])
+
+  // Mark conversation as read
+  const markAsRead = useCallback(async () => {
+    if (!conversationId) return
+
     try {
-      const response = await fetch('/api/chat/conversations', {
+      await fetch(`/api/chat/conversations/${conversationId}/read`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ otherUserId })
       })
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        console.error('Failed to create conversation:', response.status, errorData)
-        return null
-      }
-      
-      const data = await response.json()
-      
-      // Refresh conversations list to include the new conversation
-      if (data.conversation) {
-        await fetchConversations()
-      }
-      
-      return data.conversation
     } catch (error) {
-      console.error('Error creating conversation:', error)
-      return null
+      console.error('Error marking as read:', error)
     }
-  }, [fetchConversations])
+  }, [conversationId])
 
-  const deleteMessage = useCallback(async (messageId: number, conversationId: number) => {
+  // Delete message for current user
+  const deleteMessage = useCallback(async (messageId: number) => {
     try {
-      const response = await fetch(`/api/chat/messages/${messageId}`, {
-        method: 'DELETE'
+      const response = await fetch(`/api/chat/messages/${messageId}/delete`, {
+        method: 'POST',
       })
-      
-      if (response.ok) {
-        // Remove message from local state (it's now hidden for this user)
-        setMessages(prev => ({
-          ...prev,
-          [conversationId]: prev[conversationId]?.filter(msg => msg.id !== messageId) || []
-        }))
-        return true
-      } else {
-        const errorData = await response.json().catch(() => ({}))
-        console.error('Failed to delete message:', errorData.error || 'Unknown error')
-        return false
+
+      if (!response.ok) {
+        throw new Error('Failed to delete message')
       }
+
+      setMessages(prev => prev.filter(msg => msg.id !== messageId))
+      toast.success('Message deleted')
     } catch (error) {
       console.error('Error deleting message:', error)
-      return false
+      toast.error('Failed to delete message')
     }
   }, [])
 
-  const deleteConversation = useCallback(async (conversationId: number) => {
-    try {
-      const response = await fetch(`/api/chat/conversations/${conversationId}`, {
-        method: 'DELETE'
-      })
-      
-      if (response.ok) {
-        // Remove conversation from local state
-        setConversations(prev => prev.filter(conv => conv.id !== conversationId))
-        // Remove messages for this conversation
-        setMessages(prev => {
-          const newMessages = { ...prev }
-          delete newMessages[conversationId]
-          return newMessages
-        })
-        return true
-      } else {
-        const errorData = await response.json().catch(() => ({}))
-        console.error('Failed to delete conversation:', errorData.error || 'Unknown error')
-        return false
+  // Load more messages (pagination)
+  const loadMore = useCallback(() => {
+    if (!loading && hasMore) {
+      fetchMessages(false)
+    }
+  }, [loading, hasMore]) // Remove fetchMessages dependency to avoid circular reference
+
+  // Scroll to bottom
+  const scrollToBottom = useCallback(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [])
+
+  // Add new message from real-time events
+  const addMessage = useCallback((message: ChatMessage) => {
+    setMessages(prev => {
+      // Avoid duplicates
+      if (prev.some(msg => msg.id === message.id)) {
+        return prev
       }
-    } catch (error) {
-      console.error('Error deleting conversation:', error)
-      return false
-    }
+      return [...prev, message]
+    })
   }, [])
 
-  const clearConversations = useCallback(() => {
-    setConversations([])
-    setMessages({})
+  // Update message (for edits, etc.)
+  const updateMessage = useCallback((messageId: number, updates: Partial<ChatMessage>) => {
+    setMessages(prev => prev.map(msg =>
+      msg.id === messageId ? { ...msg, ...updates } : msg
+    ))
   }, [])
+
+  // Remove message (for deletions)
+  const removeMessage = useCallback((messageId: number) => {
+    setMessages(prev => prev.filter(msg => msg.id !== messageId))
+  }, [])
+
+  // Reset chat state
+  const reset = useCallback(() => {
+    setMessages([])
+    setPage(0)
+    setHasMore(true)
+    loadingRef.current = false
+  }, [])
+
+  // Auto-scroll to bottom on new messages
+  useEffect(() => {
+    if (messages.length > 0) {
+      const lastMessage = messages[messages.length - 1]
+      if (lastMessage.senderId === userId) {
+        scrollToBottom()
+      }
+    }
+  }, [messages, userId, scrollToBottom])
 
   return {
-    conversations,
     messages,
     loading,
-    fetchConversations,
+    sending,
+    hasMore,
+    messagesEndRef,
     fetchMessages,
     sendMessage,
-    createConversation,
+    markAsRead,
     deleteMessage,
-    deleteConversation,
-    clearConversations,
+    loadMore,
+    scrollToBottom,
+    addMessage,
+    updateMessage,
+    removeMessage,
+    reset,
   }
 }

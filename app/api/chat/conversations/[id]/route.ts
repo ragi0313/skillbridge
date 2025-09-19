@@ -1,139 +1,75 @@
-import { db } from "@/db"
-import { conversations, messages, mentors, learners, conversationUserDeletions, messageUserDeletions } from "@/db/schema"
-import { eq, and } from "drizzle-orm"
-import { getSession } from "@/lib/auth/getSession"
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest, NextResponse } from 'next/server'
+import { getSession } from '@/lib/auth/getSession'
+import { ChatService } from '@/lib/services/ChatService'
 
-export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSession()
-  
-  if (!session || !["mentor", "learner"].includes(session.role)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  }
-
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
+    const user = await getSession()
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const { id } = await params
     const conversationId = parseInt(id)
-
-    // Check if conversation exists and user has access
-    const conversation = await db
-      .select()
-      .from(conversations)
-      .where(eq(conversations.id, conversationId))
-      .limit(1)
-
-    if (conversation.length === 0) {
-      return NextResponse.json({ error: "Conversation not found" }, { status: 404 })
+    if (isNaN(conversationId)) {
+      return NextResponse.json({ error: 'Invalid conversation ID' }, { status: 400 })
     }
 
-    const conv = conversation[0]
-    
-    // Verify user has access to this conversation
-    let hasAccess = false
-    if (session.role === "mentor") {
-      const mentor = await db
-        .select({ id: mentors.id })
-        .from(mentors)
-        .where(eq(mentors.userId, session.id))
-        .limit(1)
-      
-      if (mentor[0] && conv.mentorId === mentor[0].id) {
-        hasAccess = true
-      }
-    } else if (session.role === "learner") {
-      const learner = await db
-        .select({ id: learners.id })
-        .from(learners)
-        .where(eq(learners.userId, session.id))
-        .limit(1)
-      
-      if (learner[0] && conv.learnerId === learner[0].id) {
-        hasAccess = true
-      }
+    const { searchParams } = new URL(request.url)
+    const page = parseInt(searchParams.get('page') || '0')
+    const limit = parseInt(searchParams.get('limit') || '50')
+
+    // Get conversation details
+    const conversation = await ChatService.getConversationWithParticipants(conversationId)
+
+    // Check if user is a participant
+    if (conversation.mentor.userId !== user.id && conversation.learner.userId !== user.id) {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
     }
 
-    if (!hasAccess) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    // Get messages
+    const messages = await ChatService.getConversationMessages(conversationId, user.id, page, limit)
+
+    return NextResponse.json({
+      conversation,
+      messages: messages.reverse() // Reverse to show oldest first
+    })
+  } catch (error) {
+    console.error('Error fetching conversation:', error)
+    return NextResponse.json(
+      { error: 'Failed to fetch conversation' },
+      { status: 500 }
+    )
+  }
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const user = await getSession()
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Check if user has already deleted this conversation
-    const existingDeletion = await db
-      .select()
-      .from(conversationUserDeletions)
-      .where(and(
-        eq(conversationUserDeletions.conversationId, conversationId),
-        eq(conversationUserDeletions.userId, session.id)
-      ))
-      .limit(1)
-
-    if (existingDeletion.length > 0) {
-      return NextResponse.json({ error: "Conversation already deleted" }, { status: 400 })
+    const { id } = await params
+    const conversationId = parseInt(id)
+    if (isNaN(conversationId)) {
+      return NextResponse.json({ error: 'Invalid conversation ID' }, { status: 400 })
     }
 
-    // Add to conversation user deletions (soft delete for this user)
-    await db
-      .insert(conversationUserDeletions)
-      .values({
-        conversationId,
-        userId: session.id,
-      })
-
-    // Get all messages in this conversation
-    const conversationMessages = await db
-      .select({ id: messages.id })
-      .from(messages)
-      .where(eq(messages.conversationId, conversationId))
-
-    // Add all messages to user deletions for this user
-    if (conversationMessages.length > 0) {
-      const messageDeletions = conversationMessages.map(msg => ({
-        messageId: msg.id,
-        userId: session.id,
-      }))
-
-      await db
-        .insert(messageUserDeletions)
-        .values(messageDeletions)
-        .onConflictDoNothing() // In case some messages were already individually deleted
-    }
-
-    // Check if both users have deleted this conversation
-    const allConversationDeletions = await db
-      .select()
-      .from(conversationUserDeletions)
-      .where(eq(conversationUserDeletions.conversationId, conversationId))
-
-    // If both participants have deleted the conversation, hard delete everything
-    if (allConversationDeletions.length >= 2) {
-      // Hard delete all messages
-      await db
-        .update(messages)
-        .set({ 
-          isDeleted: true,
-          deletedAt: new Date(),
-          content: null
-        })
-        .where(eq(messages.conversationId, conversationId))
-
-      // Clean up deletion records
-      await db
-        .delete(messageUserDeletions)
-        .where(eq(messageUserDeletions.messageId, conversationMessages.map(m => m.id)[0])) // This needs to be IN clause for all message IDs
-
-      await db
-        .delete(conversationUserDeletions)
-        .where(eq(conversationUserDeletions.conversationId, conversationId))
-
-      // Mark conversation as inactive
-      await db
-        .update(conversations)
-        .set({ isActive: false })
-        .where(eq(conversations.id, conversationId))
-    }
+    await ChatService.deleteConversationForUser(conversationId, user.id)
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error("Error deleting conversation:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    console.error('Error deleting conversation:', error)
+    return NextResponse.json(
+      { error: 'Failed to delete conversation' },
+      { status: 500 }
+    )
   }
 }

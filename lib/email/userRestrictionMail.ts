@@ -1,7 +1,6 @@
-import nodemailer from 'nodemailer'
-
 // Create transporter for sending emails
-const createTransporter = () => {
+const createTransporter = async () => {
+  const nodemailer = (await import('nodemailer')).default
   return nodemailer.createTransporter({
     host: process.env.SMTP_HOST,
     port: parseInt(process.env.SMTP_PORT || '587'),
@@ -18,7 +17,7 @@ export async function sendBlacklistNotificationEmail(
   firstName: string,
   reason: string
 ) {
-  const transporter = createTransporter()
+  const transporter = await createTransporter()
   const adminEmail = process.env.ADMIN_EMAIL || 'admin@skillbridge.com'
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://skillbridge.com'
 
@@ -135,7 +134,7 @@ export async function sendSuspensionNotificationEmail(
   reason: string,
   suspensionEndsAt: Date
 ) {
-  const transporter = createTransporter()
+  const transporter = await createTransporter()
   const adminEmail = process.env.ADMIN_EMAIL || 'admin@skillbridge.com'
   
   const endDate = suspensionEndsAt.toLocaleDateString("en-US", {

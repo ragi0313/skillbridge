@@ -79,6 +79,32 @@ export async function POST(
       }
     }
 
+    // Check feedback status if session was successfully completed
+    let feedbackInfo = {}
+    if (result.success && result.status === 'completed' && !result.alreadyCompleted) {
+      try {
+        const feedbackQuery = await db
+          .select({
+            learnerFeedbackSubmitted: bookingSessions.learnerFeedbackSubmitted,
+            mentorFeedbackSubmitted: bookingSessions.mentorFeedbackSubmitted
+          })
+          .from(bookingSessions)
+          .where(eq(bookingSessions.id, sessionId))
+          .limit(1)
+
+        if (feedbackQuery.length > 0) {
+          feedbackInfo = {
+            learnerFeedbackSubmitted: feedbackQuery[0].learnerFeedbackSubmitted || false,
+            mentorFeedbackSubmitted: feedbackQuery[0].mentorFeedbackSubmitted || false,
+            shouldShowFeedback: result.status === 'completed' && result.paymentProcessed
+          }
+        }
+      } catch (error) {
+        console.error('Error checking feedback status:', error)
+        // Continue without feedback info
+      }
+    }
+
     return NextResponse.json({
       success: result.success,
       status: result.status,
@@ -88,6 +114,7 @@ export async function POST(
         refundProcessed: result.refundProcessed,
         mentorEarnings: result.mentorEarnings
       },
+      feedbackInfo,
       alreadyEnded: result.alreadyCompleted
     })
 

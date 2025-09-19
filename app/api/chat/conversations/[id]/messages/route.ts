@@ -1,200 +1,104 @@
-import { db } from "@/db"
-import { conversations, messages, users, mentors, learners, messageUserDeletions } from "@/db/schema"
-import { eq, desc, and, notExists } from "drizzle-orm"
-import { getSession } from "@/lib/auth/getSession"
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest, NextResponse } from 'next/server'
+import { getSession } from '@/lib/auth/getSession'
+import { ChatService } from '@/lib/services/ChatService'
+import { z } from 'zod'
 
-export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSession()
-  
-  if (!session || !["mentor", "learner"].includes(session.role)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  }
-
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
+    const user = await getSession()
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const { id } = await params
     const conversationId = parseInt(id)
-
-    // Check if user has access to this conversation
-    const conversation = await db
-      .select()
-      .from(conversations)
-      .where(eq(conversations.id, conversationId))
-      .limit(1)
-
-    if (conversation.length === 0) {
-      return NextResponse.json({ error: "Conversation not found" }, { status: 404 })
+    if (isNaN(conversationId)) {
+      return NextResponse.json({ error: 'Invalid conversation ID' }, { status: 400 })
     }
 
-    const conv = conversation[0]
-    
-    // Verify user has access to this conversation
-    if (session.role === "mentor") {
-      const mentor = await db
-        .select({ id: mentors.id })
-        .from(mentors)
-        .where(eq(mentors.userId, session.id))
-        .limit(1)
-      
-      if (!mentor[0] || conv.mentorId !== mentor[0].id) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-      }
-    } else if (session.role === "learner") {
-      const learner = await db
-        .select({ id: learners.id })
-        .from(learners)
-        .where(eq(learners.userId, session.id))
-        .limit(1)
-      
-      if (!learner[0] || conv.learnerId !== learner[0].id) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-      }
+    // Verify user is a participant in this conversation
+    const conversation = await ChatService.getConversationWithParticipants(conversationId)
+    if (conversation.mentor.userId !== user.id && conversation.learner.userId !== user.id) {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
     }
 
-    // Get messages for this conversation (excluding messages deleted by this user)
-    const conversationMessages = await db
-      .select({
-        id: messages.id,
-        conversationId: messages.conversationId,
-        senderId: messages.senderId,
-        content: messages.content,
-        messageType: messages.messageType,
-        isEdited: messages.isEdited,
-        editedAt: messages.editedAt,
-        replyToMessageId: messages.replyToMessageId,
-        createdAt: messages.createdAt,
-        updatedAt: messages.updatedAt,
-        sender: {
-          id: users.id,
-          firstName: users.firstName,
-          lastName: users.lastName,
-        },
-      })
-      .from(messages)
-      .innerJoin(users, eq(messages.senderId, users.id))
-      .where(and(
-        eq(messages.conversationId, conversationId),
-        eq(messages.isDeleted, false),
-        // Exclude messages that the current user has deleted
-        notExists(
-          db.select()
-            .from(messageUserDeletions)
-            .where(
-              and(
-                eq(messageUserDeletions.messageId, messages.id),
-                eq(messageUserDeletions.userId, session.id)
-              )
-            )
-        )
-      ))
-      .orderBy(messages.createdAt)
+    const url = new URL(request.url)
+    const page = parseInt(url.searchParams.get('page') || '0')
+    const limit = parseInt(url.searchParams.get('limit') || '50')
 
-    return NextResponse.json({ messages: conversationMessages })
+    const messages = await ChatService.getConversationMessages(conversationId, user.id, page, limit)
+
+    return NextResponse.json({ messages })
   } catch (error) {
-    console.error("Error fetching messages:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    console.error('Error fetching messages:', error)
+    return NextResponse.json(
+      { error: 'Failed to fetch messages' },
+      { status: 500 }
+    )
   }
 }
 
-export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSession()
-  
-  if (!session || !["mentor", "learner"].includes(session.role)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  }
+const sendMessageSchema = z.object({
+  content: z.string().min(1, 'Message content is required'),
+  messageType: z.enum(['text', 'file', 'image']).default('text'),
+  attachments: z.array(z.object({
+    originalFilename: z.string(),
+    systemFilename: z.string(),
+    fileUrl: z.string(),
+    fileSize: z.number(),
+    mimeType: z.string(),
+    storagePath: z.string().optional(),
+  })).optional(),
+})
 
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
+    const user = await getSession()
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const { id } = await params
     const conversationId = parseInt(id)
-    const { content, messageType = 'text' } = await request.json()
-
-    if (!content) {
-      return NextResponse.json({ error: "Message content is required" }, { status: 400 })
+    if (isNaN(conversationId)) {
+      return NextResponse.json({ error: 'Invalid conversation ID' }, { status: 400 })
     }
 
-    // Check if user has access to this conversation
-    const conversation = await db
-      .select()
-      .from(conversations)
-      .where(eq(conversations.id, conversationId))
-      .limit(1)
+    const body = await request.json()
+    const { content, messageType, attachments } = sendMessageSchema.parse(body)
 
-    if (conversation.length === 0) {
-      return NextResponse.json({ error: "Conversation not found" }, { status: 404 })
+    // Verify user is a participant in this conversation
+    const conversation = await ChatService.getConversationWithParticipants(conversationId)
+    if (conversation.mentor.userId !== user.id && conversation.learner.userId !== user.id) {
+      return NextResponse.json({ error: 'Access denied' }, { status: 403 })
     }
 
-    const conv = conversation[0]
-    
-    // Verify user has access to this conversation
-    if (session.role === "mentor") {
-      const mentor = await db
-        .select({ id: mentors.id })
-        .from(mentors)
-        .where(eq(mentors.userId, session.id))
-        .limit(1)
-      
-      if (!mentor[0] || conv.mentorId !== mentor[0].id) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-      }
-    } else if (session.role === "learner") {
-      const learner = await db
-        .select({ id: learners.id })
-        .from(learners)
-        .where(eq(learners.userId, session.id))
-        .limit(1)
-      
-      if (!learner[0] || conv.learnerId !== learner[0].id) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-      }
-    }
+    const message = await ChatService.sendMessage(
+      conversationId,
+      user.id,
+      content,
+      messageType,
+      attachments
+    )
 
-    // Create message
-    const newMessage = await db
-      .insert(messages)
-      .values({
-        conversationId,
-        senderId: session.id,
-        content,
-        messageType,
-      })
-      .returning()
-
-    // Update conversation last message timestamp
-    await db
-      .update(conversations)
-      .set({ 
-        lastMessageAt: new Date(),
-        updatedAt: new Date()
-      })
-      .where(eq(conversations.id, conversationId))
-
-    // Get the complete message with sender info
-    const messageWithSender = await db
-      .select({
-        id: messages.id,
-        conversationId: messages.conversationId,
-        senderId: messages.senderId,
-        content: messages.content,
-        messageType: messages.messageType,
-        isEdited: messages.isEdited,
-        editedAt: messages.editedAt,
-        replyToMessageId: messages.replyToMessageId,
-        createdAt: messages.createdAt,
-        updatedAt: messages.updatedAt,
-        sender: {
-          id: users.id,
-          firstName: users.firstName,
-          lastName: users.lastName,
-        },
-      })
-      .from(messages)
-      .innerJoin(users, eq(messages.senderId, users.id))
-      .where(eq(messages.id, newMessage[0].id))
-      .limit(1)
-
-    return NextResponse.json({ message: messageWithSender[0] }, { status: 201 })
+    return NextResponse.json({ message })
   } catch (error) {
-    console.error("Error creating message:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    console.error('Error sending message:', error)
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { error: 'Invalid request data', details: error.errors },
+        { status: 400 }
+      )
+    }
+    return NextResponse.json(
+      { error: 'Failed to send message' },
+      { status: 500 }
+    )
   }
 }

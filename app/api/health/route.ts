@@ -1,82 +1,149 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { sessionMonitorService } from '@/lib/services/SessionMonitorService'
+import { validateServiceHealth } from '@/lib/config/env-validation'
 import { db } from '@/db'
 import { bookingSessions } from '@/db/schema'
 import { sql } from 'drizzle-orm'
 
 export async function GET(request: NextRequest) {
   try {
+    const startTime = Date.now()
     const detailed = request.nextUrl.searchParams.get('detailed') === 'true'
-    
-    // Basic health checks
-    const basicChecks = {
-      database: await checkDatabase(),
-      sessionMonitor: checkSessionMonitor(),
+
+    // Comprehensive health checks using the new service validation
+    const serviceHealth = await validateServiceHealth()
+
+    // Legacy session monitor check (if available)
+    let sessionMonitorHealth = { status: 'healthy', message: 'Not available' }
+    try {
+      const { sessionMonitorService } = await import('@/lib/services/SessionMonitorService')
+      sessionMonitorHealth = checkSessionMonitor(sessionMonitorService)
+    } catch (error) {
+      // SessionMonitorService might not exist, that's ok
+      sessionMonitorHealth = { status: 'healthy', message: 'Service not found (optional)' }
+    }
+
+    const responseTime = Date.now() - startTime
+
+    // Build comprehensive health response
+    const healthResponse = {
+      timestamp: new Date().toISOString(),
+      status: serviceHealth.overall ? 'healthy' : 'unhealthy',
+      responseTime: `${responseTime}ms`,
+      services: {
+        database: {
+          status: serviceHealth.database ? 'up' : 'down',
+          critical: true,
+          details: detailed ? await getDatabaseDetails() : undefined
+        },
+        pusher: {
+          status: serviceHealth.pusher ? 'up' : 'down',
+          critical: true,
+          message: 'Real-time messaging service'
+        },
+        cache: {
+          status: serviceHealth.cache ? 'up' : 'down',
+          critical: false,
+          message: 'Rate limiting and caching'
+        },
+        storage: {
+          status: serviceHealth.storage ? 'up' : 'down',
+          critical: false,
+          message: 'File upload service'
+        },
+        email: {
+          status: serviceHealth.email ? 'up' : 'down',
+          critical: false,
+          message: 'Email notification service'
+        },
+        sessionMonitor: {
+          status: sessionMonitorHealth.status,
+          critical: false,
+          message: sessionMonitorHealth.message,
+          details: detailed ? sessionMonitorHealth : undefined
+        }
+      },
+      environment: process.env.NODE_ENV,
+      version: process.env.npm_package_version || 'unknown'
     }
 
     // Add detailed information if requested
-    const healthChecks = {
-      timestamp: new Date().toISOString(),
-      status: 'healthy' as string,
-      checks: detailed ? {
-        ...basicChecks,
-        sessionStats: await getSessionStats(),
-        systemInfo: getSystemInfo(),
-      } : basicChecks
+    if (detailed) {
+      healthResponse.services.systemInfo = {
+        status: 'up',
+        critical: false,
+        details: getSystemInfo()
+      }
+
+      healthResponse.services.sessionStats = {
+        status: 'up',
+        critical: false,
+        details: await getSessionStats()
+      }
     }
 
-    // Determine overall health
-    const allHealthy = Object.values(healthChecks.checks).every(
-      check => check.status === 'healthy'
-    )
-    
-    healthChecks.status = allHealthy ? 'healthy' : 'unhealthy'
+    const statusCode = serviceHealth.overall ? 200 : 503
 
-    const statusCode = allHealthy ? 200 : 503
-
-    return NextResponse.json(healthChecks, { status: statusCode })
+    return NextResponse.json(healthResponse, {
+      status: statusCode,
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      }
+    })
 
   } catch (error) {
     console.error('[HEALTH_CHECK] Error during health check:', error)
-    
+
     return NextResponse.json({
       timestamp: new Date().toISOString(),
       status: 'error',
       error: error instanceof Error ? error.message : 'Unknown error',
-      checks: {
-        database: { status: 'error', message: 'Health check failed' },
-        sessionMonitor: { status: 'error', message: 'Health check failed' }
+      environment: process.env.NODE_ENV,
+      services: {
+        database: { status: 'error', critical: true, message: 'Health check failed' },
+        pusher: { status: 'error', critical: true, message: 'Health check failed' }
       }
-    }, { status: 503 })
+    }, {
+      status: 503,
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      }
+    })
   }
 }
 
-async function checkDatabase(): Promise<{ status: string; responseTime?: number; message?: string }> {
+async function getDatabaseDetails(): Promise<{ responseTime: number; message: string; connectionInfo?: any }> {
   try {
     const startTime = Date.now()
-    
+
     // Simple database connectivity test
     await db.select({ count: sql`count(*)` }).from(bookingSessions).limit(1)
-    
+
     const responseTime = Date.now() - startTime
-    
+
     return {
-      status: 'healthy',
       responseTime,
-      message: `Database responding in ${responseTime}ms`
+      message: `Database responding in ${responseTime}ms`,
+      connectionInfo: {
+        type: 'PostgreSQL',
+        pool: 'Active'
+      }
     }
   } catch (error) {
     return {
-      status: 'unhealthy',
+      responseTime: 0,
       message: `Database error: ${error instanceof Error ? error.message : 'Unknown error'}`
     }
   }
 }
 
-function checkSessionMonitor(): { status: string; message?: string; details?: any } {
+function checkSessionMonitor(sessionMonitorService: any): { status: string; message?: string; details?: any } {
   try {
     const monitorStatus = sessionMonitorService.getStatus()
-    
+
     if (!monitorStatus.isHealthy) {
       return {
         status: 'unhealthy',
@@ -107,7 +174,7 @@ function checkSessionMonitor(): { status: string; message?: string; details?: an
   }
 }
 
-async function getSessionStats(): Promise<{ status: string; data?: any; message?: string }> {
+async function getSessionStats(): Promise<any> {
   try {
     const stats = await db
       .select({
@@ -118,26 +185,35 @@ async function getSessionStats(): Promise<{ status: string; data?: any; message?
       .groupBy(bookingSessions.status)
 
     return {
-      status: 'healthy',
-      data: stats.reduce((acc, stat) => {
+      sessionsByStatus: stats.reduce((acc, stat) => {
         acc[stat.status || 'unknown'] = Number(stat.count)
         return acc
-      }, {} as Record<string, number>)
+      }, {} as Record<string, number>),
+      lastUpdated: new Date().toISOString()
     }
   } catch (error) {
     return {
-      status: 'unhealthy',
-      message: `Failed to get session stats: ${error instanceof Error ? error.message : 'Unknown error'}`
+      error: `Failed to get session stats: ${error instanceof Error ? error.message : 'Unknown error'}`
     }
   }
 }
 
 function getSystemInfo(): any {
+  const memoryUsage = process.memoryUsage()
+
   return {
     nodeVersion: process.version,
     platform: process.platform,
+    architecture: process.arch,
     environment: process.env.NODE_ENV,
-    uptime: Math.floor(process.uptime()),
-    memoryUsage: process.memoryUsage(),
+    uptime: `${Math.floor(process.uptime())}s`,
+    memoryUsage: {
+      rss: `${Math.round(memoryUsage.rss / 1024 / 1024)}MB`,
+      heapTotal: `${Math.round(memoryUsage.heapTotal / 1024 / 1024)}MB`,
+      heapUsed: `${Math.round(memoryUsage.heapUsed / 1024 / 1024)}MB`,
+      external: `${Math.round(memoryUsage.external / 1024 / 1024)}MB`
+    },
+    pid: process.pid,
+    timestamp: new Date().toISOString()
   }
 }

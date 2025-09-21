@@ -8,8 +8,10 @@ import {
   learners,
   users
 } from '@/db/schema'
-import { eq, and, desc, notExists } from 'drizzle-orm'
+import { eq, and, desc, notExists, gt } from 'drizzle-orm'
 import { triggerPusherEvent, getConversationChannel, PUSHER_EVENTS } from '@/lib/pusher/config'
+import { validateChatMessage } from '@/lib/validation/messageValidation'
+import { Metrics } from '@/lib/monitoring/metrics'
 
 export interface ConversationWithParticipants {
   id: number
@@ -81,28 +83,61 @@ export class ChatService {
       throw new Error('Mentor or learner not found')
     }
 
-    // Check for existing conversation
+    // Check for existing conversation that's NOT soft-deleted by either user
     const existingConversation = await db.select()
       .from(conversations)
       .where(and(
         eq(conversations.mentorId, mentorResult[0].id),
-        eq(conversations.learnerId, learnerResult[0].id)
+        eq(conversations.learnerId, learnerResult[0].id),
+        // Ensure conversation is not soft-deleted by the mentor
+        notExists(
+          db.select()
+            .from(conversationUserDeletions)
+            .where(and(
+              eq(conversationUserDeletions.conversationId, conversations.id),
+              eq(conversationUserDeletions.userId, mentorUserId)
+            ))
+        ),
+        // Ensure conversation is not soft-deleted by the learner
+        notExists(
+          db.select()
+            .from(conversationUserDeletions)
+            .where(and(
+              eq(conversationUserDeletions.conversationId, conversations.id),
+              eq(conversationUserDeletions.userId, learnerUserId)
+            ))
+        )
       ))
       .limit(1)
 
     if (existingConversation[0]) {
       return await this.getConversationWithParticipants(existingConversation[0].id)
     } else {
-      // Create new conversation
-      const newConversation = await db.insert(conversations)
-        .values({
-          mentorId: mentorResult[0].id,
-          learnerId: learnerResult[0].id,
-          isActive: true
-        })
-        .returning()
+      // Check if there's a soft-deleted conversation that can be restored
+      const deletedConversation = await db.select()
+        .from(conversations)
+        .where(and(
+          eq(conversations.mentorId, mentorResult[0].id),
+          eq(conversations.learnerId, learnerResult[0].id)
+        ))
+        .limit(1)
 
-      return await this.getConversationWithParticipants(newConversation[0].id)
+      if (deletedConversation[0]) {
+        // Don't remove deletion records - just return the existing conversation
+        // The message fetching will handle showing only messages after deletion time
+        return await this.getConversationWithParticipants(deletedConversation[0].id)
+      } else {
+        // No existing conversation found, create new one
+        const newConversation = await db.insert(conversations)
+          .values({
+            mentorId: mentorResult[0].id,
+            learnerId: learnerResult[0].id,
+            isActive: true
+          })
+          .returning()
+
+        return await this.getConversationWithParticipants(newConversation[0].id)
+      }
     }
   }
 
@@ -140,8 +175,8 @@ export class ChatService {
       learnerLastReadAt: conv.learnerLastReadAt?.toISOString() || null,
       lastMessageAt: conv.lastMessageAt?.toISOString() || null,
       isActive: conv.isActive,
-      createdAt: conv.createdAt?.toISOString() || new Date().toISOString(),
-      updatedAt: conv.updatedAt?.toISOString() || new Date().toISOString(),
+      createdAt: conv.createdAt.toISOString(),
+      updatedAt: conv.updatedAt.toISOString(),
       mentor: {
         id: mentorData[0].mentors.id,
         userId: mentorData[0].users.id,
@@ -160,37 +195,16 @@ export class ChatService {
   }
 
   static async getUserConversations(userId: number): Promise<ConversationWithParticipants[]> {
-    // Get user's conversations as mentor (excluding soft-deleted ones)
+    // Get ALL user's conversations (including soft-deleted ones)
     const mentorConversations = await db.select()
       .from(conversations)
       .innerJoin(mentors, eq(conversations.mentorId, mentors.id))
-      .where(and(
-        eq(mentors.userId, userId),
-        notExists(
-          db.select()
-            .from(conversationUserDeletions)
-            .where(and(
-              eq(conversationUserDeletions.conversationId, conversations.id),
-              eq(conversationUserDeletions.userId, userId)
-            ))
-        )
-      ))
+      .where(eq(mentors.userId, userId))
 
-    // Get user's conversations as learner (excluding soft-deleted ones)
     const learnerConversations = await db.select()
       .from(conversations)
       .innerJoin(learners, eq(conversations.learnerId, learners.id))
-      .where(and(
-        eq(learners.userId, userId),
-        notExists(
-          db.select()
-            .from(conversationUserDeletions)
-            .where(and(
-              eq(conversationUserDeletions.conversationId, conversations.id),
-              eq(conversationUserDeletions.userId, userId)
-            ))
-        )
-      ))
+      .where(eq(learners.userId, userId))
 
     const allConversationIds = [
       ...mentorConversations.map(c => c.conversations.id),
@@ -200,23 +214,60 @@ export class ChatService {
     const result: ConversationWithParticipants[] = []
     for (const conversationId of allConversationIds) {
       try {
+        // Check if user deleted this conversation and if there are any messages after deletion
+        const conversationDeletion = await db.select()
+          .from(conversationUserDeletions)
+          .where(and(
+            eq(conversationUserDeletions.conversationId, conversationId),
+            eq(conversationUserDeletions.userId, userId)
+          ))
+          .orderBy(desc(conversationUserDeletions.deletedAt))
+          .limit(1)
+
+        const deletionTime = conversationDeletion[0]?.deletedAt
+
+        // If conversation was deleted, check if there are any messages after deletion
+        if (deletionTime) {
+          const messagesAfterDeletion = await db.select()
+            .from(messages)
+            .where(and(
+              eq(messages.conversationId, conversationId),
+              gt(messages.createdAt, deletionTime)
+            ))
+            .limit(1)
+
+          // If no messages after deletion, skip this conversation
+          if (messagesAfterDeletion.length === 0) {
+            continue
+          }
+        }
+
         const conv = await this.getConversationWithParticipants(conversationId)
 
-        // Get the last message for this conversation
+        // Get the last message for this conversation (respecting user deletion time)
+        // (reuse deletionTime from above)
+
+        const lastMessageConditions = [
+          eq(messages.conversationId, conversationId),
+          notExists(
+            db.select()
+              .from(messageUserDeletions)
+              .where(and(
+                eq(messageUserDeletions.messageId, messages.id),
+                eq(messageUserDeletions.userId, userId)
+              ))
+          )
+        ]
+
+        // If user deleted the conversation, only show messages after deletion
+        if (deletionTime) {
+          lastMessageConditions.push(gt(messages.createdAt, deletionTime))
+        }
+
         const lastMessageQuery = await db.select()
           .from(messages)
           .innerJoin(users, eq(messages.senderId, users.id))
-          .where(and(
-            eq(messages.conversationId, conversationId),
-            notExists(
-              db.select()
-                .from(messageUserDeletions)
-                .where(and(
-                  eq(messageUserDeletions.messageId, messages.id),
-                  eq(messageUserDeletions.userId, userId)
-                ))
-            )
-          ))
+          .where(and(...lastMessageConditions))
           .orderBy(desc(messages.createdAt))
           .limit(1)
 
@@ -250,20 +301,40 @@ export class ChatService {
     page = 0,
     limit = 50
   ): Promise<ChatMessage[]> {
+    // Check if user deleted this conversation and when
+    const conversationDeletion = await db.select()
+      .from(conversationUserDeletions)
+      .where(and(
+        eq(conversationUserDeletions.conversationId, conversationId),
+        eq(conversationUserDeletions.userId, userId)
+      ))
+      .orderBy(desc(conversationUserDeletions.deletedAt))
+      .limit(1)
+
+    const deletionTime = conversationDeletion[0]?.deletedAt
+
+    const whereConditions = [
+      eq(messages.conversationId, conversationId),
+      // Exclude individually deleted messages
+      notExists(
+        db.select()
+          .from(messageUserDeletions)
+          .where(and(
+            eq(messageUserDeletions.messageId, messages.id),
+            eq(messageUserDeletions.userId, userId)
+          ))
+      )
+    ]
+
+    // If user deleted the conversation, only show messages after deletion
+    if (deletionTime) {
+      whereConditions.push(gt(messages.createdAt, deletionTime))
+    }
+
     const result = await db.select()
       .from(messages)
       .innerJoin(users, eq(messages.senderId, users.id))
-      .where(and(
-        eq(messages.conversationId, conversationId),
-        notExists(
-          db.select()
-            .from(messageUserDeletions)
-            .where(and(
-              eq(messageUserDeletions.messageId, messages.id),
-              eq(messageUserDeletions.userId, userId)
-            ))
-        )
-      ))
+      .where(and(...whereConditions))
       .orderBy(desc(messages.createdAt))
       .limit(limit)
       .offset(page * limit)
@@ -299,23 +370,76 @@ export class ChatService {
       storagePath?: string
     }>
   ): Promise<ChatMessage> {
-    // Insert message
+    // Validate message content and attachments
+    const validation = validateChatMessage({
+      content,
+      messageType: messageType as 'text' | 'file' | 'image',
+      attachments: _attachments,
+    })
+
+    if (!validation.isValid) {
+      Metrics.error('chat_validation_failed', `sendMessage:${conversationId}`)
+      throw new Error(`Message validation failed: ${validation.errors.join(', ')}`)
+    }
+
+    // Log warnings if any
+    if (validation.warnings.length > 0) {
+      console.warn('[CHAT_SERVICE] Message validation warnings:', validation.warnings)
+    }
+
+    // Use sanitized content if available
+    const sanitizedContent = validation.sanitizedContent || content
+
+    // Log metrics for spam detection
+    if (validation.isSpam) {
+      Metrics.increment('chat.spam.detected', 1, { conversationId: conversationId.toString() })
+      console.warn(`[CHAT_SERVICE] Potential spam detected in conversation ${conversationId}`)
+    }
+
+    // Log risk level metrics
+    Metrics.increment('chat.message.risk_level', 1, {
+      level: validation.riskLevel,
+      conversationId: conversationId.toString()
+    })
+
+    // Insert message with sanitized content
     const newMessage = await db.insert(messages)
       .values({
         conversationId,
         senderId,
-        content,
+        content: sanitizedContent,
         messageType,
       })
       .returning()
 
-    // Update conversation last message time
-    await db.update(conversations)
-      .set({
-        lastMessageAt: new Date(),
-        updatedAt: new Date()
-      })
-      .where(eq(conversations.id, conversationId))
+    // Track message metrics
+    Metrics.messagesSent(conversationId, messageType)
+
+    // Update conversation last message time and mark as read for sender
+    const conversation = await db.select().from(conversations).where(eq(conversations.id, conversationId)).limit(1)
+    if (conversation[0]) {
+      const now = new Date()
+      const updateData: any = {
+        lastMessageAt: now,
+        updatedAt: now
+      }
+
+      // Mark as read for the sender
+      const mentorData = await db.select().from(mentors).where(eq(mentors.userId, senderId)).limit(1)
+      const learnerData = await db.select().from(learners).where(eq(learners.userId, senderId)).limit(1)
+
+      if (mentorData[0] && conversation[0].mentorId === mentorData[0].id) {
+        // Sender is the mentor
+        updateData.mentorLastReadAt = now
+      } else if (learnerData[0] && conversation[0].learnerId === learnerData[0].id) {
+        // Sender is the learner
+        updateData.learnerLastReadAt = now
+      }
+
+      await db.update(conversations)
+        .set(updateData)
+        .where(eq(conversations.id, conversationId))
+    }
 
     // Get complete message with sender info
     const messageWithSender = await db.select()

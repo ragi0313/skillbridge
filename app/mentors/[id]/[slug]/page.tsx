@@ -225,7 +225,6 @@ export default async function MentorProfilePage({
                     <MessageMentorButton
                       mentorUserId={mentor.userId}
                       mentorName={`${mentor.firstName} ${mentor.lastName}`}
-                      mentorAvatar={mentor.profilePictureUrl}
                       className="cursor-pointer bg-transparent"
                     />
                   </div>

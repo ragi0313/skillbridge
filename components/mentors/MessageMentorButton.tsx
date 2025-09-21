@@ -47,11 +47,13 @@ export function MessageMentorButton({
 
       const data = await response.json()
 
-      // Navigate to messages page to open conversation
-      window.location.href = '/learner/messages'
+      // Dispatch custom event to open MiniChatBar with the conversation
+      window.dispatchEvent(new CustomEvent('openMiniChat', {
+        detail: { conversation: data.conversation }
+      }))
 
       // Show success toast
-      toast.success(`Redirecting to chat with ${mentorName}...`)
+      toast.success(`Opening chat with ${mentorName}...`)
     } catch (error) {
       console.error('Error creating conversation:', error)
       toast.error('Failed to start conversation. Please try again.')

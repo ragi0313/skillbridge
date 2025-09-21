@@ -2,8 +2,8 @@ import { pgTable, serial, varchar, text, timestamp, integer, json, numeric, bool
 import { relations } from "drizzle-orm"
 
 const timestamps = {
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }
 
 // USERS TABLE
@@ -417,7 +417,7 @@ export const messages = pgTable("messages", {
   editedAt: timestamp("edited_at", { withTimezone: true }),
   isGloballyDeleted: boolean("is_globally_deleted").default(false).notNull(),
   globallyDeletedAt: timestamp("globally_deleted_at", { withTimezone: true }),
-  replyToMessageId: integer("reply_to_message_id").references(() => messages.id),
+  replyToMessageId: integer("reply_to_message_id"),
   ...timestamps,
 }, (table) => ({
   conversationIdx: index("messages_conversation_idx").on(table.conversationId),

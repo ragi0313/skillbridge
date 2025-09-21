@@ -131,9 +131,9 @@ export const useChat = ({ conversationId, userId, onNewMessage, onError }: UseCh
     setSending(true)
 
     // Optimistic update
-    const tempId = `temp-${Date.now()}`
+    const tempId = -Date.now() // Use negative timestamp for temp IDs
     const optimisticMessage: ChatMessage = {
-      id: parseInt(tempId),
+      id: tempId,
       conversationId,
       senderId: userId || 0,
       content,
@@ -176,7 +176,7 @@ export const useChat = ({ conversationId, userId, onNewMessage, onError }: UseCh
 
       // Replace optimistic message with real one
       setMessages(prev => prev.map(msg =>
-        msg.id === parseInt(tempId) ? data.message : msg
+        msg.id === tempId ? data.message : msg
       ))
 
       onNewMessage?.(data.message)
@@ -184,7 +184,7 @@ export const useChat = ({ conversationId, userId, onNewMessage, onError }: UseCh
       console.error('Error sending message:', error)
 
       // Remove failed message
-      setMessages(prev => prev.filter(msg => msg.id !== parseInt(tempId)))
+      setMessages(prev => prev.filter(msg => msg.id !== tempId))
 
       onError?.('Failed to send message')
       toast.error('Failed to send message')

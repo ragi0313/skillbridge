@@ -163,6 +163,14 @@ export const metrics = new MetricsCollector()
 
 // Convenience functions for common metrics
 export const Metrics = {
+  // Direct access to core metrics methods
+  increment: (name: string, value: number = 1, tags?: Record<string, string | number>) => {
+    metrics.increment(name, value, tags)
+  },
+
+  record: (name: string, value: number, tags?: Record<string, string | number>) => {
+    metrics.record(name, value, tags)
+  },
   // API metrics
   apiRequest: (method: string, path: string, statusCode: number, duration: number) => {
     metrics.record('api.request.duration', duration, { method, path, status: statusCode })

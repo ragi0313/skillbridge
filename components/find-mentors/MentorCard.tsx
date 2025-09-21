@@ -161,7 +161,6 @@ const formattedBio = mentor.bio
                 <MessageMentorButton
                   mentorUserId={mentor.userId}
                   mentorName={mentor.name}
-                  mentorAvatar={mentor.avatar}
                   className="w-[80%] ml-6 bg-white text-purple-600 border-2 border-purple-600 font-semibold py-4 rounded-lg shadow-lg hover:shadow-xl hover:bg-purple-50 transition-all duration-200 transform hover:scale-105"
                 />
               </div>

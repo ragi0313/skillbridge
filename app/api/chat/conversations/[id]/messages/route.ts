@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth/getSession'
 import { ChatService } from '@/lib/services/ChatService'
 import { z } from 'zod'
+import { withRateLimit } from '@/lib/middleware/rate-limit'
 
 export async function GET(
   request: NextRequest,
@@ -54,10 +55,11 @@ const sendMessageSchema = z.object({
   })).optional(),
 })
 
-export async function POST(
+// Apply rate limiting to message sending
+const rateLimitedPOST = withRateLimit('chat', async (
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
-) {
+) => {
   try {
     const user = await getSession()
     if (!user) {
@@ -101,4 +103,6 @@ export async function POST(
       { status: 500 }
     )
   }
-}
+})
+
+export const POST = rateLimitedPOST

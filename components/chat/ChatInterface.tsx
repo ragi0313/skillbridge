@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Send, MoreHorizontal, Trash2, Copy, ArrowLeft, Check, CheckCheck } from 'lucide-react'
+import { Send, MoreHorizontal, Trash2, Copy, ArrowLeft, Check, CheckCheck, Paperclip, X, FileText, Image as ImageIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -11,6 +11,7 @@ import { useChat as useChatHook } from '@/lib/hooks/useChat'
 import { useChat } from '@/lib/context/ChatContext'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
+import { ChatErrorBoundary } from './ChatErrorBoundary'
 
 interface User {
   id: number
@@ -70,6 +71,14 @@ interface ChatInterfaceProps {
 
 export function ChatInterface({ user, conversation, onBack, className }: ChatInterfaceProps) {
   const [messageInput, setMessageInput] = useState('')
+  const [attachments, setAttachments] = useState<Array<{
+    file: File
+    url: string
+    type: 'image' | 'file'
+  }>>([])
+  const [uploading, setUploading] = useState(false)
+  const lastKeyPressRef = useRef<number>(0)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const {
     subscribeToConversation,
@@ -77,22 +86,23 @@ export function ChatInterface({ user, conversation, onBack, className }: ChatInt
     isConnected,
   } = useChat()
 
-  // Memoize the onNewMessage callback to prevent infinite re-renders
-  const handleNewMessage = useCallback((message: ChatMessage) => {
-    // The useChat hook will handle message addition internally
-  }, [])
-
   const {
     messages,
     sending,
     fetchMessages,
     sendMessage,
+    addMessage,
     messagesEndRef,
     scrollToBottom,
   } = useChatHook({
     conversationId: conversation?.id,
     userId: user?.id,
-    onNewMessage: handleNewMessage,
+    onNewMessage: (message: ChatMessage) => {
+      // Add the real-time message to the chat interface
+      if (addMessage) {
+        addMessage(message)
+      }
+    },
   })
 
   const unsubscribeRef = useRef<(() => void) | null>(null)
@@ -140,19 +150,121 @@ export function ChatInterface({ user, conversation, onBack, className }: ChatInt
     }
   }, [conversation?.id, user?.id])
 
+  // Cleanup attachment URLs on unmount
+  useEffect(() => {
+    return () => {
+      attachments.forEach(attachment => {
+        URL.revokeObjectURL(attachment.url)
+      })
+    }
+  }, [attachments])
+
   // Handle message send
   const handleSendMessage = async () => {
-    if (!messageInput.trim() || !conversation || !user) return
+    if ((!messageInput.trim() && attachments.length === 0) || !conversation || !user || uploading) return
 
-    await sendMessage(messageInput.trim())
+    let uploadedAttachments: Array<{
+      originalFilename: string
+      systemFilename: string
+      fileUrl: string
+      fileSize: number
+      mimeType: string
+      storagePath?: string
+    }> = []
+
+    // Upload attachments first
+    if (attachments.length > 0) {
+      setUploading(true)
+      try {
+        for (const attachment of attachments) {
+          const formData = new FormData()
+          formData.append('file', attachment.file)
+
+          const response = await fetch('/api/picture/upload', {
+            method: 'POST',
+            body: formData,
+          })
+
+          if (!response.ok) {
+            throw new Error('Failed to upload file')
+          }
+
+          const data = await response.json()
+          uploadedAttachments.push({
+            originalFilename: attachment.file.name,
+            systemFilename: data.filename || attachment.file.name,
+            fileUrl: data.url,
+            fileSize: attachment.file.size,
+            mimeType: attachment.file.type,
+            storagePath: data.path,
+          })
+        }
+      } catch (error) {
+        console.error('Error uploading files:', error)
+        toast.error('Failed to upload files')
+        setUploading(false)
+        return
+      } finally {
+        setUploading(false)
+      }
+    }
+
+    const messageType = uploadedAttachments.length > 0 ?
+      (uploadedAttachments[0].mimeType.startsWith('image/') ? 'image' : 'file') : 'text'
+
+    const content = messageInput.trim() || (uploadedAttachments.length > 0 ? `Sent ${uploadedAttachments.length} file(s)` : '')
+
+    await sendMessage(content, messageType, uploadedAttachments)
     setMessageInput('')
+    setAttachments([])
     scrollToBottom()
   }
 
-  // Handle enter key press
+  // Handle file selection
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+
+    files.forEach(file => {
+      // Validate file size (10MB limit)
+      if (file.size > 10 * 1024 * 1024) {
+        toast.error(`${file.name} is too large. Maximum file size is 10MB.`)
+        return
+      }
+
+      const url = URL.createObjectURL(file)
+      const type = file.type.startsWith('image/') ? 'image' : 'file'
+
+      setAttachments(prev => [...prev, { file, url, type }])
+    })
+
+    // Reset input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
+  // Remove attachment
+  const removeAttachment = (index: number) => {
+    setAttachments(prev => {
+      const newAttachments = [...prev]
+      URL.revokeObjectURL(newAttachments[index].url)
+      newAttachments.splice(index, 1)
+      return newAttachments
+    })
+  }
+
+  // Handle enter key press with debouncing
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
+
+      // Prevent rapid fire messages when holding Enter
+      const now = Date.now()
+      if (now - lastKeyPressRef.current < 300 || sending || uploading) {
+        return
+      }
+      lastKeyPressRef.current = now
+
       handleSendMessage()
     }
   }
@@ -250,7 +362,8 @@ export function ChatInterface({ user, conversation, onBack, className }: ChatInt
   if (!otherParticipant) return null
 
   return (
-    <div className={`flex flex-col bg-white ${className}`}>
+    <ChatErrorBoundary>
+      <div className={`flex flex-col bg-white ${className}`}>
       {/* Chat Header */}
       <div className="flex items-center justify-between p-4 border-b bg-white">
         <div className="flex items-center">
@@ -302,6 +415,45 @@ export function ChatInterface({ user, conversation, onBack, className }: ChatInt
                     }`}
                   >
                     <p className="text-sm break-words">{message.content}</p>
+
+                    {/* Display attachments */}
+                    {message.attachments && message.attachments.length > 0 && (
+                      <div className="mt-2 space-y-2">
+                        {message.attachments.map((attachment, idx) => (
+                          <div key={idx} className="border rounded p-2 bg-white/10">
+                            <div className="flex items-center space-x-2">
+                              {attachment.mimeType.startsWith('image/') ? (
+                                <div className="flex-shrink-0">
+                                  <img
+                                    src={attachment.fileUrl}
+                                    alt={attachment.originalFilename}
+                                    className="max-w-48 max-h-48 rounded object-cover"
+                                  />
+                                </div>
+                              ) : (
+                                <FileText className="w-4 h-4 flex-shrink-0" />
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-medium truncate">
+                                  {attachment.originalFilename}
+                                </p>
+                                <p className="text-xs opacity-75">
+                                  {(attachment.fileSize / 1024 / 1024).toFixed(1)} MB
+                                </p>
+                              </div>
+                              <a
+                                href={attachment.fileUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs underline"
+                              >
+                                View
+                              </a>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                     <div className="flex items-center justify-between mt-1">
                       <p className={`text-xs ${
                         isOwnMessage ? 'text-blue-100' : 'text-gray-500'
@@ -359,24 +511,90 @@ export function ChatInterface({ user, conversation, onBack, className }: ChatInt
 
       {/* Message Input */}
       <div className="p-4 border-t bg-white">
-        <div className="flex items-center space-x-2">
+        {/* Attachment previews */}
+        {attachments.length > 0 && (
+          <div className="mb-3 p-2 bg-gray-50 rounded-lg">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-gray-700">
+                {attachments.length} file(s) selected
+              </span>
+            </div>
+            <div className="space-y-2">
+              {attachments.map((attachment, index) => (
+                <div key={index} className="flex items-center space-x-3 p-2 bg-white rounded border">
+                  {attachment.type === 'image' ? (
+                    <img
+                      src={attachment.url}
+                      alt={attachment.file.name}
+                      className="w-10 h-10 object-cover rounded"
+                    />
+                  ) : (
+                    <FileText className="w-6 h-6 text-gray-500" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{attachment.file.name}</p>
+                    <p className="text-xs text-gray-500">
+                      {(attachment.file.size / 1024 / 1024).toFixed(1)} MB
+                    </p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => removeAttachment(index)}
+                    className="p-1 h-auto"
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="flex items-end space-x-2">
+          <div className="flex items-center space-x-1">
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept="image/*,.pdf,.doc,.docx,.txt,.zip"
+              onChange={handleFileSelect}
+              className="hidden"
+            />
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={sending || uploading}
+              className="p-2"
+            >
+              <Paperclip className="w-4 h-4" />
+            </Button>
+          </div>
+
           <Input
             placeholder="Type a message..."
             value={messageInput}
             onChange={(e) => setMessageInput(e.target.value)}
             onKeyPress={handleKeyPress}
             className="flex-1"
-            disabled={sending}
+            disabled={sending || uploading}
           />
+
           <Button
             size="sm"
             onClick={handleSendMessage}
-            disabled={!messageInput.trim() || sending}
+            disabled={(!messageInput.trim() && attachments.length === 0) || sending || uploading}
           >
-            <Send className="w-4 h-4" />
+            {uploading ? (
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <Send className="w-4 h-4" />
+            )}
           </Button>
         </div>
       </div>
-    </div>
+      </div>
+    </ChatErrorBoundary>
   )
 }

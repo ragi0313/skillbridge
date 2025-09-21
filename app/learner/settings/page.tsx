@@ -45,13 +45,10 @@ export default async function LearnerSettingsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
       <LearnerHeader />
-      <main className="container mx-auto px-4 py-8 max-w-5xl">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Settings</h1>
-          <p className="text-gray-600">Manage your personal information and learning preferences.</p>
-        </div>
+      <main className="container mx-auto px-4 py-8 space-y-8">
+        <h1 className="text-4xl font-bold text-gray-900 mb-8">Profile Settings</h1>
         <LearnerSettingsForm initialData={initialData} />
       </main>
     </div>

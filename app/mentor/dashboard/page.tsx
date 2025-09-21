@@ -381,7 +381,6 @@ export default function MentorDashboardPage() {
                       <MessageLearnerButton
                         learnerUserId={learner.id}
                         learnerName={learner.name}
-                        learnerAvatar={learner.profilePicture}
                       />
                     </div>
                   </div>

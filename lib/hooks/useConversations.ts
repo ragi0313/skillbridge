@@ -142,23 +142,34 @@ export const useConversations = ({ userId, onError }: UseConversationsOptions = 
 
   // Update conversation with new message
   const updateConversationWithMessage = useCallback((message: any) => {
-    setConversations(prev => prev.map(conv => {
-      if (conv.id === message.conversationId) {
-        return {
-          ...conv,
-          lastMessageAt: message.createdAt,
-          lastMessage: {
-            id: message.id,
-            content: message.content,
-            messageType: message.messageType,
-            createdAt: message.createdAt,
-            senderName: `${message.sender.firstName} ${message.sender.lastName}`.trim(),
-          },
-        }
+    setConversations(prev => {
+      const existingConv = prev.find(conv => conv.id === message.conversationId)
+
+      if (existingConv) {
+        // Update existing conversation
+        return prev.map(conv => {
+          if (conv.id === message.conversationId) {
+            return {
+              ...conv,
+              lastMessageAt: message.createdAt,
+              lastMessage: {
+                id: message.id,
+                content: message.content,
+                messageType: message.messageType,
+                createdAt: message.createdAt,
+                senderName: `${message.sender.firstName} ${message.sender.lastName}`.trim(),
+              },
+            }
+          }
+          return conv
+        })
+      } else {
+        // Conversation not in list (probably restored), fetch conversations to get it
+        setTimeout(() => fetchConversations(), 100)
+        return prev
       }
-      return conv
-    }))
-  }, [])
+    })
+  }, [fetchConversations])
 
   // Update conversation read status
   const updateReadStatus = useCallback((conversationId: number, userId: number, readAt: string) => {
@@ -236,6 +247,13 @@ export const useConversations = ({ userId, onError }: UseConversationsOptions = 
 
     return () => clearInterval(interval)
   }, [lastFetch, fetchConversations, userId])
+
+  // Auto-fetch conversations when userId becomes available
+  useEffect(() => {
+    if (userId) {
+      fetchConversations()
+    }
+  }, [userId, fetchConversations])
 
   return {
     conversations: sortedConversations(),

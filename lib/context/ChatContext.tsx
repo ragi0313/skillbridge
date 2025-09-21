@@ -93,10 +93,10 @@ export function ChatProvider({ children, user }: ChatProviderProps) {
 
   // Fetch conversations on mount
   useEffect(() => {
-    if (user) {
+    if (user?.id) {
       fetchConversations()
     }
-  }, [user?.id]) // Only depend on user ID to avoid infinite loops
+  }, [user?.id, fetchConversations]) // Include fetchConversations in dependencies
 
   // Subscribe to conversation for real-time updates
   const subscribeToConversation = useCallback((conversationId: number, onMessage: (message: any) => void) => {

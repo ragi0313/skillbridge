@@ -13,6 +13,7 @@ import { useChat as useChatHook } from '@/lib/hooks/useChat'
 import { useChat } from '@/lib/context/ChatContext'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
+import { MiniChatErrorBoundary, useMiniChatErrorRecovery } from './MiniChatErrorBoundary'
 
 interface User {
   id: number
@@ -75,6 +76,9 @@ export function MiniChatBar({ user, className }: MiniChatBarProps) {
   const [isMinimized, setIsMinimized] = useState(false)
   const [contextMenuMessageId, setContextMenuMessageId] = useState<number | null>(null)
 
+  // Error recovery for mini chat
+  const { onError } = useMiniChatErrorRecovery()
+
   const {
     conversations,
     totalUnreadCount,
@@ -84,10 +88,15 @@ export function MiniChatBar({ user, className }: MiniChatBarProps) {
     getConversation,
   } = useChat()
 
+  // Create a ref to hold the addMessage function to avoid circular dependency
+  const addMessageRef = useRef<((message: ChatMessage) => void) | null>(null)
+
   // Memoize the onNewMessage callback to prevent infinite re-renders
   const handleNewMessage = useCallback((message: ChatMessage) => {
-    // The useChat hook will handle message addition internally
-    // We don't need to do anything here to avoid circular dependencies
+    // Add the real-time message to the chat interface
+    if (addMessageRef.current) {
+      addMessageRef.current(message)
+    }
   }, [])
 
   const {
@@ -104,6 +113,11 @@ export function MiniChatBar({ user, className }: MiniChatBarProps) {
     userId: user?.id,
     onNewMessage: handleNewMessage,
   })
+
+  // Update the ref when addMessage changes
+  useEffect(() => {
+    addMessageRef.current = addMessage
+  }, [addMessage])
 
   const unsubscribeRef = useRef<(() => void) | null>(null)
 
@@ -447,7 +461,8 @@ export function MiniChatBar({ user, className }: MiniChatBarProps) {
   if (!user) return null
 
   return (
-    <>
+    <MiniChatErrorBoundary onError={onError} onClose={() => setIsOpen(false)}>
+      <>
       {/* Floating Chat Button */}
       {!isOpen && (
         <div className="fixed bottom-6 right-6 z-50">
@@ -502,6 +517,7 @@ export function MiniChatBar({ user, className }: MiniChatBarProps) {
           )}
         </div>
       )}
-    </>
+      </>
+    </MiniChatErrorBoundary>
   )
 }

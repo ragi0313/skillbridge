@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth/getSession'
 import { ChatService } from '@/lib/services/ChatService'
 import { z } from 'zod'
+import { withRateLimit } from '@/lib/middleware/rate-limit'
 
 const createConversationSchema = z.object({
   mentorUserId: z.number().optional(),
@@ -10,7 +11,8 @@ const createConversationSchema = z.object({
   message: "Either mentorUserId or learnerUserId must be provided"
 })
 
-export async function POST(request: NextRequest) {
+// Apply rate limiting to conversation creation
+const rateLimitedPOST = withRateLimit('api', async (request: NextRequest) => {
   try {
     const user = await getSession()
     if (!user) {
@@ -53,9 +55,10 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     )
   }
-}
+})
 
-export async function GET(request: NextRequest) {
+// Apply rate limiting to conversation fetching
+const rateLimitedGET = withRateLimit('api', async (request: NextRequest) => {
   try {
     const user = await getSession()
     if (!user) {
@@ -71,4 +74,7 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     )
   }
-}
+})
+
+export const POST = rateLimitedPOST
+export const GET = rateLimitedGET

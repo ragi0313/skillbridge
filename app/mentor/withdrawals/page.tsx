@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import MentorHeader from "@/components/mentor/Header"
-import Footer from "@/components/landing/Footer"
+import { Footer } from "@/components/landing/Footer"
 import { XenditCreditWithdrawal } from "@/components/mentors/XenditCreditWithdrawal"
 
 export default function WithdrawalsPage() {

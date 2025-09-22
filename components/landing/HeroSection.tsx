@@ -1,84 +1,71 @@
-"use client"
-
-import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { Button } from "@/components/ui/button"
+import { Card } from "@/components/ui/card"
 import Link from "next/link"
-import { Badge } from "@/components/ui/badge"
-import { Input } from "@/components/ui/input"
-import { Search } from "lucide-react"
-import Image from "next/image"
-import { motion } from "framer-motion"
-import { Button } from "../ui/button"
 
-export default function HeroSection() {
-  const [searchQuery, setSearchQuery] = useState("")
-    const router = useRouter()
-  
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (searchQuery.trim()) {
-      router.push(`/find-mentors?search=${encodeURIComponent(searchQuery.trim())}`)
-    } else {
-      router.push("/find-mentors")
-    }
-  }
+export function HeroSection() {
   return (
-    <section className="bg-gray-900 text-white py-20">
-      <div className="container mx-auto px-4">
+    <section className="relative bg-slate-900 text-white py-20 lg:py-32 overflow-hidden">
+      <div className="absolute inset-0">
+        <img
+          src="/filipino-professionals-in-modern-office-workspace-.jpg"
+          alt="Filipino professionals workspace"
+          className="w-full h-full object-cover opacity-20"
+        />
+        <div className="absolute inset-0 bg-gradient-to-br from-slate-900/90 via-slate-800/90 to-slate-900/90"></div>
+      </div>
+      <div className="relative z-10 container mx-auto px-4">
         <div className="grid lg:grid-cols-2 gap-12 items-center">
-          <motion.div
-            initial={{ opacity: 0, x: -50 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.6 }}
-            className="space-y-6"
-          >
-            <Badge className="bg-blue-600/20 text-blue-400 border-blue-500/20">
-              🚀 Connecting Skills, Building Futures
-            </Badge>
-            <h1 className="text-5xl font-bold leading-tight">
-              Transform Your Freelancing Career with
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">
-                {" "} 1-on-1 Expert Mentorship
-              </span>
-            </h1>
-            <p className="text-lg text-gray-300">
-              Get personalized guidance from freelancing experts, accelerate your growth, <br/> and achieve your freelancing goals faster.
-            </p>
-            <form onSubmit={handleSearch} className="mt-7 max-w-2xl mb-8">
-            <div className="relative">
-              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-white w-5 h-5 z-20" />
-              <Input
-                type="text"
-                placeholder="Search for mentors by skill, expertise, or name..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full h-14 pl-12 pr-24 text-base bg-white/10 border-gray-600 text-white placeholder:text-gray-400 focus:bg-white/20 focus:border-blue-500 rounded-xl backdrop-blur-sm"
-              />
-              <Button
-                type="submit"
-                className="cursor-pointer absolute right-2 top-1/2 transform -translate-y-1/2 h-10 px-6 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-semibold rounded-lg shadow-lg transition-all duration-300"
-              >
-                Search
-              </Button>
+          <div className="space-y-8">
+            <div className="space-y-4">
+              <h1 className="text-4xl lg:text-6xl font-bold leading-tight text-balance text-white">
+                Transform Your Career
+                <br />
+                <span className="text-blue-400">With Expert Mentors</span>
+              </h1>
+              <p className="text-xl text-slate-300 leading-relaxed">
+                Connect with industry leaders who've been there. Get personalized guidance to accelerate your growth.
+              </p>
             </div>
-          </form>
-          </motion.div>
 
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.6, delay: 0.2 }}
-            className="relative h-[400px] rounded-xl overflow-hidden hidden lg:block"
-          >
-            <Image
-              src="/landing-bg.jpeg"
-              alt="Mentorship image"
-              fill
-              className="object-cover"
-              priority
-            />
-            <div className="absolute inset-0 bg-gradient-to-tr from-blue-600/20 to-purple-600/20 mix-blend-multiply"></div>
-          </motion.div>
+            <div className="flex flex-col sm:flex-row gap-4">
+              <Link href="/find-mentors">
+               <Button size="lg" className="bg-blue-600 hover:bg-blue-700 text-white">
+                Find Your Mentor
+              </Button>
+              </Link>
+              <Link href="/register/mentor">
+                <Button
+                  size="lg"
+                  variant="outline"
+                  className="border-slate-300 text-slate-300 hover:bg-slate-300 hover:text-slate-900 bg-transparent"
+                >
+                  Become a Mentor
+                </Button>
+              </Link>
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            <div className="grid grid-cols-2 gap-4">
+              <Card className="p-4 bg-slate-800/50 backdrop-blur border-slate-700">
+                <img
+                  src="/filipino-professional-mentor-in-video-call-mentori.jpg"
+                  alt="Filipino mentor in video session"
+                  className="w-full h-32 object-cover rounded mb-3"
+                />
+                <p className="text-sm text-slate-300">98% satisfaction rate</p>
+              </Card>
+
+              <Card className="p-4 bg-slate-800/50 backdrop-blur border-slate-700">
+                <img
+                  src="/diverse-group-of-filipino-professionals-in-modern-.jpg"
+                  alt="Filipino professional team"
+                  className="w-full h-32 object-cover rounded mb-3"
+                />
+                <p className="text-sm text-slate-300">5,000+ mentors ready to help</p>
+              </Card>
+            </div>
+          </div>
         </div>
       </div>
     </section>

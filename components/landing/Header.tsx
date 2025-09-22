@@ -1,102 +1,76 @@
 "use client"
 
-import { useState } from "react"
-import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { Menu, X, User, BookOpen } from "lucide-react"
-import Logo from "@/components/ui/logo"
+import { Menu, X } from "lucide-react"
+import Link from "next/link"
+import { useState } from "react"
 
 export function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
 
-  const toggleMenu = () => {
-    setIsMenuOpen(!isMenuOpen)
-  }
-
   return (
-    <header className="bg-white shadow-sm border-b">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center h-16">
-          {/* Logo */}
-          <div className="flex-shrink-0">
-              <Logo />
-          </div>
+    <header className="bg-white border-b border-gray-100 sticky top-0 z-50">
+      <div className="container mx-auto px-4 lg:px-6">
+        <nav className="flex items-center justify-between h-16">
+          <div className="text-2xl font-bold text-blue-600">SkillBridge</div>
 
-          {/* Desktop Navigation */}
-          <nav className="hidden md:flex items-center space-x-8">
-            <Link href="/find-mentors" className="text-gray-600 hover:text-gray-900 font-medium">
-              Find Mentors
-            </Link>
-            <Link href="/how-it-works" className="text-gray-600 hover:text-gray-900 font-medium">
-              How It Works
-            </Link>
-            <Link href="/pricing" className="text-gray-600 hover:text-gray-900 font-medium">
+          <div className="hidden lg:flex items-center space-x-8">
+            <a
+              href="/find-mentors"
+              className="text-gray-600 hover:text-blue-600 transition-colors font-medium text-sm"
+            >
+              Browse Mentors
+            </a>
+            <a href="/pricing" className="text-gray-600 hover:text-blue-600 transition-colors font-medium text-sm">
               Pricing
-            </Link>
-            <Link href="/about" className="text-gray-600 hover:text-gray-900 font-medium">
-              About
-            </Link>
-          </nav>
+            </a>
+          </div>
 
-          {/* Desktop Auth Buttons */}
-          <div className="hidden md:flex items-center space-x-4">
-            <Link href="/login">
-              <Button variant="ghost" className="text-gray-600 hover:text-gray-900">
-                Sign In
+          <div className="hidden lg:flex items-center space-x-3">
+            <Link href={'/register'}>
+              <Button variant="ghost" className="w-full text-gray-600 hover:text-blue-600 font-medium text-sm">
+                Sign Up
               </Button>
             </Link>
-            <Link href="/register">
-              <Button className="gradient-bg text-white">
-                Get Started
-              </Button>
+            <Link href={'/login'}>
+              <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm">Login</Button>
             </Link>
           </div>
 
-          {/* Mobile menu button */}
-          <div className="md:hidden">
-            <Button variant="ghost" size="sm" onClick={toggleMenu}>
-              {isMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-            </Button>
-          </div>
-        </div>
+          <button
+            className="lg:hidden p-2 text-gray-600 hover:text-blue-600 transition-colors"
+            onClick={() => setIsMenuOpen(!isMenuOpen)}
+            aria-label="Toggle menu"
+          >
+            {isMenuOpen ? <X size={24} /> : <Menu size={24} />}
+          </button>
+        </nav>
 
-        {/* Mobile Navigation */}
         {isMenuOpen && (
-          <div className="md:hidden">
-            <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3 border-t">
-              <Link
+          <div className="lg:hidden border-t border-gray-100 bg-white">
+            <div className="px-4 py-4 space-y-4">
+              <a
                 href="/find-mentors"
-                className="block px-3 py-2 text-gray-600 hover:text-gray-900 font-medium"
+                className="block text-gray-600 hover:text-blue-600 transition-colors font-medium text-sm py-2"
                 onClick={() => setIsMenuOpen(false)}
               >
-                Find Mentors
-              </Link>
-              <Link
+                Browse Mentors
+              </a>
+              <a
                 href="/pricing"
-                className="block px-3 py-2 text-gray-600 hover:text-gray-900 font-medium"
+                className="block text-gray-600 hover:text-blue-600 transition-colors font-medium text-sm py-2"
                 onClick={() => setIsMenuOpen(false)}
               >
                 Pricing
-              </Link>
-              <Link
-                href="/about"
-                className="block px-3 py-2 text-gray-600 hover:text-gray-900 font-medium"
-                onClick={() => setIsMenuOpen(false)}
-              >
-                About
-              </Link>
-              <div className="border-t pt-4 space-y-2">
-                <Link href="/login" onClick={() => setIsMenuOpen(false)}>
-                  <Button variant="ghost" className="w-full justify-start text-gray-600 hover:text-gray-900">
-                    <User className="h-4 w-4 mr-2" />
-                    Sign In
-                  </Button>
-                </Link>
-                <Link href="/register" onClick={() => setIsMenuOpen(false)}>
-                  <Button className="w-full gradient-bg text-white">
-                    <BookOpen className="h-4 w-4 mr-2" />
-                    Get Started
-                  </Button>
+              </a>
+              <div className="pt-4 border-t border-gray-100 space-y-3">
+                 <Link href={'/register'}>
+                  <Button variant="ghost" className="w-full text-gray-600 hover:text-blue-600 font-medium text-sm">
+                  Sign Up
+                </Button>
+                 </Link>
+                <Link href={'/login'}>
+                 <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium text-sm">Login</Button>
                 </Link>
               </div>
             </div>

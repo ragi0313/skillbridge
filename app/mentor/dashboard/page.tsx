@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import MentorHeader from "@/components/mentor/Header"
-import Footer  from "@/components/landing/Footer"
+import { Footer } from "@/components/landing/Footer"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"

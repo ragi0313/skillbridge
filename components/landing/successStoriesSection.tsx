@@ -74,7 +74,7 @@ export function SuccessStoriesSection() {
                   <img
                     src={story.image || "/default-avatar.png"}
                     alt={story.author}
-                    className="w-16 h-16 object-cover rounded-full"
+                    className="w-20 h-20 object-cover object-center rounded-full ring-2 ring-gray-200"
                   />
                 </div>
 
@@ -113,7 +113,7 @@ export function SuccessStoriesSection() {
                   <img
                     src={story.image || "/default-avatar.png"}
                     alt={story.author}
-                    className="w-16 h-16 object-cover rounded-full"
+                    className="w-20 h-20 object-cover object-center rounded-full ring-2 ring-gray-200"
                   />
                 </div>
 

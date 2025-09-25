@@ -24,7 +24,7 @@ import {
   DollarSign
 } from "lucide-react"
 import { format, isPast, isFuture, isToday } from "date-fns"
-import { toast } from "@/lib/toast"
+import { toast } from "sonner"
 
 interface Session {
   id: number
@@ -211,13 +211,21 @@ export function MentorSessionsClient({ sessions }: MentorSessionsClientProps) {
         throw new Error(`Failed to ${isAccepting ? 'accept' : 'reject'} session`)
       }
 
-      toast.success(`Session ${isAccepting ? 'accepted' : 'rejected'} successfully`)
+      toast.success(`Session ${isAccepting ? 'accepted' : 'rejected'} successfully!`, {
+        description: isAccepting
+          ? "The learner has been notified and the session is now scheduled."
+          : "The learner has been notified about the rejection.",
+        duration: 4000,
+      })
       setResponseModalOpen(false)
       // Refresh page to show updated status
       window.location.reload()
     } catch (error) {
       console.error('Error responding to session:', error)
-      toast.error(`Failed to ${isAccepting ? 'accept' : 'reject'} session`)
+      toast.error(`Failed to ${isAccepting ? 'accept' : 'reject'} session`, {
+        description: "Please try again. If the problem persists, contact support.",
+        duration: 5000,
+      })
     }
   }
 

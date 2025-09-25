@@ -49,7 +49,7 @@ async function handleLogin(req: NextRequest) {
 
     if (!user) {
       return NextResponse.json(
-        { message: "Invalid email or password" }, 
+        { message: "Invalid email" },
         { status: 401 }
       )
     }
@@ -62,7 +62,7 @@ async function handleLogin(req: NextRequest) {
     
     if (!isPasswordValid) {
       return NextResponse.json(
-        { message: "Invalid email or password" }, 
+        { message: "Incorrect password" },
         { status: 401 }
       )
     }

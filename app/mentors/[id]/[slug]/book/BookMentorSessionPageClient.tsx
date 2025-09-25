@@ -119,7 +119,10 @@ export default function BookMentorSessionPageClient({ session }: Props) {
   // Enhanced data fetching with better error handling
   const fetchMentor = useCallback(async () => {
     if (session.role !== "learner") {
-      toast.error("Only learners can book a session")
+      toast.error("Access denied", {
+        description: "Only learners can book mentoring sessions.",
+        duration: 4000,
+      })
       router.replace("/")
       return
     }
@@ -395,11 +398,17 @@ export default function BookMentorSessionPageClient({ session }: Props) {
   const handleDurationChange = (hours: number, minutes: number) => {
     const totalMinutes = hours * 60 + minutes
     if (totalMinutes < 15) {
-      toast.warning("Session must be at least 15 minutes.")
+      toast.warning("Session too short", {
+        description: "Sessions must be at least 15 minutes long.",
+        duration: 3000,
+      })
       return
     }
     if (totalMinutes > maxDuration) {
-      toast.error("Selected duration exceeds available time.")
+      toast.error("Duration too long", {
+        description: "The selected duration exceeds the available time slot.",
+        duration: 3000,
+      })
       return
     }
     setDurationHours(hours)
@@ -416,13 +425,19 @@ export default function BookMentorSessionPageClient({ session }: Props) {
 
   const handleBooking = async () => {
     if (!mentor || !selectedDate || !selectedTimeSlot || !selectedSkillId) {
-      toast.error("Missing required booking information.")
+      toast.error("Incomplete booking information", {
+        description: "Please select a date, time slot, and skill before booking.",
+        duration: 4000,
+      })
       return
     }
     
     // Check if date is blocked before proceeding
     if (isDateBlocked(selectedDate)) {
-      toast.error("Selected date is blocked and not available for booking.")
+      toast.error("Date unavailable", {
+        description: "The selected date is blocked by the mentor. Please choose another date.",
+        duration: 4000,
+      })
       return
     }
     
@@ -438,7 +453,10 @@ export default function BookMentorSessionPageClient({ session }: Props) {
       return
     }
     if (!sessionNotes.trim()) {
-      toast.warning("Please provide session notes.")
+      toast.warning("Session notes required", {
+        description: "Please describe what you'd like to learn in this session.",
+        duration: 4000,
+      })
       return
     }
     setSubmitting(true)
@@ -468,11 +486,17 @@ export default function BookMentorSessionPageClient({ session }: Props) {
       if (!res.ok) {
         toast.error(data.error || "Booking failed.")
       } else {
-        toast.success("Session booked! Pending mentor approval.")
+        toast.success("Session booked successfully!", {
+          description: "Your booking request has been sent to the mentor for approval.",
+          duration: 4000,
+        })
         router.push("/learner/sessions")
       }
     } catch (err: any) {
-      toast.error("Something went wrong. Please try again.")
+      toast.error("Booking failed", {
+        description: "Something went wrong. Please try again or contact support if the problem persists.",
+        duration: 5000,
+      })
     } finally {
       setSubmitting(false)
     }

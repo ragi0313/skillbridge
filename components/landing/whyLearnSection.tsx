@@ -50,7 +50,7 @@ export function WhyLearnSection() {
               <img
                 src="/filipino-mentor-and-student-in-professional-1-on-1.jpg"
                 alt="Filipino 1-on-1 mentoring session"
-                className="w-full h-80 object-cover rounded-lg"
+                className="w-full aspect-[4/3] object-cover object-center rounded-lg"
               />
               <div className="absolute top-8 right-8 bg-white/90 backdrop-blur px-3 py-1 rounded-full text-sm font-medium">
                 1-on-1 Video Sessions

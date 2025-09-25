@@ -51,7 +51,7 @@ export function HeroSection() {
                 <img
                   src="/filipino-professional-mentor-in-video-call-mentori.jpg"
                   alt="Filipino mentor in video session"
-                  className="w-full h-32 object-cover rounded mb-3"
+                  className="w-full h-48 object-cover object-center rounded mb-3"
                 />
                 <p className="text-sm text-slate-300">98% satisfaction rate</p>
               </Card>
@@ -60,7 +60,7 @@ export function HeroSection() {
                 <img
                   src="/diverse-group-of-filipino-professionals-in-modern-.jpg"
                   alt="Filipino professional team"
-                  className="w-full h-32 object-cover rounded mb-3"
+                  className="w-full h-48 object-cover object-center rounded mb-3"
                 />
                 <p className="text-sm text-slate-300">5,000+ mentors ready to help</p>
               </Card>

@@ -2,10 +2,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { withRateLimit } from "@/lib/middleware/rate-limit"
 import { db } from "@/db"
-import { pendingLearners } from "@/db/schema"
+import { pendingLearners, users } from "@/db/schema"
 import { hash } from "bcryptjs"
 import { nanoid } from "nanoid"
 import { sendVerificationEmail } from "@/lib/email/activationMail"
+import { eq, or } from "drizzle-orm"
 
 
 async function handleRegisterLearner(req: NextRequest) {
@@ -22,7 +23,7 @@ async function handleRegisterLearner(req: NextRequest) {
     learningGoals,
   } = body
 
-  // ✅ Basic validation
+  // ✅ Enhanced validation
   if (
     !firstName ||
     !lastName ||
@@ -36,6 +37,60 @@ async function handleRegisterLearner(req: NextRequest) {
     return NextResponse.json(
       { error: "All fields are required." },
       { status: 400 }
+    )
+  }
+
+  // Validate email format
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  if (!emailRegex.test(email.trim())) {
+    return NextResponse.json(
+      { error: "Please enter a valid email address." },
+      { status: 400 }
+    )
+  }
+
+  // Validate password strength
+  const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/
+  if (!passwordRegex.test(password)) {
+    return NextResponse.json(
+      { error: "Password must be at least 8 characters with uppercase, lowercase, number, and special character." },
+      { status: 400 }
+    )
+  }
+
+  // Validate name format
+  const nameRegex = /^[a-zA-ZÀ-ÿ\u0100-\u017F\u0180-\u024F\u1E00-\u1EFF\s'-]+$/
+  if (!nameRegex.test(firstName.trim()) || firstName.trim().length < 2) {
+    return NextResponse.json(
+      { error: "First name must contain only letters and be at least 2 characters." },
+      { status: 400 }
+    )
+  }
+
+  if (!nameRegex.test(lastName.trim()) || lastName.trim().length < 2) {
+    return NextResponse.json(
+      { error: "Last name must contain only letters and be at least 2 characters." },
+      { status: 400 }
+    )
+  }
+
+  // Check if email already exists in users or pending_learners
+  const existingUser = await db
+    .select({ email: users.email })
+    .from(users)
+    .where(eq(users.email, email.trim().toLowerCase()))
+    .limit(1)
+
+  const existingPendingLearner = await db
+    .select({ email: pendingLearners.email })
+    .from(pendingLearners)
+    .where(eq(pendingLearners.email, email.trim().toLowerCase()))
+    .limit(1)
+
+  if (existingUser.length > 0 || existingPendingLearner.length > 0) {
+    return NextResponse.json(
+      { error: "Email address is already registered." },
+      { status: 409 }
     )
   }
 
@@ -70,8 +125,20 @@ async function handleRegisterLearner(req: NextRequest) {
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error(error)
-    return NextResponse.json({ error: "Registration failed" }, { status: 500 })
+    console.error('Learner registration error:', error)
+
+    // Handle specific database constraint errors
+    if (error instanceof Error && error.message.includes('duplicate key value')) {
+      return NextResponse.json(
+        { error: "Email address is already registered." },
+        { status: 409 }
+      )
+    }
+
+    return NextResponse.json(
+      { error: "Registration failed. Please try again." },
+      { status: 500 }
+    )
   }
 }
 

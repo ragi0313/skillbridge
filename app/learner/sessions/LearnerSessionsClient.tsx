@@ -23,7 +23,7 @@ import {
 } from "lucide-react"
 import { format, isPast, isFuture, isToday } from "date-fns"
 import { SessionRatingModal } from "@/components/session/SessionRatingModal"
-import { toast } from "@/lib/toast"
+import { toast } from "sonner"
 
 interface Session {
   id: number
@@ -174,7 +174,10 @@ export function LearnerSessionsClient({ sessions }: LearnerSessionsClientProps) 
 
   const submitCancellation = async () => {
     if (!cancelSessionId || !cancellationReason.trim()) {
-      toast.error('Please provide a cancellation reason')
+      toast.error('Please provide a cancellation reason', {
+        description: "A reason is required to cancel your session.",
+        duration: 3000,
+      })
       return
     }
 
@@ -189,13 +192,19 @@ export function LearnerSessionsClient({ sessions }: LearnerSessionsClientProps) 
         throw new Error('Failed to cancel session')
       }
 
-      toast.success('Session cancelled successfully')
+      toast.success('Session cancelled successfully!', {
+        description: "Your mentor has been notified and any credits will be refunded according to our policy.",
+        duration: 4000,
+      })
       setCancelModalOpen(false)
       // Refresh page to show updated status
       window.location.reload()
     } catch (error) {
       console.error('Error cancelling session:', error)
-      toast.error('Failed to cancel session')
+      toast.error('Failed to cancel session', {
+        description: "Please try again. If the problem persists, contact support.",
+        duration: 5000,
+      })
     }
   }
 

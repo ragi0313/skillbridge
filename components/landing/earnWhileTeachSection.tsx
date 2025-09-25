@@ -58,7 +58,7 @@ export function EarnWhileTeachSection() {
               <img
                 src="/filipino-professional-mentor-teaching-online-from-.jpg"
                 alt="Filipino professional mentor"
-                className="w-full h-32 object-cover rounded mb-3"
+                className="w-full h-48 object-cover object-center rounded mb-3"
               />
               <p className="text-sm text-muted-foreground">Expert Guidance</p>
             </Card>
@@ -67,7 +67,7 @@ export function EarnWhileTeachSection() {
               <img
                 src="/filipino-mentor-and-student-in-friendly-video-call.jpg"
                 alt="Filipino mentoring session"
-                className="w-full h-32 object-cover rounded mb-3"
+                className="w-full h-48 object-cover object-center rounded mb-3"
               />
               <p className="text-sm text-muted-foreground">1-on-1 Sessions</p>
             </Card>
@@ -76,7 +76,7 @@ export function EarnWhileTeachSection() {
               <img
                 src="/successful-filipino-freelance-mentor-working-on-la.jpg"
                 alt="Successful Filipino mentor"
-                className="w-full h-32 object-cover rounded mb-3"
+                className="w-full h-40 object-cover object-center rounded mb-3"
               />
               <p className="text-sm text-muted-foreground">Grow Your Impact</p>
             </Card>

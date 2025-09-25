@@ -9,6 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { format } from 'date-fns'
 import { toast } from 'sonner'
+import MentorHeader from '@/components/mentor/Header'
 
 interface User {
   id: number
@@ -172,41 +173,45 @@ export default function MentorMessagesPage() {
   }
 
   return (
-    <div className="flex h-screen bg-gray-50">
-      {/* Sidebar */}
-      <div className="w-80 bg-white border-r border-gray-200 flex flex-col">
-        {/* Header */}
-        <div className="p-4 border-b border-gray-200 bg-white">
-          <div className="flex items-center justify-between">
-            <h1 className="text-xl font-semibold text-gray-900">Messages</h1>
-            <div className="flex items-center space-x-2">
-              <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
-              <span className="text-xs text-gray-500">
-                {isConnected ? 'Online' : 'Offline'}
-              </span>
+    <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-blue-50">
+      <MentorHeader />
+      <div className="flex h-[calc(100vh-80px)]">
+        {/* Sidebar */}
+        <div className="w-80 bg-white/80 backdrop-blur-sm border-r border-gray-200/50 flex flex-col shadow-lg">
+          {/* Header */}
+          <div className="p-6 border-b border-gray-200/50 bg-gradient-to-r from-green-600 to-blue-600">
+            <div className="flex items-center justify-between">
+              <h1 className="text-xl font-bold text-white drop-shadow-sm">Messages</h1>
+              <div className="flex items-center space-x-2 bg-white/20 rounded-full px-3 py-1">
+                <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-400' : 'bg-red-400'}`}></div>
+                <span className="text-xs text-white/90 font-medium">
+                  {isConnected ? 'Online' : 'Offline'}
+                </span>
+              </div>
             </div>
+            {totalUnreadCount > 0 && (
+              <div className="mt-3">
+                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-red-500 text-white shadow-md">
+                  {totalUnreadCount} unread messages
+                </span>
+              </div>
+            )}
           </div>
-          {totalUnreadCount > 0 && (
-            <div className="mt-2">
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                {totalUnreadCount} unread messages
-              </span>
-            </div>
-          )}
-        </div>
 
-        {/* Conversations List */}
-        <div className="flex-1 overflow-y-auto">
-          {conversations.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full p-8 text-center">
-              <MessageCircle className="w-12 h-12 text-gray-300 mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No conversations yet</h3>
-              <p className="text-sm text-gray-500">
-                Start mentoring learners to begin conversations
-              </p>
-            </div>
-          ) : (
-            <div className="divide-y divide-gray-100">
+          {/* Conversations List */}
+          <div className="flex-1 overflow-y-auto bg-white/50">
+            {conversations.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full p-8 text-center">
+                <div className="bg-gradient-to-br from-green-100 to-blue-100 p-4 rounded-full mb-6">
+                  <MessageCircle className="w-12 h-12 text-green-600" />
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">No conversations yet</h3>
+                <p className="text-sm text-gray-600 max-w-xs">
+                  Start mentoring learners to begin meaningful conversations and share your expertise
+                </p>
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-100/50">
               {conversations.map((conversation) => {
                 const learner = conversation.learner
                 const isUnread = hasUnreadMessages(conversation)
@@ -216,16 +221,16 @@ export default function MentorMessagesPage() {
                 return (
                   <div
                     key={conversation.id}
-                    className={`flex items-center p-4 hover:bg-gray-50 transition-colors group ${selectedConversation?.id === conversation.id ? 'bg-green-50 border-r-2 border-green-500' : ''}`}
+                    className={`flex items-center p-4 hover:bg-green-50/50 transition-all duration-200 group cursor-pointer ${selectedConversation?.id === conversation.id ? 'bg-gradient-to-r from-green-100 to-blue-100 border-r-4 border-green-500 shadow-sm' : ''}`}
                   >
                     <div className="relative">
-                      <Avatar className="w-12 h-12">
+                      <Avatar className="w-12 h-12 ring-2 ring-green-200/50 transition-all duration-200 group-hover:ring-green-300">
                         <AvatarImage src={learner.profilePictureUrl || undefined} />
-                        <AvatarFallback className="bg-green-100 text-green-600 font-medium">
+                        <AvatarFallback className="bg-gradient-to-br from-green-500 to-blue-600 text-white font-semibold">
                           {learner.firstName[0]}{learner.lastName[0]}
                         </AvatarFallback>
                       </Avatar>
-                      <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-2 border-white rounded-full"></div>
+                      <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-2 border-white rounded-full shadow-sm"></div>
                     </div>
 
                     <div className="ml-3 flex-1 min-w-0 cursor-pointer" onClick={() => selectConversation(conversation)}>
@@ -253,7 +258,7 @@ export default function MentorMessagesPage() {
                             </span>
                           )}
                           {isUnread && (
-                            <div className="w-2 h-2 bg-green-600 rounded-full"></div>
+                            <div className="w-2 h-2 bg-green-500 rounded-full shadow-sm animate-pulse"></div>
                           )}
                         </div>
                       </div>
@@ -285,13 +290,14 @@ export default function MentorMessagesPage() {
         </div>
       </div>
 
-      {/* Main Content Area */}
-      <ChatInterface
-        user={user}
-        conversation={selectedConversation}
-        onBack={() => setSelectedConversation(null)}
-        className="flex-1"
-      />
+        {/* Main Content Area */}
+        <ChatInterface
+          user={user}
+          conversation={selectedConversation}
+          onBack={() => setSelectedConversation(null)}
+          className="flex-1 bg-white/60 backdrop-blur-sm shadow-lg rounded-l-xl"
+        />
+      </div>
     </div>
   )
 }

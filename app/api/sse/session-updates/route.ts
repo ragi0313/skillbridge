@@ -125,3 +125,38 @@ export async function broadcastForceDisconnect(
     message: reason
   }, targetUserIds)
 }
+
+// Export function to broadcast booking status updates
+export async function broadcastBookingUpdate(
+  bookingId: number,
+  updateType: 'status_changed' | 'booking_expired' | 'mentor_response',
+  data: any,
+  targetUserIds?: number[]
+) {
+  const message = `data: ${JSON.stringify({
+    type: 'booking_update',
+    bookingId,
+    updateType,
+    ...data,
+    timestamp: new Date().toISOString()
+  })}\n\n`
+
+  const encodedMessage = new TextEncoder().encode(message)
+
+  // If specific users are targeted, only send to them
+  if (targetUserIds && targetUserIds.length > 0) {
+    for (const userId of targetUserIds) {
+      const connection = connections.get(userId.toString())
+      if (connection) {
+        try {
+          connection.enqueue(encodedMessage)
+        } catch (error) {
+          console.error(`Failed to send booking update to user ${userId}:`, error)
+          connections.delete(userId.toString())
+        }
+      }
+    }
+  }
+
+  console.log(`[SSE] Broadcasted booking ${updateType} for booking ${bookingId} to ${targetUserIds ? targetUserIds.length : 0} users`)
+}

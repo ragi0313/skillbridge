@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { LearnerSessionsClient } from "./LearnerSessionsClient"
 import { Card, CardContent } from "@/components/ui/card"
 import { LearnerHeader } from "@/components/learner/Header"
+import { useBookingUpdates } from "@/lib/hooks/useBookingUpdates"
 
 interface Session {
   id: number
@@ -43,16 +44,33 @@ export function LearnerSessionsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  // Set up real-time booking updates
+  useBookingUpdates({
+    onBookingStatusChange: (bookingId, newStatus, data) => {
+      console.log(`[LEARNER_SESSIONS] Booking ${bookingId} status changed to ${newStatus}`)
+
+      // Update the session status in the sessions array
+      setSessions(prevSessions =>
+        prevSessions.map(session =>
+          session.id === bookingId
+            ? { ...session, status: newStatus, refundAmount: data.refundAmount || session.refundAmount }
+            : session
+        )
+      )
+    },
+    enableToasts: true
+  })
+
   useEffect(() => {
     async function fetchSessions() {
       try {
         setLoading(true)
         const response = await fetch('/api/learner/sessions')
-        
+
         if (!response.ok) {
           throw new Error('Failed to fetch sessions')
         }
-        
+
         const data = await response.json()
         setSessions(data.sessions || [])
       } catch (err: any) {

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { MentorSessionsClient } from "./MentorSessionsClient"
 import { Card } from "@/components/ui/card"
 import MentorHeader from "@/components/mentor/Header"
+import { useBookingUpdates } from "@/lib/hooks/useBookingUpdates"
 
 interface Session {
   id: number
@@ -38,6 +39,23 @@ export function MentorSessionsPage() {
   const [sessions, setSessions] = useState<Session[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // Set up real-time booking updates
+  useBookingUpdates({
+    onBookingStatusChange: (bookingId, newStatus, data) => {
+      console.log(`[MENTOR_SESSIONS] Booking ${bookingId} status changed to ${newStatus}`)
+
+      // Update the session status in the sessions array
+      setSessions(prevSessions =>
+        prevSessions.map(session =>
+          session.id === bookingId
+            ? { ...session, status: newStatus, refundAmount: data.refundAmount || session.refundAmount }
+            : session
+        )
+      )
+    },
+    enableToasts: true
+  })
 
   useEffect(() => {
     async function fetchSessions() {

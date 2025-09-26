@@ -1,21 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
-import { v2 as cloudinary } from "cloudinary"
 import { withRateLimit } from "@/lib/middleware/rate-limit"
-import fs from "fs"
-import path from "path"
-
-// Disable the built-in body parser
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-}
-
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME!,
-  api_key: process.env.CLOUDINARY_API_KEY!,
-  api_secret: process.env.CLOUDINARY_API_SECRET!,
-})
+import { uploadToCloudinary } from "@/lib/cloudinary"
 
 // Helper to convert ReadableStream to Node Readable
 async function streamToBuffer(readableStream: ReadableStream<Uint8Array>): Promise<Buffer> {
@@ -40,19 +25,20 @@ async function handleUpload(req: NextRequest) {
       return NextResponse.json({ error: "No file uploaded" }, { status: 400 })
     }
 
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      return NextResponse.json({ error: "Only image files are allowed" }, { status: 400 })
+    }
+
+    // Validate file size (5MB limit)
+    if (file.size > 5 * 1024 * 1024) {
+      return NextResponse.json({ error: "File size must be under 5MB" }, { status: 400 })
+    }
+
     const buffer = await streamToBuffer(file.stream())
 
-    const tempPath = path.join("C:", "tmp", file.name)
-    await fs.promises.writeFile(tempPath, buffer)
-
-    // Remove the public_id to let Cloudinary generate a unique one
-    const upload = await cloudinary.uploader.upload(tempPath, {
-      folder: "skillbridge/profile_pictures",
-      // No public_id specified - Cloudinary will generate a unique one
-    })
-
-    // Clean up the temporary file
-    await fs.promises.unlink(tempPath)
+    // Upload to Cloudinary using HTTP API
+    const upload = await uploadToCloudinary(buffer, file.name)
 
     return NextResponse.json({
       secure_url: upload.secure_url,

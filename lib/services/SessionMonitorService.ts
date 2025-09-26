@@ -1,7 +1,7 @@
 import { db } from "@/db"
 import { bookingSessions, learners, mentors, creditTransactions, mentorPayouts, notifications } from "@/db/schema"
 import { eq, and, or, lt, isNull } from "drizzle-orm"
-import { broadcastSessionUpdate, broadcastForceDisconnect } from "@/app/api/sse/session-updates/route"
+import { broadcastSessionUpdate, broadcastForceDisconnect, broadcastBookingUpdate } from "@/app/api/sse/session-updates/route"
 import { sessionCompletionService } from './SessionCompletionService'
 
 export class SessionMonitorService {
@@ -129,8 +129,10 @@ export class SessionMonitorService {
   private async processExpiredBookings(): Promise<void> {
     try {
       const now = new Date()
-      
-      // Find pending bookings past their expiry time (24 hours)
+
+      // Find pending bookings that are expired due to either:
+      // 1. Past their expiry time (24 hours after booking)
+      // 2. Session start time has passed without mentor response
       const expiredBookings = await db
         .select({
           id: bookingSessions.id,
@@ -138,6 +140,7 @@ export class SessionMonitorService {
           mentorId: bookingSessions.mentorId,
           escrowCredits: bookingSessions.escrowCredits,
           expiresAt: bookingSessions.expiresAt,
+          startTime: bookingSessions.startTime,
           learner: {
             id: learners.id,
             userId: learners.userId,
@@ -154,7 +157,10 @@ export class SessionMonitorService {
         .where(
           and(
             eq(bookingSessions.status, 'pending'),
-            lt(bookingSessions.expiresAt, now),
+            or(
+              lt(bookingSessions.expiresAt, now), // 24 hour expiry
+              lt(bookingSessions.startTime, now)  // Session start time passed
+            ),
             // Prevent reprocessing already handled bookings
             isNull(bookingSessions.refundProcessedAt)
           )
@@ -234,7 +240,22 @@ export class SessionMonitorService {
         })
 
         this.stats.expiredBookings++
-        console.log(`[SESSION_MONITOR] Processed expired booking ${booking.id}`)
+        const expiredReason = new Date() > booking.expiresAt ? '24-hour timeout' : 'session start time passed'
+        console.log(`[SESSION_MONITOR] Processed expired booking ${booking.id} - Reason: ${expiredReason}`)
+
+        // Broadcast booking status update to affected users
+        if (booking.learner && booking.mentor) {
+          await broadcastBookingUpdate(
+            booking.id,
+            'status_changed',
+            {
+              newStatus: 'mentor_no_response',
+              reason: expiredReason,
+              refundAmount: booking.escrowCredits
+            },
+            [booking.learner.userId, booking.mentor.userId]
+          )
+        }
       }
     } catch (error) {
       console.error('[SESSION_MONITOR] Error processing expired bookings:', error)

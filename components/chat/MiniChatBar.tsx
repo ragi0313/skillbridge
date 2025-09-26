@@ -86,6 +86,7 @@ export function MiniChatBar({ user, className }: MiniChatBarProps) {
     subscribeToConversation,
     unsubscribeFromConversation,
     getConversation,
+    fetchConversations,
   } = useChat()
 
   // Create a ref to hold the addMessage function to avoid circular dependency
@@ -120,6 +121,7 @@ export function MiniChatBar({ user, className }: MiniChatBarProps) {
   }, [addMessage])
 
   const unsubscribeRef = useRef<(() => void) | null>(null)
+  const conversationSubscriptions = useRef<Map<number, () => void>>(new Map())
 
   // Listen for custom events to open chat
   useEffect(() => {
@@ -190,6 +192,55 @@ export function MiniChatBar({ user, className }: MiniChatBarProps) {
     }
   }, [currentConversation?.id, user?.id]) // Only depend on IDs to avoid infinite loops
 
+  // Subscribe to all conversations when showing conversation list
+  useEffect(() => {
+    if (isOpen && !currentConversation && conversations.length > 0) {
+      // Subscribe to all conversations for real-time updates
+      conversations.forEach(conversation => {
+        const conversationId = conversation.id
+
+        // Don't subscribe if already subscribed
+        if (!conversationSubscriptions.current.has(conversationId)) {
+          const unsubscribe = subscribeToConversation(conversationId, (message: ChatMessage) => {
+            // This will trigger the ChatContext to update the conversations list
+            // The MiniChatBar will automatically re-render with new message info
+            console.log(`[MINICHAT] New message in conversation ${conversationId}`)
+          })
+
+          conversationSubscriptions.current.set(conversationId, unsubscribe)
+        }
+      })
+
+      // Clean up subscriptions for conversations that no longer exist
+      const currentConversationIds = new Set(conversations.map(c => c.id))
+      Array.from(conversationSubscriptions.current.entries()).forEach(([convId, unsubscribe]) => {
+        if (!currentConversationIds.has(convId)) {
+          unsubscribe()
+          conversationSubscriptions.current.delete(convId)
+        }
+      })
+    }
+
+    // Clean up all subscriptions when not showing conversation list
+    if (!isOpen || currentConversation) {
+      Array.from(conversationSubscriptions.current.values()).forEach(unsubscribe => {
+        unsubscribe()
+      })
+      conversationSubscriptions.current.clear()
+    }
+  }, [isOpen, currentConversation, conversations, subscribeToConversation])
+
+  // Cleanup subscriptions on unmount
+  useEffect(() => {
+    return () => {
+      // Clean up conversation list subscriptions
+      Array.from(conversationSubscriptions.current.values()).forEach(unsubscribe => {
+        unsubscribe()
+      })
+      conversationSubscriptions.current.clear()
+    }
+  }, [])
+
   // Handle message send
   const handleSendMessage = async () => {
     if (!messageInput.trim() || !currentConversation || !user) return
@@ -215,6 +266,12 @@ export function MiniChatBar({ user, className }: MiniChatBarProps) {
       unsubscribeRef.current()
       unsubscribeRef.current = null
     }
+
+    // Clean up conversation list subscriptions
+    Array.from(conversationSubscriptions.current.values()).forEach(unsubscribe => {
+      unsubscribe()
+    })
+    conversationSubscriptions.current.clear()
   }
 
   // Toggle minimize
@@ -270,6 +327,28 @@ export function MiniChatBar({ user, className }: MiniChatBarProps) {
     toast.success('Message copied to clipboard')
   }
 
+  // Check if conversation has unread messages
+  const hasUnreadMessages = (conversation: ConversationWithParticipants) => {
+    if (!conversation.lastMessageAt || !user) return false
+
+    // Get the appropriate last read timestamp based on user role
+    let lastReadAt: string | null = null
+    if (conversation.mentor.userId === user.id) {
+      // Current user is mentor, check mentor's read time
+      lastReadAt = conversation.mentorLastReadAt
+    } else {
+      // Current user is learner, check learner's read time
+      lastReadAt = conversation.learnerLastReadAt
+    }
+
+    if (!lastReadAt) return true // If never read, it's unread
+
+    const lastMessageTime = new Date(conversation.lastMessageAt).getTime()
+    const lastReadTime = new Date(lastReadAt).getTime()
+
+    return lastMessageTime > lastReadTime
+  }
+
   // Render conversation list
   const renderConversationList = () => {
     // Show all conversations (including those without messages)
@@ -289,11 +368,16 @@ export function MiniChatBar({ user, className }: MiniChatBarProps) {
             const otherParticipant = conversation.mentor.userId === user?.id
               ? conversation.learner
               : conversation.mentor
+            const isUnread = hasUnreadMessages(conversation)
 
             return (
               <div
                 key={conversation.id}
-                className="flex items-center p-4 rounded-xl hover:bg-gray-50 cursor-pointer transition-colors border border-gray-100 hover:border-gray-200"
+                className={`flex items-center p-4 rounded-xl cursor-pointer transition-colors border hover:border-gray-200 ${
+                  isUnread
+                    ? 'bg-blue-50 border-blue-200 hover:bg-blue-100'
+                    : 'hover:bg-gray-50 border-gray-100'
+                }`}
                 onClick={() => {
                   setCurrentConversation(conversation)
                 }}
@@ -306,14 +390,19 @@ export function MiniChatBar({ user, className }: MiniChatBarProps) {
                 </Avatar>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
-                    <p className="font-semibold text-base truncate text-gray-900">
+                    <p className={`font-semibold text-base truncate ${isUnread ? 'text-gray-900' : 'text-gray-700'}`}>
                       {otherParticipant.firstName} {otherParticipant.lastName}
                     </p>
-                    {conversation.lastMessageAt && (
-                      <span className="text-xs text-gray-500 font-medium">
-                        {formatMessageTime(conversation.lastMessageAt)}
-                      </span>
-                    )}
+                    <div className="flex items-center space-x-2">
+                      {conversation.lastMessageAt && (
+                        <span className="text-xs text-gray-500 font-medium">
+                          {formatMessageTime(conversation.lastMessageAt)}
+                        </span>
+                      )}
+                      {isUnread && (
+                        <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                      )}
+                    </div>
                   </div>
                   {conversation.lastMessage ? (
                     <p className="text-sm text-gray-600 truncate mt-1">

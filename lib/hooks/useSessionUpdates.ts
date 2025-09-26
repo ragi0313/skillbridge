@@ -5,23 +5,27 @@ import { toast } from "@/lib/toast"
 
 interface SessionUpdateData {
   type: string
-  sessionId: number
+  sessionId?: number
+  bookingId?: number
   updateType?: string
   message?: string
   reason?: string
   userRole?: string
   newStatus?: string
+  refundAmount?: number
   timestamp: string
 }
 
 interface UseSessionUpdatesOptions {
   onSessionUpdate?: (data: SessionUpdateData) => void
+  onBookingUpdate?: (data: SessionUpdateData) => void
   enableToasts?: boolean
 }
 
-export function useSessionUpdates({ 
-  onSessionUpdate, 
-  enableToasts = false 
+export function useSessionUpdates({
+  onSessionUpdate,
+  onBookingUpdate,
+  enableToasts = false
 }: UseSessionUpdatesOptions = {}) {
   const [isConnected, setIsConnected] = useState(false)
   const [lastMessage, setLastMessage] = useState<SessionUpdateData | null>(null)
@@ -69,7 +73,7 @@ export function useSessionUpdates({
             console.log('[SSE] Session update received:', data)
             setLastMessage(data)
             onSessionUpdate?.(data)
-            
+
             if (enableToasts) {
               // Show appropriate toast based on update type
               if (data.updateType === 'force_disconnect') {
@@ -80,6 +84,23 @@ export function useSessionUpdates({
                 toast.success(`${data.userRole === 'learner' ? 'Learner' : 'Mentor'} joined`)
               } else if (data.updateType === 'participant_left') {
                 toast.info(`${data.userRole === 'learner' ? 'Learner' : 'Mentor'} left`)
+              }
+            }
+          }
+
+          if (data.type === 'booking_update') {
+            console.log('[SSE] Booking update received:', data)
+            setLastMessage(data)
+            onBookingUpdate?.(data)
+
+            if (enableToasts) {
+              // Show appropriate toast based on update type
+              if (data.updateType === 'status_changed') {
+                if (data.newStatus === 'mentor_no_response') {
+                  toast.info(`Booking expired - ${data.reason}. Refund: ${data.refundAmount} credits`)
+                } else {
+                  toast.info(`Booking status changed to ${data.newStatus}`)
+                }
               }
             }
           }

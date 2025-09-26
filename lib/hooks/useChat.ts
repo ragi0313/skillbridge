@@ -169,7 +169,13 @@ export const useChat = ({ conversationId, userId, onNewMessage, onError }: UseCh
       })
 
       if (!response.ok) {
-        throw new Error('Failed to send message')
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
+        console.error('Send message API error:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorData
+        })
+        throw new Error(`Failed to send message: ${response.status} ${errorData.error || response.statusText}`)
       }
 
       const data = await response.json()

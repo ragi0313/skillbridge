@@ -60,19 +60,23 @@ const rateLimitedPOST = withRateLimit('chat', async (
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) => {
+  let conversationId: number | null = null
+  let body: any = null
+  let user: any = null
+
   try {
-    const user = await getSession()
+    user = await getSession()
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const { id } = await params
-    const conversationId = parseInt(id)
+    conversationId = parseInt(id)
     if (isNaN(conversationId)) {
       return NextResponse.json({ error: 'Invalid conversation ID' }, { status: 400 })
     }
 
-    const body = await request.json()
+    body = await request.json()
     const { content, messageType, attachments } = sendMessageSchema.parse(body)
 
     // Verify user is a participant in this conversation
@@ -91,7 +95,13 @@ const rateLimitedPOST = withRateLimit('chat', async (
 
     return NextResponse.json({ message })
   } catch (error) {
-    console.error('Error sending message:', error)
+    console.error('Error sending message:', {
+      error: error.message,
+      stack: error.stack,
+      conversationId,
+      userId: user?.id,
+      body
+    })
     if (error instanceof z.ZodError) {
       return NextResponse.json(
         { error: 'Invalid request data', details: error.errors },
@@ -99,7 +109,7 @@ const rateLimitedPOST = withRateLimit('chat', async (
       )
     }
     return NextResponse.json(
-      { error: 'Failed to send message' },
+      { error: error.message || 'Failed to send message' },
       { status: 500 }
     )
   }

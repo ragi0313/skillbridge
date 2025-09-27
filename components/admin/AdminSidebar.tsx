@@ -1,5 +1,6 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { Clock, Users, TrendingUp, UserCheck, MessageSquare, Megaphone, Settings, LogOut, X, Video, FileText }  from "lucide-react"
 import { Layers } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -13,6 +14,12 @@ type Props = {
   setActiveSection: (section: string) => void
   isOpen: boolean
   setIsOpen: (open: boolean) => void
+}
+
+interface AdminUser {
+  firstName: string
+  lastName: string
+  profilePictureUrl?: string
 }
 
 const menuItems = [
@@ -29,6 +36,27 @@ const menuItems = [
 ]
 
 export default function AdminSidebar({ activeSection, setActiveSection, isOpen, setIsOpen }: Props) {
+  const [adminUser, setAdminUser] = useState<AdminUser | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchAdminData = async () => {
+      try {
+        const response = await fetch('/api/admin/profile')
+        if (response.ok) {
+          const data = await response.json()
+          setAdminUser(data.admin)
+        }
+      } catch (error) {
+        console.error('Error fetching admin data:', error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchAdminData()
+  }, [])
+
   const handleMenuClick = (sectionId: string) => {
     setActiveSection(sectionId)
     setIsOpen(false) // Close sidebar on mobile after selection
@@ -38,6 +66,32 @@ export default function AdminSidebar({ activeSection, setActiveSection, isOpen, 
     await fetch("/api/auth/logout", { method: "POST" })
     router.push("/")
     router.refresh()
+  }
+
+  const getInitials = (firstName: string, lastName: string) => {
+    return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase()
+  }
+
+  const getRandomBgColor = (firstName: string, lastName: string) => {
+    const colors = [
+      'bg-red-500',
+      'bg-blue-500',
+      'bg-green-500',
+      'bg-yellow-500',
+      'bg-purple-500',
+      'bg-pink-500',
+      'bg-indigo-500',
+      'bg-teal-500',
+      'bg-orange-500',
+      'bg-cyan-500'
+    ]
+
+    // Generate consistent color based on name
+    const nameHash = (firstName + lastName).split('').reduce((hash, char) => {
+      return char.charCodeAt(0) + ((hash << 5) - hash)
+    }, 0)
+
+    return colors[Math.abs(nameHash) % colors.length]
   }
   return (
     <>
@@ -91,13 +145,18 @@ export default function AdminSidebar({ activeSection, setActiveSection, isOpen, 
         <div className="p-4 border-t border-slate-700">
           <div className="flex items-center space-x-3 mb-4">
             <Avatar className="h-12 w-12">
-              <AvatarImage src="/placeholder.svg?height=48&width=48" />
-              <AvatarFallback className="bg-blue-600 text-white">SJ</AvatarFallback>
+              <AvatarImage src={adminUser?.profilePictureUrl || undefined} />
+              <AvatarFallback className={`text-white font-semibold ${
+                isLoading ? 'bg-gray-400' : adminUser ? getRandomBgColor(adminUser.firstName, adminUser.lastName) : 'bg-blue-600'
+              }`}>
+                {isLoading ? "..." : adminUser ? getInitials(adminUser.firstName, adminUser.lastName) : "AD"}
+              </AvatarFallback>
             </Avatar>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-white truncate">Sarah Johnson</p>
-              <p className="text-xs text-slate-400 truncate">Super Administrator</p>
-              <p className="text-xs text-slate-500 truncate">admin@skillbridge.com</p>
+              <p className="text-sm font-medium text-white truncate">
+                {isLoading ? "Loading..." : adminUser ? `${adminUser.firstName} ${adminUser.lastName}` : "Admin User"}
+              </p>
+              <p className="text-xs text-slate-400 truncate">Administrator</p>
             </div>
           </div>
 

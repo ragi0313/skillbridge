@@ -354,4 +354,52 @@
   .animate-scroll-left:hover {
     animation-play-state: paused;
   }
+
+  /* Enhanced booking page animations */
+  @keyframes float {
+    0%, 100% {
+      transform: translateY(0px);
+    }
+    50% {
+      transform: translateY(-10px);
+    }
+  }
+
+  .animate-float {
+    animation: float 6s ease-in-out infinite;
+  }
+
+  @keyframes scale-in {
+    from {
+      opacity: 0;
+      transform: scale(0.9);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  .animate-scale-in {
+    animation: scale-in 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* Custom scrollbar for booking page */
+  .booking-scrollbar::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .booking-scrollbar::-webkit-scrollbar-track {
+    background: rgba(139, 92, 246, 0.1);
+    border-radius: 4px;
+  }
+
+  .booking-scrollbar::-webkit-scrollbar-thumb {
+    background: linear-gradient(to bottom, #8b5cf6, #7c3aed);
+    border-radius: 4px;
+  }
+
+  .booking-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(to bottom, #7c3aed, #6d28d9);
+  }
 }

@@ -14,7 +14,7 @@ interface MentorListProps {
   paginatedMentors: Mentor[]
   currentPage: number
   totalPages: number
-  handleLoadMore: () => void
+  setCurrentPage: (page: number) => void
   clearAllFilters: () => void
   MENTORS_PER_PAGE: number
 }
@@ -25,7 +25,7 @@ export function MentorList({
   paginatedMentors,
   currentPage,
   totalPages,
-  handleLoadMore,
+  setCurrentPage,
   clearAllFilters,
   MENTORS_PER_PAGE,
 }: MentorListProps) {
@@ -37,6 +37,11 @@ export function MentorList({
           <h2 className="text-2xl font-bold text-gray-900">
             {filteredMentors.length} Mentor{filteredMentors.length !== 1 ? "s" : ""} Found
           </h2>
+          {totalPages > 1 && (
+            <Badge variant="outline" className="text-sm">
+              Page {currentPage} of {totalPages}
+            </Badge>
+          )}
         </div>
       </div>
 
@@ -60,23 +65,61 @@ export function MentorList({
               <MentorCard key={mentor.id} mentor={mentor} />
             ))}
           </div>
-          {/* Load More Button */}
-          {currentPage < totalPages && (
-            <div className="flex justify-center pt-8">
-              <Button
-                onClick={handleLoadMore}
-                size="lg"
-                className="gradient-bg text-white font-semibold px-12 py-4 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105"
-              >
-                Load More Mentors
-              </Button>
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="mt-8 flex items-center justify-between">
+              <div className="text-sm text-gray-600">
+                Showing {((currentPage - 1) * MENTORS_PER_PAGE) + 1} to {Math.min(currentPage * MENTORS_PER_PAGE, filteredMentors.length)} of {filteredMentors.length} mentors
+              </div>
+              <div className="flex items-center space-x-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                  disabled={currentPage === 1}
+                >
+                  Previous
+                </Button>
+                <div className="flex space-x-1">
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    const page = i + 1
+                    return (
+                      <Button
+                        key={page}
+                        variant={currentPage === page ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setCurrentPage(page)}
+                        className="w-8 h-8 p-0"
+                      >
+                        {page}
+                      </Button>
+                    )
+                  })}
+                  {totalPages > 5 && (
+                    <>
+                      <span className="px-2">...</span>
+                      <Button
+                        variant={currentPage === totalPages ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setCurrentPage(totalPages)}
+                        className="w-8 h-8 p-0"
+                      >
+                        {totalPages}
+                      </Button>
+                    </>
+                  )}
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                  disabled={currentPage === totalPages}
+                >
+                  Next
+                </Button>
+              </div>
             </div>
           )}
-          {/* Pagination Info */}
-          <div className="text-center text-sm text-gray-500">
-            Showing {Math.min(currentPage * MENTORS_PER_PAGE, filteredMentors.length)} of {filteredMentors.length}{" "}
-            mentors
-          </div>
         </>
       )}
     </div>

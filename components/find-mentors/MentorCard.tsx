@@ -4,10 +4,9 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { CheckCircle, Star, Award, Users, MapPin, Languages, Coins, MessageCircle } from "lucide-react"
+import { CheckCircle, Star, Award, Users, MapPin, Languages, Coins } from "lucide-react"
 import type { Mentor } from "./types"
 import Link from "next/link"
-import { MessageMentorButtonWrapper as MessageMentorButton } from "@/components/mentors/MessageMentorButtonWrapper"
 
 interface MentorCardProps {
   mentor: Mentor
@@ -147,22 +146,16 @@ const formattedBio = mentor.bio
                 </div>
               </div>
 
-              {/* Action Buttons */}
-              <div className="space-y-3">
+              {/* Action Button */}
+              <div>
                  <Link href={`/mentors/${mentor.id}/${slug}`}>
                   <Button
                     size="lg"
-                    className="w-[80%] ml-6 gradient-bg text-white font-semibold py-4 rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105"
+                    className="w-full gradient-bg text-white font-semibold py-4 rounded-lg shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105"
                   >
                     View Profile
                   </Button>
                 </Link>
-                
-                <MessageMentorButton
-                  mentorUserId={mentor.userId}
-                  mentorName={mentor.name}
-                  className="w-[80%] ml-6 bg-white text-purple-600 border-2 border-purple-600 font-semibold py-4 rounded-lg shadow-lg hover:shadow-xl hover:bg-purple-50 transition-all duration-200 transform hover:scale-105"
-                />
               </div>
             </div>
           </div>

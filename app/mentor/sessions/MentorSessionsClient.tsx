@@ -8,11 +8,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { 
-  Calendar, 
-  Clock, 
-  User, 
-  Video, 
+import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import {
+  Calendar,
+  Clock,
+  User,
+  Video,
   Check,
   X,
   AlertCircle,
@@ -21,7 +24,13 @@ import {
   Timer,
   CreditCard,
   MessageCircle,
-  DollarSign
+  DollarSign,
+  Search,
+  MoreVertical,
+  Eye,
+  EyeOff,
+  Archive,
+  ArchiveRestore
 } from "lucide-react"
 import { format, isPast, isFuture, isToday } from "date-fns"
 import { toast } from "sonner"
@@ -69,41 +78,159 @@ export function MentorSessionsClient({ sessions }: MentorSessionsClientProps) {
   const [cancelSessionId, setCancelSessionId] = useState<number | null>(null)
   const [cancellationReason, setCancellationReason] = useState("")
 
-  // Categorize sessions
+  // Search and filter states
+  const [searchTerm, setSearchTerm] = useState("")
+  const [dateRangeFilter, setDateRangeFilter] = useState("all")
+  const [compactView, setCompactView] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [showArchived, setShowArchived] = useState(false)
+  const sessionsPerPage = 10
+
+  // Archive functionality - sessions older than 6 months are eligible for archiving
+  const [archivedSessions, setArchivedSessions] = useState<Set<number>>(new Set())
+
+  const isSessionArchivable = (session: Session) => {
+    const sessionDate = new Date(session.startTime || session.scheduledDate)
+    const sixMonthsAgo = new Date()
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6)
+    return sessionDate < sixMonthsAgo && ['completed', 'cancelled', 'rejected', 'mentor_no_response'].includes(session.status)
+  }
+
+  const handleArchiveSession = (sessionId: number) => {
+    setArchivedSessions(prev => new Set([...prev, sessionId]))
+    toast.success('Session archived', {
+      description: 'You can find it in the archived sessions view.',
+      duration: 3000,
+    })
+  }
+
+  const handleUnarchiveSession = (sessionId: number) => {
+    setArchivedSessions(prev => {
+      const newSet = new Set(prev)
+      newSet.delete(sessionId)
+      return newSet
+    })
+    toast.success('Session unarchived', {
+      description: 'Session moved back to main view.',
+      duration: 3000,
+    })
+  }
+
+  // Filter and search sessions
+  const filteredSessions = useMemo(() => {
+    let filtered = sessions
+
+    // Apply archive filter first
+    if (showArchived) {
+      filtered = filtered.filter(session => archivedSessions.has(session.id))
+    } else {
+      filtered = filtered.filter(session => !archivedSessions.has(session.id))
+    }
+
+    // Apply search filter
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase()
+      filtered = filtered.filter(session =>
+        `${session.learnerFirstName} ${session.learnerLastName}`.toLowerCase().includes(term) ||
+        session.skillName?.toLowerCase().includes(term) ||
+        session.sessionNotes?.toLowerCase().includes(term) ||
+        session.learnerExperienceLevel?.toLowerCase().includes(term)
+      )
+    }
+
+
+    // Apply date range filter
+    if (dateRangeFilter !== "all") {
+      const now = new Date()
+      const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+      const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+      const threeMonthsAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000)
+
+      filtered = filtered.filter(session => {
+        const sessionDate = new Date(session.startTime || session.scheduledDate)
+        switch (dateRangeFilter) {
+          case "week":
+            return sessionDate >= oneWeekAgo
+          case "month":
+            return sessionDate >= oneMonthAgo
+          case "quarter":
+            return sessionDate >= threeMonthsAgo
+          default:
+            return true
+        }
+      })
+    }
+
+    // Sort by date (newest first)
+    filtered.sort((a, b) => {
+      const aDate = new Date(a.startTime || a.scheduledDate)
+      const bDate = new Date(b.startTime || b.scheduledDate)
+      return bDate.getTime() - aDate.getTime()
+    })
+
+    return filtered
+  }, [sessions, searchTerm, dateRangeFilter, showArchived, archivedSessions])
+
+  // Categorize filtered sessions
   const categorizedSessions = useMemo(() => {
     return {
-      all: sessions,
-      pending: sessions.filter(session => session.status === 'pending'),
-      upcoming: sessions.filter(session => 
+      all: filteredSessions,
+      pending: filteredSessions.filter(session => session.status === 'pending'),
+      upcoming: filteredSessions.filter(session =>
         ['confirmed', 'upcoming'].includes(session.status)
       ),
-      ongoing: sessions.filter(session => session.status === 'ongoing'),
-      completed: sessions.filter(session => 
+      ongoing: filteredSessions.filter(session => session.status === 'ongoing'),
+      completed: filteredSessions.filter(session =>
         ['completed', 'technical_issues'].includes(session.status)
       ),
-      declined: sessions.filter(session => 
+      declined: filteredSessions.filter(session =>
         ['rejected', 'mentor_no_response'].includes(session.status)
       ),
-      no_shows: sessions.filter(session => 
+      no_shows: filteredSessions.filter(session =>
         ['both_no_show', 'learner_no_show', 'mentor_no_show'].includes(session.status)
       ),
-      cancelled: sessions.filter(session => session.status === 'cancelled'),
+      cancelled: filteredSessions.filter(session => session.status === 'cancelled'),
     }
-  }, [sessions])
+  }, [filteredSessions])
 
-  // Calculate earnings
+  // Paginate sessions
+  const paginatedSessions = useMemo(() => {
+    const currentSessions = categorizedSessions[selectedTab as keyof typeof categorizedSessions] || []
+    const startIndex = (currentPage - 1) * sessionsPerPage
+    const endIndex = startIndex + sessionsPerPage
+    return {
+      sessions: currentSessions.slice(startIndex, endIndex),
+      totalPages: Math.ceil(currentSessions.length / sessionsPerPage),
+      totalSessions: currentSessions.length
+    }
+  }, [categorizedSessions, selectedTab, currentPage, sessionsPerPage])
+
+  // Reset pagination when filters change
+  const resetPagination = () => setCurrentPage(1)
+
+  // Calculate earnings for individual session
+  const calculateEarnings = (session: Session) => {
+    if (session.status === 'completed') {
+      return Math.floor(session.totalCostCredits * 0.8) // 80% after platform fee
+    } else if (session.status === 'learner_no_show') {
+      return session.totalCostCredits // 100% compensation
+    }
+    return 0
+  }
+
+  // Calculate total earnings
   const earnings = useMemo(() => {
     const completedSessions = sessions.filter(s => s.status === 'completed')
     const noShowCompensation = sessions.filter(s => s.status === 'learner_no_show')
-    
-    const totalCompleted = completedSessions.reduce((sum, session) => 
+
+    const totalCompleted = completedSessions.reduce((sum, session) =>
       sum + Math.floor(session.totalCostCredits * 0.8), 0
     )
-    
-    const totalNoShow = noShowCompensation.reduce((sum, session) => 
+
+    const totalNoShow = noShowCompensation.reduce((sum, session) =>
       sum + session.totalCostCredits, 0
     )
-    
+
     return {
       total: totalCompleted + totalNoShow,
       fromCompleted: totalCompleted,
@@ -262,15 +389,6 @@ export function MentorSessionsClient({ sessions }: MentorSessionsClientProps) {
     }
   }
 
-  const calculateEarnings = (session: Session) => {
-    if (session.status === 'completed') {
-      return Math.floor(session.totalCostCredits * 0.8) // 80% after platform fee
-    } else if (session.status === 'learner_no_show') {
-      return session.totalCostCredits // 100% compensation
-    }
-    return 0
-  }
-
   const getCategoryHeader = (category: string, count: number) => {
     const headers = {
       all: {
@@ -335,7 +453,78 @@ export function MentorSessionsClient({ sessions }: MentorSessionsClientProps) {
     return "border border-gray-200 bg-white"
   }
 
-  const renderSession = (session: Session) => (
+  const renderSession = (session: Session) => {
+    if (compactView) {
+      return (
+        <div key={session.id} className="p-4 border border-gray-200 rounded-lg bg-white hover:shadow-sm transition-all">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <Avatar className="w-8 h-8">
+                <AvatarImage src={session.learnerProfilePictureUrl || undefined} />
+                <AvatarFallback className="text-xs">
+                  {session.learnerFirstName?.[0]}{session.learnerLastName?.[0]}
+                </AvatarFallback>
+              </Avatar>
+              <div>
+                <div className="font-medium text-sm">
+                  {session.learnerFirstName} {session.learnerLastName}
+                </div>
+                <div className="text-xs text-gray-500 flex items-center gap-2">
+                  <span>{session.skillName}</span>
+                  <span>•</span>
+                  <span>
+                    {session.startTime
+                      ? format(new Date(session.startTime), "MMM dd, h:mm a")
+                      : format(new Date(session.scheduledDate), "MMM dd, yyyy")}
+                  </span>
+                  <span>•</span>
+                  <span>+{calculateEarnings(session)} credits</span>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center space-x-2">
+              {getStatusBadge(session.status)}
+              {session.status === 'pending' && (
+                <div className="flex gap-1">
+                  <Button size="sm" onClick={() => handleSessionResponse(session, true)} className="bg-green-600 hover:bg-green-700">
+                    <Check className="w-3 h-3" />
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => handleSessionResponse(session, false)}>
+                    <X className="w-3 h-3" />
+                  </Button>
+                </div>
+              )}
+              {canJoinSession(session) && (
+                <Button size="sm" onClick={() => handleJoinSession(session.id)} className="bg-green-600 hover:bg-green-700">
+                  <Video className="w-3 h-3 mr-1" />
+                  Join
+                </Button>
+              )}
+              {canReconnectSession(session) && (
+                <Button size="sm" onClick={() => handleJoinSession(session.id)} className="bg-blue-600 hover:bg-blue-700">
+                  <Video className="w-3 h-3 mr-1" />
+                  Reconnect
+                </Button>
+              )}
+              {/* Archive/Unarchive button in compact view */}
+              {showArchived ? (
+                <Button size="sm" variant="outline" onClick={() => handleUnarchiveSession(session.id)}>
+                  <ArchiveRestore className="w-3 h-3" />
+                </Button>
+              ) : (
+                isSessionArchivable(session) && (
+                  <Button size="sm" variant="outline" onClick={() => handleArchiveSession(session.id)}>
+                    <Archive className="w-3 h-3" />
+                  </Button>
+                )
+              )}
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    return (
     <Card key={session.id} className={`mb-4 ${getSessionCardClass(session.status)} transition-all hover:shadow-md`}>
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between">
@@ -497,22 +686,111 @@ export function MentorSessionsClient({ sessions }: MentorSessionsClientProps) {
             </Button>
           )}
 
-          {session.status === 'confirmed' && session.startTime && 
+          {session.status === 'confirmed' && session.startTime &&
            isFuture(new Date(session.startTime)) && (
-            <Button 
+            <Button
               variant="outline"
               onClick={() => handleCancelSession(session.id)}
             >
               Cancel Session
             </Button>
           )}
+
+          {/* Archive/Unarchive button in detailed view */}
+          {showArchived ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleUnarchiveSession(session.id)}
+              className="flex items-center gap-2"
+            >
+              <ArchiveRestore className="w-4 h-4" />
+              Unarchive
+            </Button>
+          ) : (
+            isSessionArchivable(session) && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleArchiveSession(session.id)}
+                className="flex items-center gap-2"
+              >
+                <Archive className="w-4 h-4" />
+                Archive
+              </Button>
+            )
+          )}
         </div>
       </CardContent>
     </Card>
-  )
+    )
+  }
 
   return (
     <>
+      {/* Search and Filter Controls */}
+      <div className="mb-6 space-y-4">
+        {/* Search Bar */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+          <Input
+            placeholder="Search by learner name, skill, or notes..."
+            value={searchTerm}
+            onChange={(e) => {
+              setSearchTerm(e.target.value)
+              resetPagination()
+            }}
+            className="pl-10 pr-4 h-11"
+          />
+        </div>
+
+        {/* Filters Row */}
+        <div className="flex flex-wrap gap-4 items-center justify-between">
+          <div className="flex flex-wrap gap-3">
+            {/* Date Range Filter */}
+            <Select value={dateRangeFilter} onValueChange={(value) => { setDateRangeFilter(value); resetPagination() }}>
+              <SelectTrigger className="w-[160px]">
+                <SelectValue placeholder="All Time" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Time</SelectItem>
+                <SelectItem value="week">Past Week</SelectItem>
+                <SelectItem value="month">Past Month</SelectItem>
+                <SelectItem value="quarter">Past 3 Months</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Options Menu */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm">
+                <MoreVertical className="w-4 h-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={() => {
+                  setShowArchived(!showArchived)
+                  resetPagination()
+                }}
+                className="flex items-center gap-2"
+              >
+                {showArchived ? <ArchiveRestore className="w-4 h-4" /> : <Archive className="w-4 h-4" />}
+                {showArchived ? "Show Active" : "Show Archived"}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => setCompactView(!compactView)}
+                className="flex items-center gap-2"
+              >
+                {compactView ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                {compactView ? "Detailed" : "Compact"}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+
       {/* Earnings Summary */}
       <Card className="mb-6">
         <CardHeader>
@@ -551,7 +829,7 @@ export function MentorSessionsClient({ sessions }: MentorSessionsClientProps) {
         </CardContent>
       </Card>
 
-      <Tabs value={selectedTab} onValueChange={setSelectedTab}>
+      <Tabs value={selectedTab} onValueChange={(value) => { setSelectedTab(value); resetPagination() }}>
         <TabsList className="grid w-full grid-cols-4 lg:grid-cols-8 gap-1">
           <TabsTrigger value="all" className="text-xs">
             All ({categorizedSessions.all.length})
@@ -583,8 +861,8 @@ export function MentorSessionsClient({ sessions }: MentorSessionsClientProps) {
           {Object.entries(categorizedSessions).map(([category, sessionList]) => (
             <TabsContent key={category} value={category}>
               {getCategoryHeader(category, sessionList.length)}
-              
-              {sessionList.length === 0 ? (
+
+              {paginatedSessions.totalSessions === 0 ? (
                 <Card className="border-2 border-dashed border-gray-200">
                   <CardContent className="text-center py-16">
                     <div className="text-4xl mb-4">🔍</div>
@@ -592,7 +870,11 @@ export function MentorSessionsClient({ sessions }: MentorSessionsClientProps) {
                       No {category.replace('_', ' ')} sessions found
                     </p>
                     <p className="text-gray-400 text-sm">
-                      {category === 'all' 
+                      {showArchived
+                        ? 'No archived sessions found. Sessions older than 6 months can be archived.'
+                        : searchTerm || dateRangeFilter !== "all"
+                        ? 'Try adjusting your search or filters'
+                        : category === 'all'
                         ? 'No sessions have been booked with you yet. Optimize your profile to attract learners!'
                         : category === 'pending'
                         ? 'No new session requests at the moment'
@@ -611,9 +893,67 @@ export function MentorSessionsClient({ sessions }: MentorSessionsClientProps) {
                   </CardContent>
                 </Card>
               ) : (
-                <div className="space-y-4">
-                  {sessionList.map(renderSession)}
-                </div>
+                <>
+                  <div className="space-y-4">
+                    {paginatedSessions.sessions.map(renderSession)}
+                  </div>
+
+                  {/* Pagination */}
+                  {paginatedSessions.totalPages > 1 && (
+                    <div className="mt-8 flex items-center justify-between">
+                      <div className="text-sm text-gray-600">
+                        Showing {((currentPage - 1) * sessionsPerPage) + 1} to {Math.min(currentPage * sessionsPerPage, paginatedSessions.totalSessions)} of {paginatedSessions.totalSessions} sessions
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                          disabled={currentPage === 1}
+                        >
+                          Previous
+                        </Button>
+                        <div className="flex space-x-1">
+                          {Array.from({ length: Math.min(5, paginatedSessions.totalPages) }, (_, i) => {
+                            const page = i + 1
+                            return (
+                              <Button
+                                key={page}
+                                variant={currentPage === page ? "default" : "outline"}
+                                size="sm"
+                                onClick={() => setCurrentPage(page)}
+                                className="w-8 h-8 p-0"
+                              >
+                                {page}
+                              </Button>
+                            )
+                          })}
+                          {paginatedSessions.totalPages > 5 && (
+                            <>
+                              <span className="px-2">...</span>
+                              <Button
+                                variant={currentPage === paginatedSessions.totalPages ? "default" : "outline"}
+                                size="sm"
+                                onClick={() => setCurrentPage(paginatedSessions.totalPages)}
+                                className="w-8 h-8 p-0"
+                              >
+                                {paginatedSessions.totalPages}
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setCurrentPage(Math.min(paginatedSessions.totalPages, currentPage + 1))}
+                          disabled={currentPage === paginatedSessions.totalPages}
+                        >
+                          Next
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </TabsContent>
           ))}

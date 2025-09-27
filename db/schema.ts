@@ -354,15 +354,7 @@ export const agoraTokens = pgTable("agora_tokens", {
 })
 
 
-// SESSION VISIBILITY - Hide/show sessions in management
-export const sessionVisibility = pgTable("session_visibility", {
-  id: serial("id").primaryKey(),
-  sessionId: integer("session_id").notNull().references(() => bookingSessions.id, { onDelete: "cascade" }),
-  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  isHidden: boolean("is_hidden").default(false).notNull(),
-  hiddenAt: timestamp("hidden_at", { withTimezone: true }),
-  ...timestamps,
-})
+
 
 
 // SESSION FEEDBACK TABLE

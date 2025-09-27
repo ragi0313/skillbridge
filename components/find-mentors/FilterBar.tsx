@@ -7,7 +7,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox"
 import { Slider } from "@/components/ui/slider"
 import { Label } from "@/components/ui/label"
-import { Filter, ChevronDown, X, Star, DollarSign, Award, Globe, Users, Languages, Layers } from "lucide-react"
+import { ChevronDown, X } from "lucide-react"
 
 interface CategoryWithCount {
   id: number
@@ -68,36 +68,30 @@ export function FilterBar({
   clearAllFilters,
 }: FilterBarProps) {
   return (
-    <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8 pb-2 mb-8 relative z-10">
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
       {/* Main Filter Row */}
-      <div className="flex flex-wrap items-center gap-4 mb-6">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-purple-100 rounded-xl">
-            <Filter className="h-5 w-5 text-purple-600" />
-          </div>
-          <span className="text-lg font-semibold text-gray-800">Filters:</span>
-        </div>
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <span className="text-sm font-medium text-gray-700">Filter by:</span>
 
         {/* Categories Filter */}
         <Popover>
           <PopoverTrigger asChild>
             <Button
               variant="outline"
-              className="h-12 px-6 border-2 border-gray-200 hover:border-purple-300 hover:bg-purple-50 bg-white rounded-xl font-medium transition-all duration-200"
+              className="h-10 px-4 border border-gray-300 hover:border-gray-400 hover:bg-gray-50 bg-white rounded-lg text-sm font-medium transition-colors"
             >
-              <Layers className="mr-2 h-4 w-4 text-purple-500" />
               {selectedCategories.length > 0 ? (
-                <Badge variant="secondary" className="mr-2 bg-purple-100 text-purple-700">
+                <Badge variant="secondary" className="mr-2 bg-blue-100 text-blue-700 text-xs">
                   {selectedCategories.length}
                 </Badge>
               ) : null}
               Categories
-              <ChevronDown className="ml-2 h-4 w-4" />
+              <ChevronDown className="ml-2 h-3 w-3" />
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-96 p-6 rounded-2xl shadow-xl border-0 z-50">
-            <div className="space-y-4">
-              <h4 className="font-semibold text-gray-800 mb-4">Select Categories</h4>
+          <PopoverContent className="w-80 p-4 rounded-lg shadow-lg border z-50">
+            <div className="space-y-3">
+              <h4 className="font-medium text-gray-900 text-sm">Select Categories</h4>
               <div className="space-y-3 max-h-80 overflow-y-auto">
                 {categories && categories.length > 0 ? (
                   categories.map((category) => (
@@ -137,21 +131,20 @@ export function FilterBar({
           <PopoverTrigger asChild>
             <Button
               variant="outline"
-              className="h-12 px-6 border-2 border-gray-200 hover:border-purple-300 hover:bg-purple-50 bg-white rounded-xl font-medium transition-all duration-200"
+              className="h-10 px-4 border border-gray-300 hover:border-gray-400 hover:bg-gray-50 bg-white rounded-lg text-sm font-medium transition-colors"
             >
-              <Award className="mr-2 h-4 w-4 text-purple-500" />
               {selectedSkills.length > 0 ? (
-                <Badge variant="secondary" className="mr-2 bg-purple-100 text-purple-700">
+                <Badge variant="secondary" className="mr-2 bg-blue-100 text-blue-700 text-xs">
                   {selectedSkills.length}
                 </Badge>
               ) : null}
-              All Skills
-              <ChevronDown className="ml-2 h-4 w-4" />
+              Skills
+              <ChevronDown className="ml-2 h-3 w-3" />
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-96 p-6 rounded-2xl shadow-xl border-0 z-50">
-            <div className="space-y-4">
-              <h4 className="font-semibold text-gray-800 mb-4">Select Skills</h4>
+          <PopoverContent className="w-80 p-4 rounded-lg shadow-lg border z-50">
+            <div className="space-y-3">
+              <h4 className="font-medium text-gray-900 text-sm">Select Skills</h4>
               <div className="grid grid-cols-2 gap-3 max-h-80 overflow-y-auto">
                 {allSkills && allSkills.length > 0 ? (
                   allSkills.map((skill) => (
@@ -180,28 +173,63 @@ export function FilterBar({
           <PopoverTrigger asChild>
             <Button
               variant="outline"
-              className="h-12 px-6 border-2 border-gray-200 hover:border-purple-300 hover:bg-purple-50 bg-white rounded-xl font-medium transition-all duration-200"
+              className="h-10 px-4 border border-gray-300 hover:border-gray-400 hover:bg-gray-50 bg-white rounded-lg text-sm font-medium transition-colors"
             >
-              <DollarSign className="mr-2 h-4 w-4 text-green-500" />
-              {rateRange[0] > 0 || rateRange[1] < 200 ? `${rateRange[0]}-${rateRange[1]} credits` : "All Prices"}
-              <ChevronDown className="ml-2 h-4 w-4" />
+              {rateRange[1] < 1000 ? (
+                `≤ ${rateRange[1]} credits`
+              ) : (
+                "Price"
+              )}
+              <ChevronDown className="ml-2 h-3 w-3" />
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-96 p-6 rounded-2xl shadow-xl border-0 z-50">
-            <div className="space-y-6">
-              <h4 className="font-semibold text-gray-800">Credit Range</h4>
-              <div className="px-2">
-                <Slider
-                  value={rateRange}
-                  onValueChange={(value) => setRateRange(value as [number, number])}
-                  max={200}
-                  min={0}
-                  step={5}
-                  className="w-full"
-                />
-                <div className="flex justify-between text-sm text-gray-600 mt-3">
-                  <span className="font-medium">{rateRange[0]} credits</span>
-                  <span className="font-medium">{rateRange[1]}+ credits</span>
+          <PopoverContent className="w-80 p-6 rounded-lg shadow-lg border z-50">
+            <div className="space-y-4">
+              <div>
+                <h4 className="font-medium text-gray-900 text-sm mb-1">Maximum Price</h4>
+                <p className="text-xs text-gray-500 mb-3">Show mentors up to this price</p>
+              </div>
+
+              {/* Current Selection Display */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <div className="text-center">
+                  <div className="text-lg font-semibold text-blue-900">
+                    {rateRange[1] === 1000 ? 'Any Price' : `≤ ${rateRange[1]} credits`}
+                  </div>
+                  {rateRange[1] < 1000 && (
+                    <div className="text-sm text-blue-700">
+                      ≤ ₱{(rateRange[1] * 25).toLocaleString()} per session
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Range Slider */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-medium text-gray-700">Adjust price limit</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setRateRange([0, 1000])}
+                    className="text-xs text-gray-500 hover:text-gray-700 h-auto p-1"
+                  >
+                    Reset
+                  </Button>
+                </div>
+                <div className="px-2">
+                  <Slider
+                    value={[rateRange[1]]}
+                    onValueChange={(value) => setRateRange([0, value[0]])}
+                    max={1000}
+                    min={0}
+                    step={10}
+                    className="w-full"
+                  />
+                  <div className="flex justify-between text-xs text-gray-500 mt-2">
+                    <span>0 credits</span>
+                    <span>1000+ credits</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -213,21 +241,20 @@ export function FilterBar({
           <PopoverTrigger asChild>
             <Button
               variant="outline"
-              className="h-12 px-6 border-2 border-gray-200 hover:border-purple-300 hover:bg-purple-50 bg-white rounded-xl font-medium transition-all duration-200"
+              className="h-10 px-4 border border-gray-300 hover:border-gray-400 hover:bg-gray-50 bg-white rounded-lg text-sm font-medium transition-colors"
             >
-              <Languages className="mr-2 h-4 w-4 text-blue-500" />
               {selectedLanguages.length > 0 ? (
-                <Badge variant="secondary" className="mr-2 bg-blue-100 text-blue-700">
+                <Badge variant="secondary" className="mr-2 bg-blue-100 text-blue-700 text-xs">
                   {selectedLanguages.length}
                 </Badge>
               ) : null}
               Languages
-              <ChevronDown className="ml-2 h-4 w-4" />
+              <ChevronDown className="ml-2 h-3 w-3" />
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-80 p-6 rounded-2xl shadow-xl border-0 z-50">
-            <div className="space-y-4">
-              <h4 className="font-semibold text-gray-800 mb-4">Select Languages</h4>
+          <PopoverContent className="w-64 p-4 rounded-lg shadow-lg border z-50">
+            <div className="space-y-3">
+              <h4 className="font-medium text-gray-900 text-sm">Select Languages</h4>
               <div className="space-y-3 max-h-64 overflow-y-auto">
                 {allLanguages && allLanguages.length > 0 ? (
                   allLanguages.map((language) => (
@@ -251,34 +278,27 @@ export function FilterBar({
           </PopoverContent>
         </Popover>
 
-        {/* More Filters - Now as Popover */}
+        {/* More Filters */}
         <Popover>
           <PopoverTrigger asChild>
             <Button
               variant="outline"
-              className="h-12 px-6 border-2 border-gray-200 hover:border-purple-300 hover:bg-purple-50 rounded-xl font-medium transition-all duration-200 bg-transparent"
+              className="h-10 px-4 border border-gray-300 hover:border-gray-400 hover:bg-gray-50 rounded-lg text-sm font-medium transition-colors"
             >
-              <Filter className="mr-2 h-4 w-4 text-gray-500" />
-              More Filters
-              <ChevronDown className="ml-2 h-4 w-4" />
+              More
+              <ChevronDown className="ml-2 h-3 w-3" />
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-[600px] p-8 rounded-2xl shadow-xl border-0 z-50">
-            <div className="space-y-8">
-              <h3 className="text-xl font-bold text-gray-800 flex items-center gap-3">
-                <div className="p-2 bg-purple-100 rounded-xl">
-                  <Filter className="h-5 w-5 text-purple-600" />
-                </div>
+          <PopoverContent className="w-[500px] p-6 rounded-lg shadow-lg border z-50">
+            <div className="space-y-6">
+              <h3 className="text-lg font-semibold text-gray-900">
                 Advanced Filters
               </h3>
 
-              <div className="grid grid-cols-2 gap-8">
+              <div className="grid grid-cols-2 gap-6">
                 {/* Countries Filter */}
-                <div className="space-y-4">
-                  <Label className="text-lg font-semibold text-gray-800 flex items-center gap-3">
-                    <div className="p-2 bg-blue-100 rounded-lg">
-                      <Globe className="h-4 w-4 text-blue-600" />
-                    </div>
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium text-gray-900">
                     Country
                   </Label>
                   <div className="space-y-3 max-h-48 overflow-y-auto">
@@ -309,136 +329,128 @@ export function FilterBar({
                 </div>
 
                 {/* Experience Range */}
-                <div className="space-y-4">
-                  <Label className="text-lg font-semibold text-gray-800 flex items-center gap-3">
-                    <div className="p-2 bg-purple-100 rounded-lg">
-                      <Award className="h-4 w-4 text-purple-600" />
-                    </div>
-                    Experience
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium text-gray-900">
+                    Minimum Experience
                   </Label>
                   <div className="space-y-6">
                     <div className="px-3">
                       <Slider
-                        value={experienceRange}
-                        onValueChange={(value) => setExperienceRange(value as [number, number])}
+                        value={[experienceRange[1]]}
+                        onValueChange={(value) => setExperienceRange([0, value[0]])}
                         max={20}
                         min={0}
                         step={1}
                         className="w-full"
                       />
                       <div className="flex justify-between text-sm text-gray-600 mt-3 font-medium">
-                        <span>{experienceRange[0]} years</span>
-                        <span>{experienceRange[1]}+ years</span>
+                        <span>0 years</span>
+                        <span>{experienceRange[1]}+ years minimum</span>
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-8">
+              <div className="grid grid-cols-1 gap-6">
                 {/* Rating Range */}
-                <div className="space-y-4">
-                  <Label className="text-lg font-semibold text-gray-800 flex items-center gap-3">
-                    <div className="p-2 bg-yellow-100 rounded-lg">
-                      <Star className="h-4 w-4 text-yellow-600" />
-                    </div>
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium text-gray-900">
                     Minimum Rating
                   </Label>
                   <div className="space-y-6">
                     <div className="px-3">
                       <Slider
-                        value={ratingRange}
-                        onValueChange={(value) => setRatingRange(value as [number, number])}
+                        value={[ratingRange[1]]}
+                        onValueChange={(value) => setRatingRange([0, value[0]])}
                         max={5}
                         min={0}
                         step={0.1}
                         className="w-full"
                       />
                       <div className="flex justify-between text-sm text-gray-600 mt-3 font-medium">
-                        <span>{ratingRange[0].toFixed(1)}⭐</span>
-                        <span>{ratingRange[1].toFixed(1)}⭐</span>
+                        <span>0.0⭐</span>
+                        <span>{ratingRange[1].toFixed(1)}⭐+ minimum</span>
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Clear Filters Button */}
-              {hasActiveFilters && (
-                <div className="flex justify-center pt-6 border-t border-gray-200">
-                  <Button
-                    variant="outline"
-                    onClick={clearAllFilters}
-                    className="px-8 py-3 border-2 border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 rounded-xl font-semibold transition-all duration-200 bg-white shadow-sm"
-                  >
-                    <X className="mr-2 h-5 w-5" />
-                    Clear All Filters
-                  </Button>
-                </div>
-              )}
             </div>
           </PopoverContent>
         </Popover>
 
         <div className="flex-1" />
 
+        <div className="flex-1" />
+
         {/* Sort */}
-        <div className="flex items-center gap-3">
-          <span className="text-sm font-medium text-gray-600">Sort by:</span>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium text-gray-700">Sort:</span>
           <Select value={sortBy} onValueChange={setSortBy}>
-            <SelectTrigger className="w-56 h-12 border-2 border-gray-200 hover:border-purple-300 rounded-xl font-medium">
+            <SelectTrigger className="w-40 h-10 border border-gray-300 hover:border-gray-400 rounded-lg text-sm">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent className="rounded-xl z-50">
-              <SelectItem value="highest-rated">
-                <div className="flex items-center gap-2">
-                  <Star className="h-4 w-4 text-yellow-500" />
-                  Highest Rated
-                </div>
-              </SelectItem>
-              <SelectItem value="lowest-price">
-                <div className="flex items-center gap-2">
-                  <DollarSign className="h-4 w-4 text-green-500" />
-                  Lowest Price
-                </div>
-              </SelectItem>
-              <SelectItem value="highest-price">
-                <div className="flex items-center gap-2">
-                  <DollarSign className="h-4 w-4 text-red-500" />
-                  Highest Price
-                </div>
-              </SelectItem>
-              <SelectItem value="most-experienced">
-                <div className="flex items-center gap-2">
-                  <Award className="h-4 w-4 text-purple-500" />
-                  Most Experienced
-                </div>
-              </SelectItem>
-              <SelectItem value="most-sessions">
-                <div className="flex items-center gap-2">
-                  <Users className="h-4 w-4 text-blue-500" />
-                  Most Sessions
-                </div>
-              </SelectItem>
+            <SelectContent className="rounded-lg z-50">
+              <SelectItem value="highest-rated">Highest Rated</SelectItem>
+              <SelectItem value="lowest-price">Lowest Price</SelectItem>
+              <SelectItem value="highest-price">Highest Price</SelectItem>
+              <SelectItem value="most-experienced">Most Experienced</SelectItem>
+              <SelectItem value="most-sessions">Most Sessions</SelectItem>
             </SelectContent>
           </Select>
         </div>
       </div>
 
+
       {/* Active Filters */}
       {hasActiveFilters && (
-        <div className="border-t border-gray-100 pt-6 mt-6">
-          <div className="flex flex-wrap gap-3">
+        <div className="border-t border-gray-200 pt-4 mt-4">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Price Range Filter */}
+            {rateRange[1] < 1000 && (
+              <Badge className="bg-purple-100 text-purple-700 border-purple-200 px-3 py-1 rounded-lg text-xs font-medium">
+                Price: ≤{rateRange[1]} credits (≤₱{(rateRange[1] * 25).toLocaleString()})
+                <X
+                  className="ml-2 h-3 w-3 cursor-pointer hover:text-purple-900 transition-colors"
+                  onClick={() => setRateRange([0, 1000])}
+                />
+              </Badge>
+            )}
+
+            {/* Experience Range Filter */}
+            {experienceRange[1] > 0 && (
+              <Badge className="bg-orange-100 text-orange-700 border-orange-200 px-3 py-1 rounded-lg text-xs font-medium">
+                Experience: {experienceRange[1]}+ years
+                <X
+                  className="ml-2 h-3 w-3 cursor-pointer hover:text-orange-900 transition-colors"
+                  onClick={() => setExperienceRange([0, 0])}
+                />
+              </Badge>
+            )}
+
+            {/* Rating Range Filter */}
+            {ratingRange[1] > 0 && (
+              <Badge className="bg-yellow-100 text-yellow-700 border-yellow-200 px-3 py-1 rounded-lg text-xs font-medium">
+                Rating: {ratingRange[1].toFixed(1)}+ stars
+                <X
+                  className="ml-2 h-3 w-3 cursor-pointer hover:text-yellow-900 transition-colors"
+                  onClick={() => setRatingRange([0, 0])}
+                />
+              </Badge>
+            )}
+
             {selectedCategories.map((categoryId) => {
               const category = categories?.find((c) => c.id.toString() === categoryId)
               return category ? (
                 <Badge
                   key={categoryId}
-                  className="bg-purple-100 text-purple-700 border-purple-200 px-4 py-2 rounded-full text-sm font-medium"
+                  className="bg-blue-100 text-blue-700 border-blue-200 px-3 py-1 rounded-lg text-xs font-medium"
                 >
                   {category.name}
                   <X
-                    className="ml-2 h-4 w-4 cursor-pointer hover:text-purple-900 transition-colors"
+                    className="ml-2 h-3 w-3 cursor-pointer hover:text-blue-900 transition-colors"
                     onClick={() => handleCategoryToggle(categoryId)}
                   />
                 </Badge>
@@ -447,11 +459,11 @@ export function FilterBar({
             {selectedSkills.map((skill) => (
               <Badge
                 key={skill}
-                className="bg-purple-100 text-purple-700 border-purple-200 px-4 py-2 rounded-full text-sm font-medium"
+                className="bg-blue-100 text-blue-700 border-blue-200 px-3 py-1 rounded-lg text-xs font-medium"
               >
                 {skill}
                 <X
-                  className="ml-2 h-4 w-4 cursor-pointer hover:text-purple-900 transition-colors"
+                  className="ml-2 h-3 w-3 cursor-pointer hover:text-blue-900 transition-colors"
                   onClick={() => handleSkillToggle(skill)}
                 />
               </Badge>
@@ -459,11 +471,11 @@ export function FilterBar({
             {selectedLanguages.map((language) => (
               <Badge
                 key={language}
-                className="bg-blue-100 text-blue-700 border-blue-200 px-4 py-2 rounded-full text-sm font-medium"
+                className="bg-green-100 text-green-700 border-green-200 px-3 py-1 rounded-lg text-xs font-medium"
               >
                 {language}
                 <X
-                  className="ml-2 h-4 w-4 cursor-pointer hover:text-blue-900 transition-colors"
+                  className="ml-2 h-3 w-3 cursor-pointer hover:text-green-900 transition-colors"
                   onClick={() => handleLanguageToggle(language)}
                 />
               </Badge>
@@ -471,15 +483,25 @@ export function FilterBar({
             {selectedCountries.map((country) => (
               <Badge
                 key={country}
-                className="bg-green-100 text-green-700 border-green-200 px-4 py-2 rounded-full text-sm font-medium"
+                className="bg-gray-100 text-gray-700 border-gray-200 px-3 py-1 rounded-lg text-xs font-medium"
               >
                 {country}
                 <X
-                  className="ml-2 h-4 w-4 cursor-pointer hover:text-green-900 transition-colors"
+                  className="ml-2 h-3 w-3 cursor-pointer hover:text-gray-900 transition-colors"
                   onClick={() => handleCountryToggle(country)}
                 />
               </Badge>
             ))}
+
+            {/* Clear All Button alongside other filters */}
+            <Button
+              variant="outline"
+              onClick={clearAllFilters}
+              className="px-3 py-1 border border-red-300 text-red-600 hover:bg-red-50 rounded-lg text-xs font-medium transition-colors h-auto"
+            >
+              <X className="mr-1 h-3 w-3" />
+              Clear All
+            </Button>
           </div>
         </div>
       )}

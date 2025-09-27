@@ -194,7 +194,6 @@ export default function FindMentorsPage() {
   const totalPages = Math.ceil((filteredMentors || []).length / MENTORS_PER_PAGE)
   const startIndex = (currentPage - 1) * MENTORS_PER_PAGE
   const paginatedMentors = Array.isArray(filteredMentors) ? filteredMentors.slice(startIndex, startIndex + MENTORS_PER_PAGE) : []
-  const handleLoadMore = () => setCurrentPage((prev) => prev + 1)
 
   // Extract unique values for filters from current mentors
   const allSkills = Array.isArray(mentors) ? Array.from(
@@ -310,7 +309,7 @@ export default function FindMentorsPage() {
           paginatedMentors={paginatedMentors}
           currentPage={currentPage}
           totalPages={totalPages}
-          handleLoadMore={handleLoadMore}
+          setCurrentPage={setCurrentPage}
           clearAllFilters={clearAllFilters}
           MENTORS_PER_PAGE={MENTORS_PER_PAGE}
         />

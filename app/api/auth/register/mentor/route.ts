@@ -9,6 +9,7 @@ import { hash } from "bcryptjs"
 import crypto from "crypto"
 import { NextResponse } from "next/server"
 import { eq } from "drizzle-orm"
+import { isValidPhilippineTimezone } from "@/lib/timeZones"
 
 export async function POST(req: Request) {
   try {
@@ -66,6 +67,21 @@ export async function POST(req: Request) {
     if (!emailRegex.test(email.trim())) {
       return NextResponse.json(
         { error: "Please enter a valid email address." },
+        { status: 400 }
+      )
+    }
+
+    // Validate Philippines-only constraints
+    if (country !== "PH") {
+      return NextResponse.json(
+        { error: "Only Philippines is currently supported." },
+        { status: 400 }
+      )
+    }
+
+    if (!isValidPhilippineTimezone(timezone)) {
+      return NextResponse.json(
+        { error: "Only Philippine Standard Time is supported." },
         { status: 400 }
       )
     }

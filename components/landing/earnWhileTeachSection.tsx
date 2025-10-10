@@ -71,15 +71,6 @@ export function EarnWhileTeachSection() {
               />
               <p className="text-sm text-muted-foreground">1-on-1 Sessions</p>
             </Card>
-
-            <Card className="p-4 col-span-2">
-              <img
-                src="/successful-filipino-freelance-mentor-working-on-la.jpg"
-                alt="Successful Filipino mentor"
-                className="w-full h-40 object-cover object-center rounded mb-3"
-              />
-              <p className="text-sm text-muted-foreground">Grow Your Impact</p>
-            </Card>
           </div>
         </div>
       </div>

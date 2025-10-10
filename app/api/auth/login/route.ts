@@ -9,7 +9,7 @@ import { users, learners, mentors, admins } from "@/db/schema"
 import { compare } from "bcryptjs"
 import { sign } from "jsonwebtoken"
 import { sendBlacklistNotificationEmail, sendSuspensionNotificationEmail } from "@/lib/email/userRestrictionMail"
-
+import { logUserAction, AUDIT_ACTIONS, ENTITY_TYPES, extractRequestInfo } from "@/lib/admin/audit-log"
 
 const withTimeout = <T>(promise: Promise<T>, ms: number): Promise<T> => {
   return Promise.race([
@@ -22,23 +22,18 @@ const withTimeout = <T>(promise: Promise<T>, ms: number): Promise<T> => {
 
 async function handleLogin(req: NextRequest) {
   try {
-    console.log('Login API: Request received')
-    
     // Parse request body with timeout
     const body = await withTimeout(req.json(), 5000)
     const { email, password } = body
 
     // Validate input
     if (!email || !password) {
-      console.log('Login API: Missing email or password')
       return NextResponse.json(
         { message: "Email and password are required" }, 
         { status: 400 }
       )
     }
 
-    console.log('Login API: Querying database for user:', email)
-    
     // Database query with timeout (5 seconds)
     const userQuery = await withTimeout(
       db.select().from(users).where(eq(users.email, email)),
@@ -47,27 +42,54 @@ async function handleLogin(req: NextRequest) {
     
     const [user] = userQuery
 
+    const { ipAddress, userAgent } = extractRequestInfo(req)
+
     if (!user) {
+      // Log failed login attempt
+      await logUserAction({
+        action: AUDIT_ACTIONS.USER_LOGIN_FAILED,
+        entityType: ENTITY_TYPES.USER,
+        description: `Failed login attempt for email: ${email}`,
+        metadata: { email, reason: "invalid_credentials" },
+        ipAddress,
+        userAgent,
+        severity: "warning",
+      })
+
+      // SECURITY: Use generic message to prevent email enumeration
       return NextResponse.json(
-        { message: "Invalid email" },
+        { message: "Invalid credentials" },
         { status: 401 }
       )
     }
-    
+
     // Password comparison with timeout
     const isPasswordValid = await withTimeout(
       compare(password, user.hashedPassword),
       3000
     )
-    
+
     if (!isPasswordValid) {
+      // Log failed login attempt
+      await logUserAction({
+        userId: user.id,
+        action: AUDIT_ACTIONS.USER_LOGIN_FAILED,
+        entityType: ENTITY_TYPES.USER,
+        entityId: user.id,
+        description: `Failed login attempt: Incorrect password for ${user.email}`,
+        metadata: { email: user.email, reason: "invalid_credentials" },
+        ipAddress,
+        userAgent,
+        severity: "warning",
+      })
+
+      // SECURITY: Use generic message to prevent email enumeration
       return NextResponse.json(
-        { message: "Incorrect password" },
+        { message: "Invalid credentials" },
         { status: 401 }
       )
     }
 
-    
     // Check if user is blacklisted
     if (user.blacklistedAt) {
       // Send notification email to user about blacklist with appeal option
@@ -155,7 +177,6 @@ async function handleLogin(req: NextRequest) {
         .where(eq(users.id, user.id))
     }
 
-    
     // Get profile picture URL based on user role
     let profilePictureUrl = null
     
@@ -192,11 +213,9 @@ async function handleLogin(req: NextRequest) {
           break
       }
     } catch (profileError) {
-      console.warn('Login API: Could not fetch profile picture, continuing without it:', profileError)
       // Continue without profile picture if query fails
     }
 
-    
     // JWT signing
     if (!process.env.JWT_SECRET) {
       console.error('Login API: JWT_SECRET not configured')
@@ -210,6 +229,7 @@ async function handleLogin(req: NextRequest) {
       {
         id: user.id,
         role: user.role,
+        email: user.email,
         firstName: user.firstName,
         lastName: user.lastName,
         profilePictureUrl,
@@ -218,20 +238,32 @@ async function handleLogin(req: NextRequest) {
       { expiresIn: "7d" }
     )
 
-    
-    // Set cookie
+    // Set cookie with enhanced security
     const cookieStore = await cookies()
     cookieStore.set("session_token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
+      httpOnly: true, // Prevent JavaScript access (XSS protection)
+      secure: process.env.NODE_ENV === "production", // HTTPS only in production
+      sameSite: "strict", // SECURITY: Strict CSRF protection - cookies only sent to same site
       path: "/",
       maxAge: 60 * 60 * 24 * 7, // 7 days
     })
-    
+
+    // Log successful login
+    await logUserAction({
+      userId: user.id,
+      action: user.role === "admin" ? AUDIT_ACTIONS.ADMIN_LOGIN : AUDIT_ACTIONS.USER_LOGIN,
+      entityType: ENTITY_TYPES.USER,
+      entityId: user.id,
+      description: `${user.role} logged in: ${user.firstName} ${user.lastName} (${user.email})`,
+      metadata: { role: user.role, email: user.email },
+      ipAddress,
+      userAgent,
+      severity: "info",
+    })
+
     // Return success with role (matching frontend expectation)
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       role: user.role,
       message: "Login successful"
     })

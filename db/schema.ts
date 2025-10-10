@@ -6,7 +6,6 @@ const timestamps = {
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 }
 
-// USERS TABLE
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   firstName: varchar("first_name", { length: 100 }).notNull(),
@@ -15,7 +14,6 @@ export const users = pgTable("users", {
   hashedPassword: varchar("hashed_password", { length: 255 }).notNull(),
   role: varchar("role", { length: 20 }).notNull(),
   status: varchar("status", { length: 20 }).default("offline").notNull(),
-  // Payment Provider Fields
   xenditAccountId: varchar("xendit_account_id", { length: 255 }),
   xenditAccountStatus: varchar("xendit_account_status", { length: 50 }).default("none"),
   preferredPaymentProvider: varchar("preferred_payment_provider", { length: 20 }).default("xendit"),
@@ -126,6 +124,129 @@ export const creditPurchases = pgTable("credit_purchases", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 })
 
+// Admin Audit Log for tracking all administrative actions
+export const auditLogs = pgTable("audit_logs", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id), // Can be null for unauthenticated users (for backward compatibility)
+  adminId: integer("admin_id").references(() => users.id), // Admin who performed the action
+  action: varchar("action", { length: 100 }).notNull(), // 'approve_mentor', 'suspend_user', 'delete_session', etc.
+  entityType: varchar("entity_type", { length: 50 }), // 'user', 'mentor', 'session', etc.
+  entityId: integer("entity_id"), // ID of the affected entity
+  details: text("details").notNull(), // Human-readable description (for backward compatibility)
+  description: text("description"), // More detailed description
+  metadata: json("metadata"), // Additional structured data
+  severity: varchar("severity", { length: 20 }).default("info"), // 'info', 'warning', 'critical'
+  ipAddress: varchar("ip_address", { length: 45 }),
+  userAgent: varchar("user_agent", { length: 500 }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  userIdIdx: index("audit_logs_user_id_idx").on(table.userId),
+  adminIdIdx: index("audit_logs_admin_id_idx").on(table.adminId),
+  actionIdx: index("audit_logs_action_idx").on(table.action),
+  entityTypeIdx: index("audit_logs_entity_type_idx").on(table.entityType),
+  severityIdx: index("audit_logs_severity_idx").on(table.severity),
+  createdAtIdx: index("audit_logs_created_at_idx").on(table.createdAt),
+}))
+
+// Support tickets for contact form submissions
+export const supportTickets = pgTable("support_tickets", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id), // Can be null for unauthenticated users
+  name: varchar("name", { length: 100 }).notNull(),
+  email: varchar("email", { length: 255 }).notNull(),
+  category: varchar("category", { length: 50 }).notNull(), // 'general', 'technical', 'billing', etc.
+  subject: varchar("subject", { length: 200 }).notNull(),
+  message: text("message").notNull(),
+  priority: varchar("priority", { length: 20 }).default("medium"), // 'low', 'medium', 'high', 'urgent'
+  status: varchar("status", { length: 20 }).default("open"), // 'open', 'in_progress', 'resolved', 'closed'
+  assignedTo: integer("assigned_to").references(() => users.id), // Admin who handles the ticket
+  adminNotes: text("admin_notes"),
+  resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  closedAt: timestamp("closed_at", { withTimezone: true }),
+  lastResponseAt: timestamp("last_response_at", { withTimezone: true }),
+  responseCount: integer("response_count").default(0),
+  ...timestamps,
+}, (table) => ({
+  statusIdx: index("support_tickets_status_idx").on(table.status),
+  categoryIdx: index("support_tickets_category_idx").on(table.category),
+  priorityIdx: index("support_tickets_priority_idx").on(table.priority),
+  assignedToIdx: index("support_tickets_assigned_to_idx").on(table.assignedTo),
+  createdAtIdx: index("support_tickets_created_at_idx").on(table.createdAt),
+}))
+
+// Support ticket responses for email conversation management
+export const supportTicketResponses = pgTable("support_ticket_responses", {
+  id: serial("id").primaryKey(),
+  ticketId: integer("ticket_id").notNull().references(() => supportTickets.id, { onDelete: "cascade" }),
+  responderId: integer("responder_id").references(() => users.id), // Can be null for external responses
+  responderType: varchar("responder_type", { length: 20 }).notNull(), // 'user', 'admin', 'system'
+  responderName: varchar("responder_name", { length: 100 }).notNull(),
+  responderEmail: varchar("responder_email", { length: 255 }).notNull(),
+  message: text("message").notNull(),
+  isInternal: boolean("is_internal").default(false), // Internal admin notes vs public responses
+  emailMessageId: varchar("email_message_id", { length: 255 }), // For email threading
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  ticketIdIdx: index("support_ticket_responses_ticket_id_idx").on(table.ticketId),
+  responderTypeIdx: index("support_ticket_responses_responder_type_idx").on(table.responderType),
+  createdAtIdx: index("support_ticket_responses_created_at_idx").on(table.createdAt),
+}))
+
+// Reports submitted by users for harassment, inappropriate behavior, etc.
+export const userReports = pgTable("user_reports", {
+  id: serial("id").primaryKey(),
+  reporterId: integer("reporter_id").notNull().references(() => users.id),
+  reportedUserId: integer("reported_user_id").notNull().references(() => users.id),
+  sessionId: integer("session_id").references(() => bookingSessions.id),
+  category: varchar("category", { length: 50 }).notNull(), // 'harassment', 'inappropriate_content', 'fraud', etc.
+  description: text("description").notNull(),
+  evidence: json("evidence"), // Screenshots, chat logs, etc.
+  status: varchar("status", { length: 20 }).default("pending"), // 'pending', 'under_review', 'resolved', 'dismissed'
+  adminNotes: text("admin_notes"),
+  reviewedBy: integer("reviewed_by").references(() => users.id),
+  reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  resolution: text("resolution"),
+  ...timestamps,
+}, (table) => ({
+  reporterIdx: index("user_reports_reporter_idx").on(table.reporterId),
+  reportedUserIdx: index("user_reports_reported_user_idx").on(table.reportedUserId),
+  statusIdx: index("user_reports_status_idx").on(table.status),
+}))
+
+// Platform announcements for users
+export const announcements = pgTable("announcements", {
+  id: serial("id").primaryKey(),
+  title: varchar("title", { length: 200 }).notNull(),
+  content: text("content").notNull(),
+  type: varchar("type", { length: 30 }).default("general"), // 'general', 'maintenance', 'feature', 'warning'
+  priority: varchar("priority", { length: 20 }).default("normal"), // 'low', 'normal', 'high', 'urgent'
+  targetAudience: varchar("target_audience", { length: 50 }).default("all"), // 'all', 'mentors', 'learners', 'admins'
+  isActive: boolean("is_active").default(true),
+  publishAt: timestamp("publish_at", { withTimezone: true }).defaultNow(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  createdBy: integer("created_by").notNull().references(() => users.id),
+  ...timestamps,
+}, (table) => ({
+  isActiveIdx: index("announcements_is_active_idx").on(table.isActive),
+  publishAtIdx: index("announcements_publish_at_idx").on(table.publishAt),
+  targetAudienceIdx: index("announcements_target_audience_idx").on(table.targetAudience),
+}))
+
+// System health metrics for monitoring
+export const systemMetrics = pgTable("system_metrics", {
+  id: serial("id").primaryKey(),
+  metricName: varchar("metric_name", { length: 100 }).notNull(),
+  metricValue: numeric("metric_value", { precision: 15, scale: 4 }).notNull(),
+  metricUnit: varchar("metric_unit", { length: 20 }), // 'ms', 'mb', 'percentage', 'count'
+  category: varchar("category", { length: 50 }).notNull(), // 'performance', 'usage', 'error', 'business'
+  metadata: json("metadata"),
+  recordedAt: timestamp("recorded_at", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  metricNameIdx: index("system_metrics_metric_name_idx").on(table.metricName),
+  categoryIdx: index("system_metrics_category_idx").on(table.category),
+  recordedAtIdx: index("system_metrics_recorded_at_idx").on(table.recordedAt),
+}))
+
 
 export const bookingSessions = pgTable("booking_sessions", {
   id: serial("id").primaryKey(),
@@ -139,7 +260,7 @@ export const bookingSessions = pgTable("booking_sessions", {
   totalCostCredits: integer("total_cost_credits").notNull(),
   escrowCredits: integer("escrow_credits").notNull(),
   sessionNotes: text("session_notes").notNull(),
-  status: varchar("status", { length: 20 }).default("pending"), // pending, confirmed, ongoing, completed, cancelled, both_no_show, learner_no_show, mentor_no_show, rejected
+  status: varchar("status", { length: 20 }).default("pending"), 
   agoraChannelName: varchar("agora_channel_name", { length: 255 }),
   agoraChannelCreatedAt: timestamp("agora_channel_created_at", { withTimezone: true }),
   agoraCallStartedAt: timestamp("agora_call_started_at", { withTimezone: true }),
@@ -357,28 +478,24 @@ export const agoraTokens = pgTable("agora_tokens", {
 
 
 
-// SESSION FEEDBACK TABLE
 export const sessionFeedback = pgTable("session_feedback", {
   id: serial("id").primaryKey(),
   sessionId: integer("session_id").notNull().references(() => bookingSessions.id, { onDelete: "cascade" }),
   reviewerUserId: integer("reviewer_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  reviewerRole: varchar("reviewer_role", { length: 20 }).notNull(), // 'learner' or 'mentor'
+  reviewerRole: varchar("reviewer_role", { length: 20 }).notNull(), 
 
-  // Rating fields (1-5 scale)
   overallRating: integer("overall_rating").notNull(),
   communicationRating: integer("communication_rating"),
   knowledgeRating: integer("knowledge_rating"),
   helpfulnessRating: integer("helpfulness_rating"),
   punctualityRating: integer("punctuality_rating"),
 
-  // Text feedback
   feedbackText: text("feedback_text").notNull(),
   improvementSuggestions: text("improvement_suggestions"),
   mostValuableAspect: text("most_valuable_aspect"),
 
-  // Structured feedback
-  sessionHighlights: text("session_highlights"), // JSON array of selected highlights
-  sessionPace: varchar("session_pace", { length: 20 }), // 'too_slow', 'just_right', 'too_fast'
+  sessionHighlights: text("session_highlights"), 
+  sessionPace: varchar("session_pace", { length: 20 }), 
   wouldRecommend: boolean("would_recommend"),
 
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
@@ -386,7 +503,7 @@ export const sessionFeedback = pgTable("session_feedback", {
   sessionReviewerIdx: index("session_feedback_session_reviewer_idx").on(table.sessionId, table.reviewerRole),
 }))
 
-// CHAT TABLES
+
 export const conversations = pgTable("conversations", {
   id: serial("id").primaryKey(),
   mentorId: integer("mentor_id").notNull().references(() => mentors.id),

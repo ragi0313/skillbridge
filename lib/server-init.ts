@@ -7,28 +7,24 @@ export async function initializeServer() {
     return
   }
 
-  console.log('[SERVER_INIT] Starting server initialization...')
-
   try {
     // Validate environment variables first
-    console.log('[SERVER_INIT] Validating environment configuration...')
     EnvironmentValidator.logEnvironmentStatus()
     const config = EnvironmentValidator.ensureValidEnvironment()
-
-    console.log('[SERVER_INIT] Environment validation completed successfully')
 
     // Start session monitoring service (if available)
     try {
       const { sessionMonitorService } = await import("@/lib/services/SessionMonitorService")
       sessionMonitorService.start()
-      console.log('[SERVER_INIT] Session monitoring service started')
-    } catch (error) {
-      console.warn('[SERVER_INIT] Session monitoring service not available:', error)
-    }
+      } catch (error) {
+      }
+
+    // Email worker will be initialized lazily on first use
+    // to avoid instrumentation hook limitations with BullMQ
+    console.log('[SERVER_INIT] Email worker will initialize on first use')
 
     initialized = true
-    console.log('[SERVER_INIT] Server initialization completed successfully')
-  } catch (error) {
+    } catch (error) {
     console.error('[SERVER_INIT] Error initializing services:', error)
     if (process.env.NODE_ENV === 'production') {
       process.exit(1)
@@ -37,26 +33,32 @@ export async function initializeServer() {
 }
 
 // Cleanup function for graceful shutdown
-export function shutdownServer() {
+export async function shutdownServer() {
   if (!initialized) {
     return
   }
-
-  console.log('[SERVER_INIT] Starting graceful shutdown...')
 
   try {
     // Stop session monitoring service (if available)
     try {
       const { sessionMonitorService } = require("@/lib/services/SessionMonitorService")
       sessionMonitorService.stop()
-      console.log('[SERVER_INIT] Session monitoring service stopped')
+      } catch (error) {
+      }
+
+    // Close email queue and worker
+    try {
+      const { closeEmailQueue } = require("@/lib/email/emailQueue")
+      const { closeEmailTransporter } = require("@/lib/email/transporter")
+      await closeEmailQueue()
+      await closeEmailTransporter()
+      console.log('[SERVER_INIT] Email services closed')
     } catch (error) {
-      console.warn('[SERVER_INIT] Session monitoring service not available for shutdown')
+      console.warn('[SERVER_INIT] Error closing email services:', error)
     }
 
     initialized = false
-    console.log('[SERVER_INIT] Graceful shutdown completed')
-  } catch (error) {
+    } catch (error) {
     console.error('[SERVER_INIT] Error shutting down services:', error)
   }
 }

@@ -102,8 +102,7 @@ export function validateCronAuth(request: NextRequest): {
   } else {
     // In development, just warn if auth is missing
     if (!authHeader || authHeader !== expectedAuth) {
-      console.warn('[CRON_AUTH] Missing or invalid auth in development mode')
-    }
+      }
   }
 
   return { isValid: true }

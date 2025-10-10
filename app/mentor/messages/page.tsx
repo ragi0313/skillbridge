@@ -73,7 +73,7 @@ export default function MentorMessagesPage() {
 
   const getLastMessagePreview = (conversation: any) => {
     // If no last message exists, show start conversation text
-    if (!conversation.lastMessage || !conversation.lastMessage.content) {
+    if (!conversation.lastMessage) {
       return 'Start a conversation...'
     }
 
@@ -99,7 +99,19 @@ export default function MentorMessagesPage() {
       senderName = 'Someone'
     }
 
-    return `${senderName}: ${conversation.lastMessage.content}`
+    // Handle empty content (file/image only messages)
+    let preview = conversation.lastMessage.content
+    if (!preview || preview.trim().length === 0) {
+      if (conversation.lastMessage.messageType === 'image') {
+        preview = '📷 Photo'
+      } else if (conversation.lastMessage.messageType === 'file') {
+        preview = '📎 File'
+      } else {
+        preview = 'New message'
+      }
+    }
+
+    return `${senderName}: ${preview}`
   }
 
   const selectConversation = (conversation: any) => {
@@ -223,15 +235,12 @@ export default function MentorMessagesPage() {
                     key={conversation.id}
                     className={`flex items-center p-4 hover:bg-green-50/50 transition-all duration-200 group cursor-pointer ${selectedConversation?.id === conversation.id ? 'bg-gradient-to-r from-green-100 to-blue-100 border-r-4 border-green-500 shadow-sm' : ''}`}
                   >
-                    <div className="relative">
-                      <Avatar className="w-12 h-12 ring-2 ring-green-200/50 transition-all duration-200 group-hover:ring-green-300">
-                        <AvatarImage src={learner.profilePictureUrl || undefined} />
-                        <AvatarFallback className="bg-gradient-to-br from-green-500 to-blue-600 text-white font-semibold">
-                          {learner.firstName[0]}{learner.lastName[0]}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-2 border-white rounded-full shadow-sm"></div>
-                    </div>
+                    <Avatar className="w-12 h-12 ring-2 ring-green-200/50 transition-all duration-200 group-hover:ring-green-300">
+                      <AvatarImage src={learner.profilePictureUrl || undefined} />
+                      <AvatarFallback className="bg-gradient-to-br from-green-500 to-blue-600 text-white font-semibold">
+                        {learner.firstName[0]}{learner.lastName[0]}
+                      </AvatarFallback>
+                    </Avatar>
 
                     <div className="ml-3 flex-1 min-w-0 cursor-pointer" onClick={() => selectConversation(conversation)}>
                       <div className="flex items-center justify-between">

@@ -39,21 +39,18 @@ class Logger {
 
   debug(message: string, context?: any) {
     if (this.isDevelopment) {
-      console.log(`[DEBUG] ${message}`, context || '')
-    }
+      }
   }
 
   info(message: string, context?: any) {
     const entry = this.formatMessage('info', message, context)
     if (this.isDevelopment) {
-      console.log(`[INFO] ${message}`, context || '')
-    }
+      }
     this.persistLog(entry)
   }
 
   warn(message: string, context?: any) {
     const entry = this.formatMessage('warn', message, context)
-    console.warn(`[WARN] ${message}`, context || '')
     this.persistLog(entry)
   }
 

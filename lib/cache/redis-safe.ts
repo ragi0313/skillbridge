@@ -78,7 +78,6 @@ class ServerRedisStore implements SafeCacheStore {
       const redisUrl = process.env.REDIS_URL || process.env.KV_URL
 
       if (!redisUrl) {
-        console.log('[REDIS] No Redis URL provided, using memory store')
         return
       }
 
@@ -92,17 +91,13 @@ class ServerRedisStore implements SafeCacheStore {
       })
 
       this.client.on('error', (err: any) => {
-        console.warn('[REDIS] Connection error, falling back to memory:', err.message)
         this.client = null
       })
 
       this.client.on('connect', () => {
-        console.log('[REDIS] Connected successfully')
-      })
+        })
 
-      console.log('[REDIS] Initialized with lazy connection')
-    } catch (error) {
-      console.warn('[REDIS] Failed to initialize, using memory store:', error)
+      } catch (error) {
       this.client = null
     }
   }
@@ -115,7 +110,6 @@ class ServerRedisStore implements SafeCacheStore {
     try {
       return await this.client.get(key)
     } catch (error) {
-      console.warn('[REDIS] Get error, using memory fallback:', error)
       return this.memoryFallback.get(key)
     }
   }
@@ -132,7 +126,6 @@ class ServerRedisStore implements SafeCacheStore {
         await this.client.set(key, value)
       }
     } catch (error) {
-      console.warn('[REDIS] Set error, using memory fallback:', error)
       return this.memoryFallback.set(key, value, expiryMs)
     }
   }
@@ -145,7 +138,6 @@ class ServerRedisStore implements SafeCacheStore {
     try {
       return await this.client.incr(key)
     } catch (error) {
-      console.warn('[REDIS] Incr error, using memory fallback:', error)
       return this.memoryFallback.incr(key)
     }
   }
@@ -158,7 +150,6 @@ class ServerRedisStore implements SafeCacheStore {
     try {
       await this.client.expire(key, Math.ceil(expiryMs / 1000))
     } catch (error) {
-      console.warn('[REDIS] Expire error, using memory fallback:', error)
       return this.memoryFallback.expire(key, expiryMs)
     }
   }
@@ -171,7 +162,6 @@ class ServerRedisStore implements SafeCacheStore {
     try {
       await this.client.del(key)
     } catch (error) {
-      console.warn('[REDIS] Del error, using memory fallback:', error)
       return this.memoryFallback.del(key)
     }
   }
@@ -185,7 +175,6 @@ class ServerRedisStore implements SafeCacheStore {
       const result = await this.client.exists(key)
       return result === 1
     } catch (error) {
-      console.warn('[REDIS] Exists error, using memory fallback:', error)
       return this.memoryFallback.exists(key)
     }
   }
@@ -214,6 +203,35 @@ export function getSafeCache(): SafeCacheStore {
     cacheInstance = createSafeCacheStore()
   }
   return cacheInstance
+}
+
+// Get Redis connection for BullMQ (returns null if Redis is not available)
+export function getRedisConnection(): any {
+  if (!isNodeRuntime) {
+    return null
+  }
+
+  try {
+    const Redis = eval('require')('ioredis')
+    const redisUrl = process.env.REDIS_URL || process.env.KV_URL
+
+    if (!redisUrl) {
+      console.warn('[REDIS] No Redis URL configured, queue features disabled')
+      return null
+    }
+
+    return new Redis(redisUrl, {
+      maxRetriesPerRequest: 3,
+      enableReadyCheck: false,
+      lazyConnect: false,
+      connectTimeout: 10000,
+      commandTimeout: 5000,
+      retryDelayOnFailover: 100,
+    })
+  } catch (error) {
+    console.error('[REDIS] Failed to create Redis connection:', error)
+    return null
+  }
 }
 
 // Cleanup memory store periodically (only in development)

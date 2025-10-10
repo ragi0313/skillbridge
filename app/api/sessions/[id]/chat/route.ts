@@ -21,8 +21,7 @@ function scheduleSessionCleanup(sessionId: string) {
   sessionCleanupIntervals[sessionId] = setTimeout(() => {
     delete sessionMessages[sessionId]
     delete sessionCleanupIntervals[sessionId]
-    console.log(`[SESSION_CHAT] Cleaned up messages for session ${sessionId}`)
-  }, 2 * 60 * 60 * 1000) // 2 hours
+    }, 2 * 60 * 60 * 1000) // 2 hours
 }
 
 async function handleGetChatMessages(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -146,8 +145,6 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     // Broadcast via Pusher for real-time delivery
     const channelName = `session-chat-${sessionId}`
-    console.log(`[SESSION_CHAT] Broadcasting message to channel: ${channelName}`)
-
     const pusherMessage = {
       ...newMessage,
       // Include file data in real-time broadcast but not in storage
@@ -157,10 +154,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     const success = await triggerPusherEvent(channelName, 'session-message', pusherMessage)
 
     if (!success) {
-      console.warn('[SESSION_CHAT] Failed to broadcast message via Pusher, but message was stored')
-    }
-
-    console.log(`[SESSION_CHAT] Message processed successfully for session ${sessionId}`)
+      }
 
     return NextResponse.json({
       message: newMessage,

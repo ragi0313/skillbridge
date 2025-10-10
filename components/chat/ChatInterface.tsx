@@ -117,8 +117,8 @@ export function ChatInterface({ user, conversation, onBack, className }: ChatInt
 
       // Subscribe to new conversation
       unsubscribeRef.current = subscribeToConversation(conversation.id, (message: ChatMessage) => {
-        // The real-time message will be handled by the ChatContext
-        // and the useChatHook will automatically update messages
+        // Add incoming message to the chat UI
+        addMessage(message)
       })
 
       // Fetch messages for current conversation
@@ -180,13 +180,14 @@ export function ChatInterface({ user, conversation, onBack, className }: ChatInt
           const formData = new FormData()
           formData.append('file', attachment.file)
 
-          const response = await fetch('/api/picture/upload', {
+          const response = await fetch('/api/files/upload', {
             method: 'POST',
             body: formData,
           })
 
           if (!response.ok) {
-            throw new Error('Failed to upload file')
+            const errorData = await response.json().catch(() => ({}))
+            throw new Error(errorData.error || 'Failed to upload file')
           }
 
           const data = await response.json()
@@ -201,7 +202,7 @@ export function ChatInterface({ user, conversation, onBack, className }: ChatInt
         }
       } catch (error) {
         console.error('Error uploading files:', error)
-        toast.error('Failed to upload files')
+        toast.error(error instanceof Error ? error.message : 'Failed to upload files')
         setUploading(false)
         return
       } finally {
@@ -212,7 +213,9 @@ export function ChatInterface({ user, conversation, onBack, className }: ChatInt
     const messageType = uploadedAttachments.length > 0 ?
       (uploadedAttachments[0].mimeType.startsWith('image/') ? 'image' : 'file') : 'text'
 
-    const content = messageInput.trim() || (uploadedAttachments.length > 0 ? `Sent ${uploadedAttachments.length} file(s)` : '')
+    // Use the message input if provided, otherwise empty string
+    // The UI will display the attachments visually
+    const content = messageInput.trim()
 
     await sendMessage(content, messageType, uploadedAttachments)
     setMessageInput('')
@@ -414,46 +417,57 @@ export function ChatInterface({ user, conversation, onBack, className }: ChatInt
                         : 'bg-gray-100 text-gray-900'
                     }`}
                   >
-                    <p className="text-sm break-words">{message.content}</p>
-
                     {/* Display attachments */}
                     {message.attachments && message.attachments.length > 0 && (
-                      <div className="mt-2 space-y-2">
+                      <div className={message.content ? 'mb-2' : ''}>
                         {message.attachments.map((attachment, idx) => (
-                          <div key={idx} className="border rounded p-2 bg-white/10">
-                            <div className="flex items-center space-x-2">
-                              {attachment.mimeType.startsWith('image/') ? (
-                                <div className="flex-shrink-0">
-                                  <img
-                                    src={attachment.fileUrl}
-                                    alt={attachment.originalFilename}
-                                    className="max-w-48 max-h-48 rounded object-cover"
-                                  />
-                                </div>
-                              ) : (
-                                <FileText className="w-4 h-4 flex-shrink-0" />
-                              )}
-                              <div className="flex-1 min-w-0">
-                                <p className="text-xs font-medium truncate">
-                                  {attachment.originalFilename}
-                                </p>
-                                <p className="text-xs opacity-75">
-                                  {(attachment.fileSize / 1024 / 1024).toFixed(1)} MB
-                                </p>
-                              </div>
+                          <div key={idx}>
+                            {attachment.mimeType.startsWith('image/') ? (
                               <a
                                 href={attachment.fileUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-xs underline"
+                                className="block"
                               >
-                                View
+                                <img
+                                  src={attachment.fileUrl}
+                                  alt={attachment.originalFilename}
+                                  className="max-w-full rounded cursor-pointer hover:opacity-90 transition-opacity"
+                                  style={{ maxHeight: '300px' }}
+                                />
                               </a>
-                            </div>
+                            ) : (
+                              <div className="border rounded p-2 bg-white/10 mb-1">
+                                <div className="flex items-center space-x-2">
+                                  <FileText className="w-4 h-4 flex-shrink-0" />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-medium truncate">
+                                      {attachment.originalFilename}
+                                    </p>
+                                    <p className="text-xs opacity-75">
+                                      {(attachment.fileSize / 1024 / 1024).toFixed(1)} MB
+                                    </p>
+                                  </div>
+                                  <a
+                                    href={attachment.fileUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs underline flex-shrink-0"
+                                  >
+                                    Download
+                                  </a>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>
                     )}
+
+                    {message.content && (
+                      <p className="text-sm break-words">{message.content}</p>
+                    )}
+
                     <div className="flex items-center justify-between mt-1">
                       <p className={`text-xs ${
                         isOwnMessage ? 'text-blue-100' : 'text-gray-500'

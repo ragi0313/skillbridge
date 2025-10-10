@@ -116,7 +116,7 @@ export default function ActivatePage() {
 
                 <div>
                   <h1 className="text-4xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent mb-4">
-                    Welcome to SkillBridge!
+                    Welcome to BridgeMentor!
                   </h1>
                   <p className="text-gray-600 text-xl mb-2">🎉 Your email has been verified successfully</p>
                   <p className="text-gray-500 text-lg">Your account is now active and ready to use</p>

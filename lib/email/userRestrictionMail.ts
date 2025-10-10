@@ -18,8 +18,8 @@ export async function sendBlacklistNotificationEmail(
   reason: string
 ) {
   const transporter = await createTransporter()
-  const adminEmail = process.env.ADMIN_EMAIL || 'admin@skillbridge.com'
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://skillbridge.com'
+  const adminEmail = process.env.ADMIN_EMAIL || 'admin@bridgementor.com'
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://bridgementor.com'
 
   const htmlContent = `
     <!DOCTYPE html>
@@ -53,7 +53,7 @@ export async function sendBlacklistNotificationEmail(
                 <h2>Hello ${firstName},</h2>
                 
                 <div class="alert-box">
-                    <p><strong>Your SkillBridge account has been permanently restricted.</strong></p>
+                    <p><strong>Your BridgeMentor account has been permanently restricted.</strong></p>
                     <p><strong>Reason:</strong> ${reason}</p>
                 </div>
                 
@@ -63,7 +63,7 @@ export async function sendBlacklistNotificationEmail(
                     <h3>🔄 Appeal This Decision</h3>
                     <p>If you believe this restriction was made in error, you can submit an appeal for review by our support team.</p>
                     
-                    <a href="mailto:${adminEmail}?subject=Account%20Restriction%20Appeal%20-%20${encodeURIComponent(userEmail)}&body=Dear%20SkillBridge%20Support%2C%0A%0AI%20am%20writing%20to%20appeal%20the%20restriction%20placed%20on%20my%20account%20(${encodeURIComponent(userEmail)}).%0A%0AReason%20for%20restriction%3A%20${encodeURIComponent(reason)}%0A%0AMy%20appeal%20explanation%3A%0A[Please%20explain%20why%20you%20believe%20this%20restriction%20was%20made%20in%20error]%0A%0AThank%20you%20for%20your%20consideration.%0A%0ABest%20regards%2C%0A${encodeURIComponent(firstName)}" 
+                    <a href="mailto:${adminEmail}?subject=Account%20Restriction%20Appeal%20-%20${encodeURIComponent(userEmail)}&body=Dear%20BridgeMentor%20Support%2C%0A%0AI%20am%20writing%20to%20appeal%20the%20restriction%20placed%20on%20my%20account%20(${encodeURIComponent(userEmail)}).%0A%0AReason%20for%20restriction%3A%20${encodeURIComponent(reason)}%0A%0AMy%20appeal%20explanation%3A%0A[Please%20explain%20why%20you%20believe%20this%20restriction%20was%20made%20in%20error]%0A%0AThank%20you%20for%20your%20consideration.%0A%0ABest%20regards%2C%0A${encodeURIComponent(firstName)}" 
                        class="appeal-button">
                         📧 Submit Appeal
                     </a>
@@ -83,7 +83,7 @@ export async function sendBlacklistNotificationEmail(
             </div>
             
             <div class="footer">
-                <p><strong>SkillBridge Support Team</strong></p>
+                <p><strong>BridgeMentor Support Team</strong></p>
                 <p>This is an automated notification. For questions, contact us at <a href="mailto:${adminEmail}">${adminEmail}</a></p>
             </div>
         </div>
@@ -96,7 +96,7 @@ Account Restriction Notice
 
 Hello ${firstName},
 
-Your SkillBridge account has been permanently restricted.
+Your BridgeMentor account has been permanently restricted.
 Reason: ${reason}
 
 This action was taken to maintain the safety and integrity of our platform community.
@@ -114,13 +114,13 @@ Please include:
 Our team will review appeals within 3-5 business days.
 
 Best regards,
-SkillBridge Support Team
+BridgeMentor Support Team
 
 Contact us: ${adminEmail}
   `
 
   await transporter.sendMail({
-    from: `"SkillBridge Support" <${process.env.SMTP_USER}>`,
+    from: `"BridgeMentor Support" <${process.env.SMTP_USER}>`,
     to: userEmail,
     subject: '🚨 Account Restriction Notice - Action Required',
     text: textContent,
@@ -135,7 +135,7 @@ export async function sendSuspensionNotificationEmail(
   suspensionEndsAt: Date
 ) {
   const transporter = await createTransporter()
-  const adminEmail = process.env.ADMIN_EMAIL || 'admin@skillbridge.com'
+  const adminEmail = process.env.ADMIN_EMAIL || 'admin@bridgementor.com'
   
   const endDate = suspensionEndsAt.toLocaleDateString("en-US", {
     weekday: 'long',
@@ -179,7 +179,7 @@ export async function sendSuspensionNotificationEmail(
                 <h2>Hello ${firstName},</h2>
                 
                 <div class="alert-box">
-                    <p><strong>Your SkillBridge account has been temporarily suspended.</strong></p>
+                    <p><strong>Your BridgeMentor account has been temporarily suspended.</strong></p>
                     <p><strong>Reason:</strong> ${reason}</p>
                 </div>
                 
@@ -193,7 +193,7 @@ export async function sendSuspensionNotificationEmail(
                     <h3>🔄 Appeal This Suspension</h3>
                     <p>If you believe this suspension was made in error, you can submit an appeal for immediate review.</p>
                     
-                    <a href="mailto:${adminEmail}?subject=Account%20Suspension%20Appeal%20-%20${encodeURIComponent(userEmail)}&body=Dear%20SkillBridge%20Support%2C%0A%0AI%20am%20writing%20to%20appeal%20the%20suspension%20placed%20on%20my%20account%20(${encodeURIComponent(userEmail)}).%0A%0AReason%20for%20suspension%3A%20${encodeURIComponent(reason)}%0ASuspension%20ends%3A%20${encodeURIComponent(endDate)}%0A%0AMy%20appeal%20explanation%3A%0A[Please%20explain%20why%20you%20believe%20this%20suspension%20was%20made%20in%20error]%0A%0AThank%20you%20for%20your%20consideration.%0A%0ABest%20regards%2C%0A${encodeURIComponent(firstName)}" 
+                    <a href="mailto:${adminEmail}?subject=Account%20Suspension%20Appeal%20-%20${encodeURIComponent(userEmail)}&body=Dear%20BridgeMentor%20Support%2C%0A%0AI%20am%20writing%20to%20appeal%20the%20suspension%20placed%20on%20my%20account%20(${encodeURIComponent(userEmail)}).%0A%0AReason%20for%20suspension%3A%20${encodeURIComponent(reason)}%0ASuspension%20ends%3A%20${encodeURIComponent(endDate)}%0A%0AMy%20appeal%20explanation%3A%0A[Please%20explain%20why%20you%20believe%20this%20suspension%20was%20made%20in%20error]%0A%0AThank%20you%20for%20your%20consideration.%0A%0ABest%20regards%2C%0A${encodeURIComponent(firstName)}" 
                        class="appeal-button">
                         📧 Submit Appeal
                     </a>
@@ -213,7 +213,7 @@ export async function sendSuspensionNotificationEmail(
             </div>
             
             <div class="footer">
-                <p><strong>SkillBridge Support Team</strong></p>
+                <p><strong>BridgeMentor Support Team</strong></p>
                 <p>This is an automated notification. For questions, contact us at <a href="mailto:${adminEmail}">${adminEmail}</a></p>
             </div>
         </div>
@@ -226,7 +226,7 @@ Account Suspension Notice
 
 Hello ${firstName},
 
-Your SkillBridge account has been temporarily suspended.
+Your BridgeMentor account has been temporarily suspended.
 Reason: ${reason}
 Suspension ends: ${endDate}
 
@@ -245,13 +245,13 @@ What happens next:
 Please review our Community Guidelines to avoid future issues.
 
 Best regards,
-SkillBridge Support Team
+BridgeMentor Support Team
 
 Contact us: ${adminEmail}
   `
 
   await transporter.sendMail({
-    from: `"SkillBridge Support" <${process.env.SMTP_USER}>`,
+    from: `"BridgeMentor Support" <${process.env.SMTP_USER}>`,
     to: userEmail,
     subject: '⏸️ Account Suspension Notice - Appeal Available',
     text: textContent,

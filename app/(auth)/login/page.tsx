@@ -151,7 +151,7 @@ const Login = () => {
           <div className="mb-8 mt-10 lg:mt-0">
             <h1 className="font-extrabold mb-4 text-4xl">Welcome</h1>
             <p className="text-gray-600 text-lg">
-              Sign in to your SkillBridge account
+              Sign in to your BridgeMentor account
             </p>
           </div>
 

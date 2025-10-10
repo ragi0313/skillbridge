@@ -107,8 +107,6 @@ class SessionCompletionService {
       const { finalStatus, shouldProcessPayment, shouldRefundLearner, refundReason } = 
         this.determineCompletionOutcome(reason, learnerDuration, mentorDuration)
 
-      console.log(`[SESSION_COMPLETION] Session ${sessionId}: finalStatus=${finalStatus}, payment=${shouldProcessPayment}, refund=${shouldRefundLearner}`)
-
       // Update session status and metadata
       const updateData = {
         status: finalStatus,
@@ -134,8 +132,6 @@ class SessionCompletionService {
         platformFeePhp = platformFeeCredits * this.CREDITS_TO_PHP_RATE
 
         // PLATFORM FEE COLLECTION: Transfer platform fee to Xendit account
-        console.log(`[PLATFORM_FEE] Creating Xendit payout for ₱${platformFeePhp} platform fee from session ${sessionId}`)
-        
         try {
           // Create a payout to transfer platform fee to your business account
           const platformFeePayout = await Payout.createPayout({
@@ -144,7 +140,7 @@ class SessionCompletionService {
               referenceId: `platform_fee_${sessionId}_${Date.now()}`,
               channelCode: `PH_${process.env.XENDIT_PLATFORM_BANK_CODE || 'BPI'}`,
               channelProperties: {
-                accountHolderName: process.env.XENDIT_PLATFORM_ACCOUNT_NAME || 'SkillBridge Inc',
+                accountHolderName: process.env.XENDIT_PLATFORM_ACCOUNT_NAME || 'BridgeMentor Inc',
                 accountNumber: process.env.XENDIT_PLATFORM_ACCOUNT_NUMBER!,
               },
               description: `Platform fee - Session ${sessionId} (${platformFeeCredits} credits)`,
@@ -160,8 +156,6 @@ class SessionCompletionService {
               }
             }
           })
-          
-          console.log(`[PLATFORM_FEE] Platform fee payout created: ${platformFeePayout.id} for ₱${platformFeePhp}`)
           
           // Record the Xendit payout ID for reference
           platformFeeChargeId = platformFeePayout.id
@@ -230,7 +224,6 @@ class SessionCompletionService {
             completionReason: reason
           },
         })
-
 
         notificationData.push({
           userId: sessionRecord.mentor_user_id,

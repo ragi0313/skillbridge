@@ -1,14 +1,6 @@
-import nodemailer from "nodemailer";
-
-export const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST!,
-  port: parseInt(process.env.SMTP_PORT || "587"),
-  secure: parseInt(process.env.SMTP_PORT || "587") === 465,
-  auth: {
-    user: process.env.SMTP_USER!,
-    pass: process.env.SMTP_PASS!,
-  },
-})
+import { sendEmailQueued, sendEmailDirect } from "./emailQueue"
+import { DEFAULT_SENDER } from "./transporter"
+import { logger } from "@/lib/monitoring/logger"
 
 export async function sendVerificationEmail({
   to,
@@ -18,22 +10,21 @@ export async function sendVerificationEmail({
   to: string
   token: string
   id: string | number
-}) {
+}): Promise<{ success: boolean; error?: any }> {
   const verifyUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/register/learner/activate/${id}/${token}`
 
-  await transporter.sendMail({
-    from: '"SkillBridge" <no-reply@skillbridge.com>',
+  const emailData = {
     to,
-    subject: "Verify your SkillBridge account",
+    subject: "Verify your BridgeMentor account",
     html: `
         <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-            <h1 style="color: #333;">Activate Your SkillBridge Account</h1>
+            <h1 style="color: #333;">Activate Your BridgeMentor Account</h1>
             <p>Hi there,</p>
             <p>Click the button below to activate your account:</p>
             <table role="presentation" cellspacing="0" cellpadding="0">
             <tr>
                 <td align="center" bgcolor="#3B82F6" style="border-radius: 8px;">
-                <a 
+                <a
                     href="${verifyUrl}"
                     target="_blank"
                     style="
@@ -55,9 +46,33 @@ export async function sendVerificationEmail({
             <p style="margin-top: 24px;">This link will expire in <strong>24 hours</strong>.</p>
             <p>If you did not sign up, you can safely ignore this email.</p>
             <br />
-            <p>– The SkillBridge Team</p>
+            <p>– The BridgeMentor Team</p>
         </div>
-    `
+    `,
+    from: DEFAULT_SENDER,
+  }
 
-  })
+  try {
+    // Use queue for better reliability and performance
+    await sendEmailQueued(emailData)
+    logger.info("Verification email queued", { to, userId: id })
+    return { success: true }
+  } catch (queueError) {
+    // Fallback to direct send if queue fails
+    logger.warn("Email queue failed, falling back to direct send", { error: queueError })
+    try {
+      const result = await sendEmailDirect(emailData)
+      if (result.success) {
+        logger.info("Verification email sent directly", { to, userId: id })
+        return { success: true }
+      } else {
+        logger.error("Direct email send failed", { error: result.error, to, userId: id })
+        return { success: false, error: result.error }
+      }
+    } catch (directError) {
+      logger.error("Email sending completely failed", { error: directError, to, userId: id })
+      // Don't throw - allow registration to continue
+      return { success: false, error: directError }
+    }
+  }
 }

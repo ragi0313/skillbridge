@@ -150,8 +150,6 @@ export async function POST(
       .set(updateData)
       .where(eq(bookingSessions.id, sessionId))
 
-    console.log(`[SESSION_FEEDBACK] Feedback submitted by ${userRole} for session ${sessionId}`)
-
     return NextResponse.json({
       success: true,
       message: 'Feedback submitted successfully'

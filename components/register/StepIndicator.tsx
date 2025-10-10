@@ -22,7 +22,7 @@ export default function StepIndicator({
   totalSteps: number
   isMentor?: boolean
 }) {
-  const progress = (currentStep / totalSteps) * 100
+  const progress = ((currentStep - 1) / totalSteps) * 100
   const stepData = isMentor ? mentorStepInfo : stepInfo
   const [title, subtitle] = stepData[currentStep - 1] || ["Step", ""]
 

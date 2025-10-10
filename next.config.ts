@@ -13,52 +13,35 @@ const nextConfig: NextConfig = {
   experimental: {
     optimizePackageImports: ['agora-rtc-sdk-ng']
   },
-  turbopack: {
-    resolveAlias: {
-      // Prevent server-only modules from being bundled in client
-      'dns': './lib/utils/client-fallback.js',
-      'net': './lib/utils/client-fallback.js',
-      'tls': './lib/utils/client-fallback.js',
-      'fs': './lib/utils/client-fallback.js',
-      'stream': './lib/utils/client-fallback.js',
-      'crypto': './lib/utils/client-fallback.js',
-      'child_process': './lib/utils/client-fallback.js',
-      'cluster': './lib/utils/client-fallback.js',
-      'ioredis': './lib/utils/client-fallback.js',
-    },
-  },
-  serverExternalPackages: ['jsonwebtoken', 'ioredis'],
-  webpack: (config, { isServer, dev }) => {
-    // Completely prevent ioredis and related modules from being bundled in client
-    if (!isServer) {
-      config.resolve.fallback = {
-        ...config.resolve.fallback,
-        dns: false,
-        net: false,
-        tls: false,
-        fs: false,
-        stream: false,
-        crypto: false,
-        child_process: false,
-        cluster: false,
+  serverExternalPackages: ['jsonwebtoken', 'ioredis', 'bullmq'],
+
+  // Security: Configure request body size limits
+  async headers() {
+    return [
+      {
+        source: '/api/:path*',
+        headers: [
+          {
+            key: 'X-Content-Type-Options',
+            value: 'nosniff'
+          },
+          {
+            key: 'X-Frame-Options',
+            value: 'DENY'
+          },
+          {
+            key: 'X-XSS-Protection',
+            value: '1; mode=block'
+          }
+        ]
       }
-
-      // Completely exclude ioredis from client bundles
-      config.externals = config.externals || []
-      config.externals.push({
-        ioredis: 'commonjs ioredis',
-      })
-    }
-
-    // Add module rules to ignore ioredis in client builds
-    config.module.rules.push({
-      test: /node_modules\/ioredis/,
-      use: 'null-loader',
-      include: isServer ? undefined : /.*/
-    })
-
-    return config
+    ]
   },
+
+  // Set body size limits for API routes (handled by middleware)
+  serverRuntimeConfig: {
+    maxRequestBodySize: '50mb' // Maximum for file uploads
+  }
 };
 
 export default nextConfig;

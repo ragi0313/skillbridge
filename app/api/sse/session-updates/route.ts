@@ -1,7 +1,6 @@
 import { NextRequest } from "next/server"
 import { getSession } from "@/lib/auth/getSession"
 
-// Store active SSE connections
 const connections = new Map<string, ReadableStreamDefaultController>()
 
 export async function GET(request: NextRequest) {
@@ -12,21 +11,16 @@ export async function GET(request: NextRequest) {
 
   const userId = session.id.toString()
 
-  // Create SSE stream
+
   const stream = new ReadableStream({
     start(controller) {
-      // Store connection for this user
       connections.set(userId, controller)
-
-      // Send initial connection message
       const message = `data: ${JSON.stringify({
         type: 'connected',
         timestamp: new Date().toISOString()
       })}\n\n`
       
       controller.enqueue(new TextEncoder().encode(message))
-
-      // Set up heartbeat to keep connection alive
       const heartbeatInterval = setInterval(() => {
         try {
           const heartbeat = `data: ${JSON.stringify({
@@ -111,8 +105,7 @@ export async function broadcastSessionUpdate(
     }
   }
 
-  console.log(`[SSE] Broadcasted ${updateType} for session ${sessionId} to ${targetUserIds ? targetUserIds.length : connections.size} users`)
-}
+  }
 
 // Export function to force disconnect users
 export async function broadcastForceDisconnect(
@@ -158,5 +151,4 @@ export async function broadcastBookingUpdate(
     }
   }
 
-  console.log(`[SSE] Broadcasted booking ${updateType} for booking ${bookingId} to ${targetUserIds ? targetUserIds.length : 0} users`)
-}
+  }

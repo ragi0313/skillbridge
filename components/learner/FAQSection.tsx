@@ -3,12 +3,12 @@ import Link from "next/link";
 
 const faqs = [
   {
-    question: "What is SkillBridge?",
+    question: "What is BridgeMentor?",
     answer:
-      "SkillBridge is a platform that connects students and early professionals with experienced freelancers and industry mentors for 1-on-1 mentorship sessions. It's designed to help you gain real-world skills, insights, and career guidance.",
+      "BridgeMentor is a platform that connects students and early professionals with experienced freelancers and industry mentors for 1-on-1 mentorship sessions. It's designed to help you gain real-world skills, insights, and career guidance.",
   },
   {
-    question: "Who are the mentors on SkillBridge?",
+    question: "Who are the mentors on BridgeMentor?",
     answer:
       "Our mentors are verified freelancers and professionals from diverse industries. They have practical experience and are passionate about helping others grow.",
   },
@@ -23,14 +23,14 @@ const faqs = [
       "You can ask for help with specific projects, career advice, code reviews, freelancing tips, or learning paths. Just make sure to clearly communicate your goals before the session.",
   },
   {
-    question: "How do credits work on SkillBridge?",
+    question: "How do credits work on BridgeMentor?",
     answer:
-      "You purchase credits to book mentorship sessions. Each mentor sets their rate per session in credits. SkillBridge deducts 20% as a platform fee.",
+      "You purchase credits to book mentorship sessions. Each mentor sets their rate per session in credits. BridgeMentor deducts 20% as a platform fee.",
   },
   {
     question: "Can I get a refund for unused credits?",
     answer:
-      "Yes, SkillBridge will offer refunds for unused credits upon request. However, a small processing fee will be charged to cover transaction and administrative costs. Please review our Refund Policy for full details or contact support for assistance.",
+      "Yes, BridgeMentor will offer refunds for unused credits upon request. However, a small processing fee will be charged to cover transaction and administrative costs. Please review our Refund Policy for full details or contact support for assistance.",
   },
   {
     question: "Can I become a mentor someday?",
@@ -38,7 +38,7 @@ const faqs = [
       "Absolutely. Once you've gained enough experience, you can apply to become a mentor and start giving back to others in the community.",
   },
   {
-    question: "Is SkillBridge free to use?",
+    question: "Is BridgeMentor free to use?",
     answer:
       "Creating a learner account is free. However, mentorship sessions require credits, which you can purchase as needed.",
   },
@@ -56,7 +56,7 @@ export default function FAQSection() {
           {/* Section Header */}
           <div className="text-center mb-12">
             <h2 className="text-3xl font-bold text-gray-900 mb-4">Frequently Asked Questions</h2>
-            <p className="text-gray-600 text-lg">Everything you need to know about SkillBridge and how it works</p>
+            <p className="text-gray-600 text-lg">Everything you need to know about BridgeMentor and how it works</p>
           </div>
 
           {/* FAQ Accordion */}
@@ -77,7 +77,7 @@ export default function FAQSection() {
           <div className="text-center mt-8">
             <p className="text-gray-600">
               Still have questions?{" "}
-              <Link href="/support" className="text-blue-600 hover:text-blue-700 font-medium hover:underline">
+              <Link href="/contact" className="text-blue-600 hover:text-blue-700 font-medium hover:underline">
                 Contact our support team
               </Link>
             </p>

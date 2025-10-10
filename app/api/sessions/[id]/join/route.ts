@@ -106,7 +106,7 @@ export async function POST(
       // Prepare update data
       const updateData: any = {}
 
-      console.log(`[SESSION_JOIN] User ${userId} accessing session ${sessionId} (going to waiting room)`)
+      `)
       
       // Check for no-show scenarios: session is 15+ minutes past start time and still in confirmed/upcoming status
       const fifteenMinutesAfterStart = new Date(sessionStart.getTime() + 15 * 60 * 1000)
@@ -138,8 +138,6 @@ export async function POST(
           updateData.noShowCheckedAt = now
           updateData.agoraCallEndedAt = now
           
-          console.log(`[SESSION_JOIN] Detected ${noShowType} for session ${sessionId} - 15+ minutes past start time`)
-          
           // Handle refunds/payouts based on no-show type
           if (noShowType === 'both_no_show' || noShowType === 'mentor_no_show') {
             // Refund learner 100%
@@ -167,7 +165,7 @@ export async function POST(
                 metadata: { noShowType, detectedAt: 'join_api' },
               })
 
-              console.log(`[SESSION_JOIN] Refunded ${sessionRecord.escrowCredits} credits to learner for ${noShowType}`)
+              console.log('[SESSION_JOIN] Refunded', sessionRecord.escrowCredits, 'credits to learner')
             }
           } else if (noShowType === 'learner_no_show') {
             // Pay mentor 100% as compensation
@@ -203,8 +201,7 @@ export async function POST(
                 metadata: { noShowType, detectedAt: 'join_api' },
               })
 
-              console.log(`[SESSION_JOIN] Compensated mentor ${sessionRecord.totalCostCredits} credits for learner no-show`)
-            }
+              }
           }
 
           // Send notifications
@@ -281,19 +278,15 @@ export async function POST(
         if (now >= sessionStart) {
           // Session time has started - mark as upcoming (ready for video entry)
           updateData.status = 'upcoming'
-          console.log(`[SESSION_JOIN] Session time reached, setting to 'upcoming' for session ${sessionId}`)
-        } else if (sessionRecord.status === 'pending') {
+          } else if (sessionRecord.status === 'pending') {
           // First user accessing a pending session before start time
           updateData.status = 'confirmed'
-          console.log(`[SESSION_JOIN] First user accessing pending session, status 'confirmed' for session ${sessionId}`)
-        } else if (sessionRecord.status === null) {
+          } else if (sessionRecord.status === null) {
           // Handle null status case
           updateData.status = now >= sessionStart ? 'upcoming' : 'confirmed'
-          console.log(`[SESSION_JOIN] Null status session, setting to '${updateData.status}' for session ${sessionId}`)
-        }
+          }
       } else if (!shouldCheckNoShow) {
-        console.log(`[SESSION_JOIN] Session ${sessionId} in terminal/ongoing state: ${sessionRecord.status}, no status change`)
-      }
+        }
 
       // Only update if we have changes
       if (Object.keys(updateData).length > 0) {
@@ -302,10 +295,8 @@ export async function POST(
           .set(updateData)
           .where(eq(bookingSessions.id, sessionId))
         
-        console.log(`[SESSION_JOIN] Updated session ${sessionId} with:`, updateData)
-      } else {
-        console.log(`[SESSION_JOIN] No updates needed for session ${sessionId}`)
-      }
+        } else {
+        }
     })
 
     // Check if session was marked as no-show during this API call
@@ -333,8 +324,6 @@ export async function POST(
     }
 
     const responseMessage = 'Successfully accessed session - ready to enter waiting room'
-
-    console.log(`[SESSION_JOIN] ${responseMessage} for user ${userId} in session ${sessionId}`)
 
     return NextResponse.json({ 
       success: true,

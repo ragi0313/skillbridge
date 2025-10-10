@@ -44,7 +44,7 @@ export default function MentorProfessionalDetails({ formData, setFormData, nextS
       formData.professionalTitle &&
       formData.bio &&
       formData.bio.length >= 100 &&
-      formData.bio.length <= 1000 &&
+      formData.bio.length <= 500 &&
       formData.yearsOfExperience &&
       formData.linkedinUrl
 
@@ -136,7 +136,7 @@ export default function MentorProfessionalDetails({ formData, setFormData, nextS
       <Card>
         <CardContent className="px-6 space-y-4">
           <Label htmlFor="bio" className="text-base font-semibold text-gray-700">
-            About Me*
+            About Me* (at least 100 characters)
           </Label>
           <Textarea
             id="bio"
@@ -146,13 +146,13 @@ export default function MentorProfessionalDetails({ formData, setFormData, nextS
             rows={6}
             className="resize-none text-base h-40"
             minLength={100}
-            maxLength={1000}
+            maxLength={500}
             required
           />
           <div className="flex justify-between items-center">
             <p className="text-sm text-gray-500">This will be visible on your mentor profile</p>
-            <span className={`text-sm ${formData.bio?.length >= 100 && formData.bio?.length <= 1000 ? "text-green-600" : "text-gray-400"}`}>
-              {formData.bio?.length || 0}/1000 characters
+            <span className={`text-sm ${formData.bio?.length >= 100 && formData.bio?.length <= 500 ? "text-green-600" : "text-gray-400"}`}>
+              {formData.bio?.length || 0}/500 characters
             </span>
           </div>
         </CardContent>

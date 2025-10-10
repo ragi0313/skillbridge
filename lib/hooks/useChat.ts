@@ -126,7 +126,8 @@ export const useChat = ({ conversationId, userId, onNewMessage, onError }: UseCh
       storagePath?: string
     }>
   ) => {
-    if (!conversationId || !content.trim()) return
+    // Allow empty content if there are attachments
+    if (!conversationId || (!content.trim() && (!attachments || attachments.length === 0))) return
 
     setSending(true)
 

@@ -29,8 +29,6 @@ export async function POST(
     const reason = validReasons.includes(body.reason) ? body.reason : 'user_action'
     const isPageRefresh = Boolean(body.isPageRefresh)
 
-    console.log(`[LEAVE_API] User ${session.id} leaving session ${sessionId}, reason: ${reason}, isPageRefresh: ${isPageRefresh}`)
-
     const leaveResult = { 
       wasInSession: false, 
       connectionDurationSeconds: 0, 
@@ -78,8 +76,6 @@ export async function POST(
       
       // For page refresh/navigation events, only update lastActiveAt, don't set leave timestamp
       if (isPageRefresh || reason === 'page_refresh' || reason === 'navigation' || reason === 'beforeunload') {
-        console.log(`[LEAVE_API] ${reason} detected for session ${sessionId} - updating lastActiveAt only`)
-        
         await tx
           .update(bookingSessions)
           .set(lastActiveUpdate)
@@ -91,7 +87,6 @@ export async function POST(
 
       // Check if session is already in terminal state
       if (sessionData.status !== null && ['completed', 'cancelled', 'both_no_show', 'mentor_no_show', 'learner_no_show', 'technical_issues'].includes(sessionData.status)) {
-        console.log(`[LEAVE_API] Session ${sessionId} is already in terminal state: ${sessionData.status}`)
         return
       }
       const updateData: any = {}
@@ -106,7 +101,6 @@ export async function POST(
       // Check if user was never in session
       if (!userJoinedAt) {
         leaveResult.wasInSession = false
-        console.log(`[LEAVE_API] User was never in session ${sessionId}`)
         return // No update needed
       }
 
@@ -116,7 +110,6 @@ export async function POST(
         leaveResult.wasInSession = true
         // Calculate previous connection duration for response
         leaveResult.connectionDurationSeconds = Math.floor((userLeftAt.getTime() - userJoinedAt.getTime()) / 1000)
-        console.log(`[LEAVE_API] User had already left session ${sessionId}`)
         return // No update needed
       }
 
@@ -154,8 +147,6 @@ export async function POST(
       // CRITICAL FIX: Don't auto-complete sessions when users leave
       // Let the SessionMonitorService handle completion based on more sophisticated logic
       // Only set left timestamp, don't change session status
-      console.log(`[LEAVE_API] User ${userId} leaving session ${sessionId}, connection duration: ${leaveResult.connectionDurationSeconds}s, bothUsersLeft: ${leaveResult.bothUsersNowLeft}`)
-
       // Apply updates
       if (Object.keys(updateData).length > 0) {
         await tx

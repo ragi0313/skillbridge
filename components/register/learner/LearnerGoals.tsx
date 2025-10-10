@@ -86,12 +86,16 @@ export default function LearnerGoals({ formData, setFormData, prevStep }: any) {
           />
           <Label htmlFor="terms" className="text-sm leading-relaxed text-gray-600">
             I agree to the{" "}
-            <a href="/terms" className="text-blue-600 hover:text-blue-700 hover:underline font-semibold">
+            <a href="/terms-of-service" className="text-blue-600 hover:text-blue-700 hover:underline font-semibold">
               Terms of Service
-            </a>{" "}
-            and{" "}
-            <a href="/privacy" className="text-blue-600 hover:text-blue-700 hover:underline font-semibold">
+            </a>
+            {", "}
+            <a href="/privacy-policy" className="text-blue-600 hover:text-blue-700 hover:underline font-semibold">
               Privacy Policy
+            </a>
+            {", and "}
+            <a href="/code-of-conduct" className="text-blue-600 hover:text-blue-700 hover:underline font-semibold">
+              Code of Conduct
             </a>
           </Label>
         </div>

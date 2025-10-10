@@ -4,6 +4,7 @@ import { db } from '@/db'
 import { bookingSessions } from '@/db/schema'
 import { eq, and, or, lt, isNull, sql } from 'drizzle-orm'
 import { validateCronAuth, cronRateLimiter, createCronResponse } from '@/lib/middleware/rate-limit-cron'
+import { getSession } from '@/lib/auth/getSession'
 
 export async function GET(request: NextRequest) {
   // Validate authentication and rate limiting
@@ -23,8 +24,6 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    console.log('[SESSION_CLEANUP] Starting automated session cleanup job...')
-    
     // Get current stats before processing
     const beforeStats = sessionMonitorService.getStatus().stats
     
@@ -41,8 +40,6 @@ export async function GET(request: NextRequest) {
       completedSessions: afterStats.sessionsCompleted - beforeStats.sessionsCompleted,
       totalProcessed: afterStats.sessionsProcessed - beforeStats.sessionsProcessed
     }
-
-    console.log(`[SESSION_CLEANUP] Cleanup completed:`, processed)
 
     const rateLimit = cronRateLimiter.isRateLimited(request)
     return createCronResponse({
@@ -62,11 +59,16 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  // Allow manual trigger with basic authentication
+  // SECURITY: Require admin authentication for manual triggers
+  const session = await getSession()
+  if (!session || session.role !== 'admin') {
+    return NextResponse.json({
+      error: 'Unauthorized - Admin access required for manual session cleanup'
+    }, { status: 401 })
+  }
+
   try {
     const { action, force = false } = await request.json()
-    
-    console.log(`[SESSION_CLEANUP] Manual cleanup triggered with action: ${action || 'all'}`)
     
     const results: any = {}
     
@@ -114,8 +116,7 @@ async function runCompleteSessionCleanup(): Promise<void> {
     await monitor['detectNoShows']?.()
     await monitor['completeFinishedSessions']?.()
     
-    console.log('[SESSION_CLEANUP] All monitoring processes completed')
-  } catch (error) {
+    } catch (error) {
     console.error('[SESSION_CLEANUP] Error running monitoring processes:', error)
     throw error
   }

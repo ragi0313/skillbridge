@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { learners, creditPurchases, creditTransactions } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
 import crypto from "crypto";
+import { logUserAction, AUDIT_ACTIONS, ENTITY_TYPES } from "@/lib/admin/audit-log";
 
 const xendit = new Xendit({ 
   secretKey: process.env.XENDIT_SECRET_KEY! 
@@ -19,36 +20,46 @@ export async function POST(req: Request) {
   const body = await req.text();
   const headerStore = await headers();
   const signature = headerStore.get("x-callback-token");
-  
-  console.log("[XENDIT_WEBHOOK] Received webhook with headers:", {
-    signature: signature ? "present" : "missing",
-    contentType: headerStore.get("content-type"),
-  });
-  
+
   if (!signature) {
-    console.error("Missing webhook signature");
+    console.error("[SECURITY] Missing webhook signature - potential unauthorized webhook attempt");
     return new NextResponse("Webhook Error", { status: 400 });
   }
 
-  // Verify webhook signature (skip verification in test mode for debugging)
-  const isTestMode = process.env.XENDIT_SECRET_KEY?.includes('xnd_development');
-  if (!isTestMode && !verifyXenditWebhook(body, signature, process.env.XENDIT_WEBHOOK_TOKEN!)) {
-    console.error("Webhook signature verification failed");
+  // SECURITY: Always verify webhook signature - NEVER skip verification
+  if (!process.env.XENDIT_WEBHOOK_TOKEN) {
+    console.error("[SECURITY CRITICAL] XENDIT_WEBHOOK_TOKEN not configured - cannot verify webhooks");
+    return new NextResponse("Server configuration error", { status: 500 });
+  }
+
+  const isValidSignature = verifyXenditWebhook(body, signature, process.env.XENDIT_WEBHOOK_TOKEN);
+
+  if (!isValidSignature) {
+    console.error("[SECURITY] Webhook signature verification failed - potential webhook forgery attempt", {
+      signatureProvided: signature.substring(0, 10) + '...',
+      timestamp: new Date().toISOString()
+    });
+
+    // Log security event
+    await logUserAction({
+      action: 'WEBHOOK_VERIFICATION_FAILED',
+      entityType: ENTITY_TYPES.SYSTEM as any,
+      description: 'Xendit webhook signature verification failed - possible attack',
+      metadata: {
+        signature: signature.substring(0, 20),
+        bodyLength: body.length,
+        timestamp: new Date().toISOString()
+      },
+      severity: "critical",
+    }).catch(err => console.error('Failed to log webhook verification failure:', err));
+
     return new NextResponse("Unauthorized", { status: 401 });
   }
 
   let event;
   try {
     event = JSON.parse(body);
-    console.log("[XENDIT_WEBHOOK] Parsed event:", {
-      event: event.event,
-      invoiceId: event.data?.id,
-      amount: event.data?.amount,
-      currency: event.data?.currency,
-      status: event.data?.status,
-      metadata: event.data?.metadata
-    });
-  } catch (err) {
+    } catch (err) {
     console.error("Invalid JSON payload:", err);
     return new NextResponse("Invalid JSON", { status: 400 });
   }
@@ -62,7 +73,6 @@ export async function POST(req: Request) {
 
     if (!learnerId || !credits) {
       console.error("Missing metadata in invoice:", metadata);
-      console.log("Full webhook event:", JSON.stringify(event, null, 2));
       return NextResponse.json({ received: true });
     }
 
@@ -132,7 +142,24 @@ export async function POST(req: Request) {
           },
         });
 
-        console.log(`[XENDIT_CREDIT_PURCHASE] User ${learnerId}: ${credits} credits purchased for ₱${totalAmountPhp} (Platform: ₱${platformFeePhp}, Mentors: ₱${mentorAvailablePhp})`);
+        // Log the credit purchase
+        await logUserAction({
+          userId: parseInt(learnerId),
+          action: AUDIT_ACTIONS.CREDITS_PURCHASE,
+          entityType: ENTITY_TYPES.CREDITS,
+          description: `User ${learnerId} purchased ${credits} credits for ${totalAmountPhp} ${invoice.currency || 'PHP'}`,
+          metadata: {
+            credits,
+            amountPhp: totalAmountPhp,
+            currency: invoice.currency || 'PHP',
+            invoiceId: invoice.id,
+            paymentId: invoice.paymentId || invoice.payment_id,
+            externalId: invoice.externalId || invoice.external_id,
+          },
+          severity: "info",
+        })
+
+        `);
       });
     } catch (error) {
       console.error("Failed to process Xendit credit purchase:", error);
@@ -157,8 +184,7 @@ export async function POST(req: Request) {
           })
           .where(eq(creditPurchases.externalId, invoice.externalId || invoice.external_id));
 
-        console.log(`[XENDIT_INVOICE_EXPIRED] Invoice ${invoice.id} expired for user ${learnerId}`);
-      } catch (error) {
+        } catch (error) {
         console.error("Failed to handle expired invoice:", error);
       }
     }
@@ -181,8 +207,7 @@ export async function POST(req: Request) {
           })
           .where(eq(creditPurchases.externalId, invoice.externalId || invoice.external_id));
 
-        console.log(`[XENDIT_PAYMENT_FAILED] Payment failed for invoice ${invoice.id}, user ${learnerId}`);
-      } catch (error) {
+        } catch (error) {
         console.error("Failed to handle payment failure:", error);
       }
     }

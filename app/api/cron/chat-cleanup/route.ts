@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { conversationCleanupService } from '@/lib/services/ConversationCleanupService'
 import { getEnvConfig } from '@/lib/config/env-validation'
+
+// NOTE: ConversationCleanupService is temporarily disabled due to errors
+// TODO: Fix ConversationCleanupService.ts and re-enable this endpoint
 
 export async function POST(request: NextRequest) {
   try {
@@ -10,31 +12,15 @@ export async function POST(request: NextRequest) {
     const providedSecret = authHeader?.replace('Bearer ', '')
 
     if (!providedSecret || providedSecret !== config.CRON_SECRET) {
-      console.warn('[CHAT_CLEANUP_CRON] Unauthorized access attempt')
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    console.log('[CHAT_CLEANUP_CRON] Starting scheduled chat cleanup...')
-
-    // Get current stats before cleanup
-    const statsBefore = await conversationCleanupService.getCleanupStats()
-    console.log('[CHAT_CLEANUP_CRON] Stats before cleanup:', statsBefore)
-
-    // Run cleanup
-    const results = await conversationCleanupService.runCleanup()
-
-    // Get stats after cleanup
-    const statsAfter = await conversationCleanupService.getCleanupStats()
-    console.log('[CHAT_CLEANUP_CRON] Stats after cleanup:', statsAfter)
-
-    // Return results
+    // Temporarily disabled - ConversationCleanupService needs fixing
     return NextResponse.json({
-      success: true,
+      success: false,
+      error: 'Chat cleanup service temporarily disabled',
       timestamp: new Date().toISOString(),
-      results,
-      statsBefore,
-      statsAfter,
-    })
+    }, { status: 503 })
 
   } catch (error) {
     console.error('[CHAT_CLEANUP_CRON] Cleanup failed:', error)
@@ -59,13 +45,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const stats = await conversationCleanupService.getCleanupStats()
-
+    // Temporarily disabled - ConversationCleanupService needs fixing
     return NextResponse.json({
-      success: true,
+      success: false,
+      error: 'Chat cleanup service temporarily disabled',
       timestamp: new Date().toISOString(),
-      stats,
-    })
+    }, { status: 503 })
 
   } catch (error) {
     console.error('[CHAT_CLEANUP_CRON] Failed to get stats:', error)

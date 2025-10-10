@@ -4,7 +4,7 @@ import { and, eq, or } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { toZonedTime } from "date-fns-tz";
 import { withRateLimit } from "@/lib/middleware/rate-limit";
-
+import { logUserAction, AUDIT_ACTIONS, ENTITY_TYPES, extractRequestInfo } from "@/lib/admin/audit-log";
 
 const timeToMinutes = (timeStr: string): number => {
   if (!timeStr || typeof timeStr !== "string") return 0;
@@ -33,8 +33,6 @@ const timeRangesOverlap = (
 async function handleBooking(req: NextRequest) {
   try {
     const body = await req.json();
-    console.log("Booking request body:", body);
-
     const {
       learnerUserId,
       mentorUserId,
@@ -241,6 +239,28 @@ async function handleBooking(req: NextRequest) {
 
       return booking[0];
     });
+
+    // Log booking creation
+    const { ipAddress, userAgent } = extractRequestInfo(req)
+    await logUserAction({
+      userId: learnerUserId,
+      action: AUDIT_ACTIONS.BOOKING_CREATE,
+      entityType: ENTITY_TYPES.BOOKING,
+      entityId: result.id,
+      description: `Learner ${learnerUserId} created booking ${result.id} with mentor ${mentorUserId}`,
+      metadata: {
+        bookingId: result.id,
+        learnerId: learnerUserId,
+        mentorId: mentorUserId,
+        mentorSkillId,
+        scheduledDate,
+        durationMinutes,
+        totalCostCredits: result.totalCostCredits,
+      },
+      ipAddress,
+      userAgent,
+      severity: "info",
+    })
 
     return NextResponse.json({
       message: "Session booked successfully! Pending mentor approval.",

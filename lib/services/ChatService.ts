@@ -2,13 +2,14 @@ import { db } from '@/db/index'
 import {
   conversations,
   messages,
+  messageAttachments,
   messageUserDeletions,
   conversationUserDeletions,
   mentors,
   learners,
   users
 } from '@/db/schema'
-import { eq, and, desc, notExists, gt } from 'drizzle-orm'
+import { eq, and, desc, notExists, gt, inArray } from 'drizzle-orm'
 import { triggerPusherEvent, getConversationChannel, PUSHER_EVENTS } from '@/lib/pusher/config'
 import { validateChatMessage } from '@/lib/validation/messageValidation'
 import { Metrics } from '@/lib/monitoring/metrics'
@@ -339,6 +340,23 @@ export class ChatService {
       .limit(limit)
       .offset(page * limit)
 
+    // Fetch attachments for all messages in one query
+    const messageIds = result.map(row => row.messages.id)
+    const attachmentsData = messageIds.length > 0
+      ? await db.select()
+          .from(messageAttachments)
+          .where(inArray(messageAttachments.messageId, messageIds))
+      : []
+
+    // Group attachments by message ID
+    const attachmentsByMessageId: Record<number, typeof attachmentsData> = {}
+    for (const att of attachmentsData) {
+      if (!attachmentsByMessageId[att.messageId]) {
+        attachmentsByMessageId[att.messageId] = []
+      }
+      attachmentsByMessageId[att.messageId].push(att)
+    }
+
     return result.map(row => ({
       id: row.messages.id,
       conversationId: row.messages.conversationId,
@@ -353,6 +371,13 @@ export class ChatService {
         lastName: row.users.lastName,
         profilePictureUrl: null,
       },
+      attachments: attachmentsByMessageId[row.messages.id]?.map(att => ({
+        id: att.id,
+        originalFilename: att.originalFilename,
+        fileUrl: att.fileUrl,
+        fileSize: att.fileSize,
+        mimeType: att.mimeType,
+      })),
     }))
   }
 
@@ -384,8 +409,7 @@ export class ChatService {
 
     // Log warnings if any
     if (validation.warnings.length > 0) {
-      console.warn('[CHAT_SERVICE] Message validation warnings:', validation.warnings)
-    }
+      }
 
     // Use sanitized content if available
     const sanitizedContent = validation.sanitizedContent || content
@@ -393,8 +417,7 @@ export class ChatService {
     // Log metrics for spam detection
     if (validation.isSpam) {
       Metrics.increment('chat.spam.detected', 1, { conversationId: conversationId.toString() })
-      console.warn(`[CHAT_SERVICE] Potential spam detected in conversation ${conversationId}`)
-    }
+      }
 
     // Log risk level metrics
     Metrics.increment('chat.message.risk_level', 1, {
@@ -411,6 +434,23 @@ export class ChatService {
         messageType,
       })
       .returning()
+
+    const messageId = (newMessage as any)[0]?.id
+
+    // Insert attachments if provided
+    if (_attachments && _attachments.length > 0 && messageId) {
+      await db.insert(messageAttachments).values(
+        _attachments.map(att => ({
+          messageId,
+          originalFilename: att.originalFilename,
+          systemFilename: att.systemFilename,
+          fileUrl: att.fileUrl,
+          fileSize: att.fileSize,
+          mimeType: att.mimeType,
+          storagePath: att.storagePath || null,
+        }))
+      )
+    }
 
     // Track message metrics
     Metrics.messagesSent(conversationId, messageType)
@@ -445,8 +485,13 @@ export class ChatService {
     const messageWithSender = await db.select()
       .from(messages)
       .innerJoin(users, eq(messages.senderId, users.id))
-      .where(eq(messages.id, (newMessage as any)[0]?.id!))
+      .where(eq(messages.id, messageId))
       .limit(1)
+
+    // Get attachments for this message
+    const attachmentsData = await db.select()
+      .from(messageAttachments)
+      .where(eq(messageAttachments.messageId, messageId))
 
     const msg = messageWithSender[0] as any
     const chatMessage: ChatMessage = {
@@ -463,6 +508,13 @@ export class ChatService {
         lastName: msg.users.lastName,
         profilePictureUrl: null,
       },
+      attachments: attachmentsData.length > 0 ? attachmentsData.map(att => ({
+        id: att.id,
+        originalFilename: att.originalFilename,
+        fileUrl: att.fileUrl,
+        fileSize: att.fileSize,
+        mimeType: att.mimeType,
+      })) : undefined,
     }
 
     // Trigger real-time event
@@ -501,6 +553,17 @@ export class ChatService {
     } else {
       throw new Error('User is not a participant in this conversation')
     }
+
+    // Broadcast read event to update UI for all participants
+    await triggerPusherEvent(
+      getConversationChannel(conversationId),
+      PUSHER_EVENTS.CONVERSATION_READ,
+      {
+        conversationId,
+        userId,
+        readAt: now.toISOString()
+      }
+    )
   }
 
   static async deleteMessageForUser(messageId: number, userId: number): Promise<void> {

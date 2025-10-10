@@ -22,8 +22,6 @@ export async function POST(
 
     // Broadcast force disconnect to participants
     // Note: We would need user IDs to broadcast, this is handled in the service
-    console.log(`Force disconnect result:`, result)
-
     return NextResponse.json({
       success: true,
       message: "Session force disconnected successfully",

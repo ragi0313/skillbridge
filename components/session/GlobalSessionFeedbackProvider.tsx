@@ -15,12 +15,10 @@ export function GlobalSessionFeedbackProvider({ children }: GlobalSessionFeedbac
   } = useSessionCompletion()
 
   const handleFeedbackSubmitted = () => {
-    console.log('[FEEDBACK] Feedback submitted successfully')
     hideFeedbackModal()
   }
 
   const handleSkipFeedback = () => {
-    console.log('[FEEDBACK] Feedback skipped by user')
     hideFeedbackModal()
   }
 

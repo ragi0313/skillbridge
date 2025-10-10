@@ -32,19 +32,30 @@ export default function LearnerBasicInfo({ formData, setFormData, nextStep }: Pr
   const { emailAvailable, isChecking } = useEmailAvailability(formData.email || "")
   const { showPassword, showConfirmPassword, togglePassword, toggleConfirmPassword } = usePasswordVisibility()
   
-  const countryOptions = countries.map((country) => ({
-    value: country.cca2,
-    label: country.name.common,
-  })).sort((a, b) => a.label.localeCompare(b.label))
+  // Philippines-only platform, so limit country options to Philippines
+  const countryOptions = countries
+    .filter((country) => country.cca2 === "PH") // Only Philippines
+    .map((country) => ({
+      value: country.cca2,
+      label: country.name.common,
+    }))
 
   useEffect(() => {
-    if (!formData.timezone) {
-      const defaultTz = getDefaultTimezone()
-      if (defaultTz) {
-        setFormData({ ...formData, timezone: defaultTz })
-      }
+    // Auto-set Philippines as default country and timezone since platform is Philippines-only
+    const updates: any = {}
+
+    if (!formData.country) {
+      updates.country = "PH" // Philippines
     }
-  }, [formData.timezone, setFormData])
+
+    if (!formData.timezone) {
+      updates.timezone = getDefaultTimezone() // Asia/Manila
+    }
+
+    if (Object.keys(updates).length > 0) {
+      setFormData({ ...formData, ...updates })
+    }
+  }, [formData.country, formData.timezone, setFormData])
 
   const validateName = (name: string = "") => {
     const trimmedName = name.trim()
@@ -110,7 +121,12 @@ export default function LearnerBasicInfo({ formData, setFormData, nextStep }: Pr
           <Input
             id="firstName"
             value={formData.firstName || ""}
-            onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+            onChange={(e) => {
+              const value = e.target.value
+              // Only allow letters, spaces, hyphens, and apostrophes
+              const filteredValue = value.replace(/[^a-zA-ZÀ-ÿ\u0100-\u017F\u0180-\u024F\u1E00-\u1EFF\s'-]/g, '')
+              setFormData({ ...formData, firstName: filteredValue })
+            }}
             placeholder="Enter your first name"
             className={`h-14 ${
               formData.firstName && !firstNameValid ? "border-red-500 focus:border-red-500" : ""
@@ -130,7 +146,12 @@ export default function LearnerBasicInfo({ formData, setFormData, nextStep }: Pr
           <Input
             id="lastName"
             value={formData.lastName || ""}
-            onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+            onChange={(e) => {
+              const value = e.target.value
+              // Only allow letters, hyphens, and apostrophes (no spaces for last name)
+              const filteredValue = value.replace(/[^a-zA-ZÀ-ÿ\u0100-\u017F\u0180-\u024F\u1E00-\u1EFF'-]/g, '')
+              setFormData({ ...formData, lastName: filteredValue })
+            }}
             placeholder="Enter your last name"
             className={`h-14 ${
               formData.lastName && !lastNameValid ? "border-red-500 focus:border-red-500" : ""
@@ -150,6 +171,9 @@ export default function LearnerBasicInfo({ formData, setFormData, nextStep }: Pr
       {/* Email */}
       <div>
         <Label htmlFor="email" className="mb-2">Email Address*</Label>
+        <p className="text-sm text-gray-500 mb-2">
+          ⚠️ Please use a valid email address. You'll need to verify it to activate your account.
+        </p>
         <div className="relative">
           <Input
             id="email"

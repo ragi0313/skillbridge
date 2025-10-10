@@ -1,22 +1,13 @@
-import nodemailer from "nodemailer"
-
-export const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST!,
-  port: parseInt(process.env.SMTP_PORT || "587"),
-  secure: parseInt(process.env.SMTP_PORT || "587") === 465,
-  auth: {
-    user: process.env.SMTP_USER!,
-    pass: process.env.SMTP_PASS!,
-  },
-})
+import { sendEmailQueued, sendEmailDirect } from "./emailQueue"
+import { DEFAULT_SENDER } from "./transporter"
+import { logger } from "@/lib/monitoring/logger"
 
 export async function sendPasswordResetEmail(email: string, firstName: string, resetCode: string) {
-  try {
-    const mailOptions = {
-      from: process.env.SMTP_FROM,
-      to: email,
-      subject: "Skillbridge - Password Reset Code",
-      html: `
+  const emailData = {
+    to: email,
+    from: DEFAULT_SENDER,
+    subject: "Skillbridge - Password Reset Code",
+    html: `
         <!DOCTYPE html>
         <html lang="en">
         <head>
@@ -121,12 +112,25 @@ export async function sendPasswordResetEmail(email: string, firstName: string, r
         </body>
         </html>
       `,
-    }
+  }
 
-    await transporter.sendMail(mailOptions)
+  try {
+    await sendEmailQueued(emailData)
+    logger.info("Password reset email queued", { to: email })
     return { success: true }
-  } catch (error) {
-    console.error("Error sending password reset email:", error)
-    return { success: false, error }
+  } catch (queueError) {
+    logger.warn("Email queue failed, falling back to direct send", { error: queueError })
+    try {
+      const result = await sendEmailDirect(emailData)
+      if (result.success) {
+        logger.info("Password reset email sent directly", { to: email })
+      } else {
+        logger.error("Direct email send failed", { error: result.error, to: email })
+      }
+      return result
+    } catch (directError) {
+      logger.error("Email sending completely failed", { error: directError, to: email })
+      return { success: false, error: directError }
+    }
   }
 }

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { X, MessageCircle, Send, Paperclip, Smile, MoreHorizontal, Trash2, Copy } from 'lucide-react'
+import { X, MessageCircle, Send, Paperclip, Smile, MoreHorizontal, Trash2, Copy, FileText, Image as ImageIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -41,6 +41,13 @@ interface ChatMessage {
     lastName: string
     profilePictureUrl?: string
   }
+  attachments?: Array<{
+    id: number
+    originalFilename: string
+    fileUrl: string
+    fileSize: number
+    mimeType: string
+  }>
 }
 
 interface ConversationWithParticipants {
@@ -75,6 +82,13 @@ export function MiniChatBar({ user, className }: MiniChatBarProps) {
   const [messageInput, setMessageInput] = useState('')
   const [isMinimized, setIsMinimized] = useState(false)
   const [contextMenuMessageId, setContextMenuMessageId] = useState<number | null>(null)
+  const [attachments, setAttachments] = useState<Array<{
+    file: File
+    url: string
+    type: 'image' | 'file'
+  }>>([])
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Error recovery for mini chat
   const { onError } = useMiniChatErrorRecovery()
@@ -158,8 +172,8 @@ export function MiniChatBar({ user, className }: MiniChatBarProps) {
 
       // Subscribe to new conversation
       unsubscribeRef.current = subscribeToConversation(currentConversation.id, (message: ChatMessage) => {
-        // The real-time message will be handled by the ChatContext
-        // and the useChatHook will automatically update messages
+        // Add incoming message to the chat UI
+        addMessage(message)
       })
 
       // Fetch messages for current conversation
@@ -204,8 +218,7 @@ export function MiniChatBar({ user, className }: MiniChatBarProps) {
           const unsubscribe = subscribeToConversation(conversationId, (message: ChatMessage) => {
             // This will trigger the ChatContext to update the conversations list
             // The MiniChatBar will automatically re-render with new message info
-            console.log(`[MINICHAT] New message in conversation ${conversationId}`)
-          })
+            })
 
           conversationSubscriptions.current.set(conversationId, unsubscribe)
         }
@@ -230,6 +243,15 @@ export function MiniChatBar({ user, className }: MiniChatBarProps) {
     }
   }, [isOpen, currentConversation, conversations, subscribeToConversation])
 
+  // Cleanup attachment URLs on unmount
+  useEffect(() => {
+    return () => {
+      attachments.forEach(attachment => {
+        URL.revokeObjectURL(attachment.url)
+      })
+    }
+  }, [attachments])
+
   // Cleanup subscriptions on unmount
   useEffect(() => {
     return () => {
@@ -243,11 +265,99 @@ export function MiniChatBar({ user, className }: MiniChatBarProps) {
 
   // Handle message send
   const handleSendMessage = async () => {
-    if (!messageInput.trim() || !currentConversation || !user) return
+    if ((!messageInput.trim() && attachments.length === 0) || !currentConversation || !user || uploading) return
 
-    await sendMessage(messageInput.trim())
+    let uploadedAttachments: Array<{
+      originalFilename: string
+      systemFilename: string
+      fileUrl: string
+      fileSize: number
+      mimeType: string
+      storagePath?: string
+    }> = []
+
+    // Upload attachments first
+    if (attachments.length > 0) {
+      setUploading(true)
+      try {
+        for (const attachment of attachments) {
+          const formData = new FormData()
+          formData.append('file', attachment.file)
+
+          const response = await fetch('/api/files/upload', {
+            method: 'POST',
+            body: formData,
+          })
+
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}))
+            throw new Error(errorData.error || 'Failed to upload file')
+          }
+
+          const data = await response.json()
+          uploadedAttachments.push({
+            originalFilename: attachment.file.name,
+            systemFilename: data.filename || attachment.file.name,
+            fileUrl: data.url,
+            fileSize: attachment.file.size,
+            mimeType: attachment.file.type,
+            storagePath: data.path,
+          })
+        }
+      } catch (error) {
+        console.error('Error uploading files:', error)
+        toast.error(error instanceof Error ? error.message : 'Failed to upload files')
+        setUploading(false)
+        return
+      } finally {
+        setUploading(false)
+      }
+    }
+
+    const messageType = uploadedAttachments.length > 0 ?
+      (uploadedAttachments[0].mimeType.startsWith('image/') ? 'image' : 'file') : 'text'
+
+    // Use the message input if provided, otherwise empty string
+    // The UI will display the attachments visually
+    const content = messageInput.trim()
+
+    await sendMessage(content, messageType, uploadedAttachments)
     setMessageInput('')
+    setAttachments([])
     scrollToBottom()
+  }
+
+  // Handle file selection
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+
+    files.forEach(file => {
+      // Validate file size (10MB limit)
+      if (file.size > 10 * 1024 * 1024) {
+        toast.error(`${file.name} is too large. Maximum file size is 10MB.`)
+        return
+      }
+
+      const url = URL.createObjectURL(file)
+      const type = file.type.startsWith('image/') ? 'image' : 'file'
+
+      setAttachments(prev => [...prev, { file, url, type }])
+    })
+
+    // Reset input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
+  // Remove attachment
+  const removeAttachment = (index: number) => {
+    setAttachments(prev => {
+      const newAttachments = [...prev]
+      URL.revokeObjectURL(newAttachments[index].url)
+      newAttachments.splice(index, 1)
+      return newAttachments
+    })
   }
 
   // Handle enter key press
@@ -406,7 +516,9 @@ export function MiniChatBar({ user, className }: MiniChatBarProps) {
                   </div>
                   {conversation.lastMessage ? (
                     <p className="text-sm text-gray-600 truncate mt-1">
-                      {conversation.lastMessage.content}
+                      {conversation.lastMessage.content ||
+                        (conversation.lastMessage.messageType === 'image' ? '📷 Photo' :
+                         conversation.lastMessage.messageType === 'file' ? '📎 File' : '')}
                     </p>
                   ) : (
                     <p className="text-sm text-gray-400 italic truncate mt-1">
@@ -451,9 +563,6 @@ export function MiniChatBar({ user, className }: MiniChatBarProps) {
               <p className="font-semibold text-base text-gray-900">
                 {otherParticipant.firstName} {otherParticipant.lastName}
               </p>
-              <p className="text-sm text-gray-500">
-                {isConnected ? 'Online' : 'Offline'}
-              </p>
             </div>
           </div>
         </div>
@@ -471,14 +580,64 @@ export function MiniChatBar({ user, className }: MiniChatBarProps) {
                 >
                   <div className="relative max-w-[85%]">
                     <div
-                      className={`p-4 rounded-2xl shadow-sm ${
+                      className={`p-3 rounded-2xl shadow-sm ${
                         isOwnMessage
                           ? 'bg-blue-500 text-white'
                           : 'bg-gray-100 text-gray-900 border border-gray-200'
                       }`}
                     >
-                      <p className="text-sm leading-relaxed break-words">{message.content}</p>
-                      <p className={`text-xs mt-2 ${
+                      {/* Display attachments */}
+                      {message.attachments && message.attachments.length > 0 && (
+                        <div className={message.content ? 'mb-2' : ''}>
+                          {message.attachments.map((attachment, idx) => (
+                            <div key={idx}>
+                              {attachment.mimeType.startsWith('image/') ? (
+                                <a
+                                  href={attachment.fileUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="block"
+                                >
+                                  <img
+                                    src={attachment.fileUrl}
+                                    alt={attachment.originalFilename}
+                                    className="max-w-full rounded cursor-pointer hover:opacity-90 transition-opacity"
+                                    style={{ maxHeight: '200px' }}
+                                  />
+                                </a>
+                              ) : (
+                                <div className="border rounded p-2 bg-white/10 mb-1">
+                                  <div className="flex items-center space-x-2">
+                                    <FileText className="w-4 h-4 flex-shrink-0" />
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-xs font-medium truncate">
+                                        {attachment.originalFilename}
+                                      </p>
+                                      <p className="text-xs opacity-75">
+                                        {(attachment.fileSize / 1024 / 1024).toFixed(1)} MB
+                                      </p>
+                                    </div>
+                                    <a
+                                      href={attachment.fileUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-xs underline flex-shrink-0"
+                                    >
+                                      Download
+                                    </a>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {message.content && (
+                        <p className="text-sm leading-relaxed break-words">{message.content}</p>
+                      )}
+
+                      <p className={`text-xs mt-1 ${
                         isOwnMessage ? 'text-blue-100' : 'text-gray-500'
                       }`}>
                         {formatMessageTime(message.createdAt)}
@@ -524,22 +683,83 @@ export function MiniChatBar({ user, className }: MiniChatBarProps) {
 
         {/* Message Input */}
         <div className="p-4 border-t bg-white">
-          <div className="flex items-center space-x-3">
+          {/* Attachment previews */}
+          {attachments.length > 0 && (
+            <div className="mb-3 p-2 bg-gray-50 rounded-lg">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-medium text-gray-700">
+                  {attachments.length} file(s)
+                </span>
+              </div>
+              <div className="space-y-1">
+                {attachments.map((attachment, index) => (
+                  <div key={index} className="flex items-center space-x-2 p-1.5 bg-white rounded border text-xs">
+                    {attachment.type === 'image' ? (
+                      <img
+                        src={attachment.url}
+                        alt={attachment.file.name}
+                        className="w-8 h-8 object-cover rounded"
+                      />
+                    ) : (
+                      <FileText className="w-5 h-5 text-gray-500" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium truncate">{attachment.file.name}</p>
+                      <p className="text-gray-500">
+                        {(attachment.file.size / 1024 / 1024).toFixed(1)} MB
+                      </p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removeAttachment(index)}
+                      className="p-1 h-auto w-6"
+                    >
+                      <X className="w-3 h-3" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center space-x-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept="image/*,.pdf,.doc,.docx,.txt,.zip"
+              onChange={handleFileSelect}
+              className="hidden"
+            />
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={sending || uploading}
+              className="p-2 w-8 h-8"
+            >
+              <Paperclip className="w-4 h-4" />
+            </Button>
             <Input
               placeholder="Type a message..."
               value={messageInput}
               onChange={(e) => setMessageInput(e.target.value)}
               onKeyPress={handleKeyPress}
-              className="flex-1 rounded-full border-gray-300 focus:border-blue-500 focus:ring-blue-500 px-4 py-2"
-              disabled={sending}
+              className="flex-1 rounded-full border-gray-300 focus:border-blue-500 focus:ring-blue-500 px-4 py-2 text-sm"
+              disabled={sending || uploading}
             />
             <Button
               size="sm"
               onClick={handleSendMessage}
-              disabled={!messageInput.trim() || sending}
+              disabled={(!messageInput.trim() && attachments.length === 0) || sending || uploading}
               className="rounded-full w-10 h-10 p-0 bg-blue-500 hover:bg-blue-600"
             >
-              <Send className="w-4 h-4" />
+              {uploading ? (
+                <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <Send className="w-4 h-4" />
+              )}
             </Button>
           </div>
         </div>
@@ -601,7 +821,11 @@ export function MiniChatBar({ user, className }: MiniChatBarProps) {
           {/* Content */}
           {!isMinimized && (
             <div className="flex-1 overflow-hidden">
-              {currentConversation ? renderChatInterface() : renderConversationList()}
+              {currentConversation ? (
+                renderChatInterface()
+              ) : (
+                renderConversationList()
+              )}
             </div>
           )}
         </div>

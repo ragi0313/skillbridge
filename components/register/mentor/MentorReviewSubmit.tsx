@@ -16,8 +16,7 @@ type Props = {
   isSubmitting: boolean
 }
 
-export default function MentorReviewSubmit({ formData, prevStep }: Props) {
-  const [isSubmitting, setIsSubmitting] = useState(false)
+export default function MentorReviewSubmit({ formData, prevStep, isSubmitting }: Props) {
   const [agreedToTerms, setAgreedToTerms] = useState(false)
 
   const getAvailabilityCount = () => {
@@ -209,19 +208,26 @@ export default function MentorReviewSubmit({ formData, prevStep }: Props) {
             <Label htmlFor="terms" className="text-sm leading-relaxed text-blue-900 block">
               I agree to the{" "}
               <Link
-                href="/terms"
+                href="/terms-of-service"
                 className="text-blue-600 hover:text-blue-700 hover:underline font-semibold"
               >
                 Terms of Service
               </Link>
-              {" "}and{" "}
+              {", "}
               <Link
-                href="/privacy"
+                href="/privacy-policy"
                 className="text-blue-600 hover:text-blue-700 hover:underline font-semibold"
               >
                 Privacy Policy
               </Link>
-              . I understand that my application will be reviewed by SkillBridge admins before account activation.
+              {", and "}
+              <Link
+                href="/code-of-conduct"
+                className="text-blue-600 hover:text-blue-700 hover:underline font-semibold"
+              >
+                Code of Conduct
+              </Link>
+              . I understand that my application will be reviewed by BridgeMentor admins before account activation.
             </Label>
           </div>
         </CardContent>

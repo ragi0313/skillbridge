@@ -32,7 +32,7 @@ async function handleAppeal(req: NextRequest) {
       },
     })
 
-    const adminEmail = process.env.ADMIN_EMAIL || 'admin@skillbridge.com'
+    const adminEmail = process.env.ADMIN_EMAIL || 'admin@bridgementor.com'
     const currentDate = new Date().toLocaleString()
 
     // Send appeal to admin
@@ -93,7 +93,7 @@ async function handleAppeal(req: NextRequest) {
     `
 
     await transporter.sendMail({
-      from: `"SkillBridge Appeals" <${process.env.SMTP_USER}>`,
+      from: `"BridgeMentor Appeals" <${process.env.SMTP_USER}>`,
       to: adminEmail,
       subject: `🔄 Account Appeal - ${email}`,
       html: adminEmailContent,
@@ -135,7 +135,7 @@ async function handleAppeal(req: NextRequest) {
               
               <p>Thank you for your patience.</p>
               
-              <p><strong>SkillBridge Support Team</strong><br>
+              <p><strong>BridgeMentor Support Team</strong><br>
               <a href="mailto:${adminEmail}">${adminEmail}</a></p>
           </div>
       </body>
@@ -143,7 +143,7 @@ async function handleAppeal(req: NextRequest) {
     `
 
     await transporter.sendMail({
-      from: `"SkillBridge Support" <${process.env.SMTP_USER}>`,
+      from: `"BridgeMentor Support" <${process.env.SMTP_USER}>`,
       to: email,
       subject: '✅ Appeal Submitted - Under Review',
       html: userConfirmationEmail,

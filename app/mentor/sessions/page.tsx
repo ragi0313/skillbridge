@@ -13,6 +13,6 @@ export default async function Page() {
 }
 
 export const metadata = {
-  title: 'My Sessions | SkillBridge',
+  title: 'My Sessions | BridgeMentor',
   description: 'Manage your mentoring sessions',
 }

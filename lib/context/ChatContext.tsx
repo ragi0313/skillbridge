@@ -19,8 +19,7 @@ if (typeof window !== 'undefined') {
       })
     }
   } catch (error) {
-    console.warn('Pusher client not available:', error)
-  }
+    }
 }
 
 interface ChatContextType {
@@ -101,7 +100,6 @@ export function ChatProvider({ children, user }: ChatProviderProps) {
   // Subscribe to conversation for real-time updates
   const subscribeToConversation = useCallback((conversationId: number, onMessage: (message: any) => void) => {
     if (!pusherClient) {
-      console.warn('Pusher not available, falling back to polling')
       return () => {}
     }
 
@@ -118,10 +116,12 @@ export function ChatProvider({ children, user }: ChatProviderProps) {
 
       // Bind to new message events
       channel.bind(PUSHER_EVENTS.NEW_MESSAGE, (message: any) => {
-        // Only process if message is not from current user (avoid duplicates)
+        // Always update conversation with new message
+        updateConversationWithMessage(message)
+
+        // Only notify and call onMessage for messages from other users
         if (user && message.senderId !== user.id) {
           onMessage(message)
-          updateConversationWithMessage(message)
 
           // Show notification if user is not currently viewing this conversation
           toast.info(`New message from ${message.sender.firstName}`, {
@@ -135,6 +135,9 @@ export function ChatProvider({ children, user }: ChatProviderProps) {
               }
             }
           })
+        } else {
+          // For own messages, just call onMessage without notification
+          onMessage(message)
         }
       })
 
@@ -146,10 +149,7 @@ export function ChatProvider({ children, user }: ChatProviderProps) {
       // Bind to message deleted events
       channel.bind(PUSHER_EVENTS.MESSAGE_DELETED, (data: any) => {
         // Handle message deletion in UI
-        console.log('Message deleted:', data)
-      })
-
-      console.log(`Subscribed to conversation channel: ${channelName}`)
+        })
 
       // Return unsubscribe function
       return () => {
@@ -160,8 +160,7 @@ export function ChatProvider({ children, user }: ChatProviderProps) {
           next.delete(channelName)
           return next
         })
-        console.log(`Unsubscribed from conversation channel: ${channelName}`)
-      }
+        }
     } catch (error) {
       console.error('Error subscribing to conversation:', error)
       return () => {}
@@ -181,8 +180,7 @@ export function ChatProvider({ children, user }: ChatProviderProps) {
         next.delete(channelName)
         return next
       })
-      console.log(`Unsubscribed from conversation channel: ${channelName}`)
-    } catch (error) {
+      } catch (error) {
       console.error('Error unsubscribing from conversation:', error)
     }
   }, [])

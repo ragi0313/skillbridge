@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { Clock, Users, TrendingUp, UserCheck, MessageSquare, Megaphone, Settings, LogOut, X, Video, FileText }  from "lucide-react"
+import { useState, useEffect, useImperativeHandle, forwardRef } from "react"
+import { Clock, Users, TrendingUp, UserCheck, MessageSquare, Megaphone, Settings, LogOut, X, Video, FileText, Mail }  from "lucide-react"
 import { Layers } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -16,36 +16,76 @@ type Props = {
   setIsOpen: (open: boolean) => void
 }
 
+export interface AdminSidebarRef {
+  refreshCounts: () => Promise<void>
+}
+
 interface AdminUser {
   firstName: string
   lastName: string
   profilePictureUrl?: string
 }
 
-const menuItems = [
-  { id: "pending-mentors", label: "Pending Approvals", icon: Clock, badge: "12" },
+interface SidebarCounts {
+  pendingMentors: number
+  openSupportTickets: number
+  pendingReports: number
+}
+
+const getMenuItems = (counts: SidebarCounts) => [
+  { id: "dashboard", label: "Dashboard", icon: TrendingUp },
+  {
+    id: "pending-mentors",
+    label: "Pending Approvals",
+    icon: Clock,
+    badge: counts.pendingMentors > 0 ? counts.pendingMentors.toString() : undefined
+  },
   { id: "user-management", label: "Users Management", icon: Users },
   { id: "skill-categories", label: "Skill Categories", icon: Layers },
-  { id: "learner-insights", label: "Learner Insights", icon: TrendingUp },
-  { id: "mentor-directory", label: "Mentor Directory", icon: UserCheck },
   { id: "session-logs", label: "Session Logs", icon: Video },
-  { id: "reports-feedback", label: "Reports & Feedback", icon: MessageSquare, badge: "3" },
-  { id: "announcements", label: "Announcements", icon: Megaphone },
+  {
+    id: "support-tickets",
+    label: "Support Tickets",
+    icon: Mail,
+    badge: counts.openSupportTickets > 0 ? counts.openSupportTickets.toString() : undefined
+  },
   { id: "audit-log", label: "Audit Log", icon: FileText },
+  {
+    id: "reports-feedback",
+    label: "Reports & Feedback",
+    icon: MessageSquare,
+    badge: counts.pendingReports > 0 ? counts.pendingReports.toString() : undefined
+  },
+  { id: "announcements", label: "Announcements", icon: Megaphone },
   { id: "settings", label: "Platform Settings", icon: Settings },
 ]
 
-export default function AdminSidebar({ activeSection, setActiveSection, isOpen, setIsOpen }: Props) {
+const AdminSidebar = forwardRef<AdminSidebarRef, Props>(({ activeSection, setActiveSection, isOpen, setIsOpen }, ref) => {
   const [adminUser, setAdminUser] = useState<AdminUser | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [counts, setCounts] = useState<SidebarCounts>({
+    pendingMentors: 0,
+    openSupportTickets: 0,
+    pendingReports: 0
+  })
 
   useEffect(() => {
     const fetchAdminData = async () => {
       try {
-        const response = await fetch('/api/admin/profile')
-        if (response.ok) {
-          const data = await response.json()
-          setAdminUser(data.admin)
+        // Fetch admin profile and counts in parallel
+        const [profileResponse, countsResponse] = await Promise.all([
+          fetch('/api/admin/profile'),
+          fetch('/api/admin/sidebar-counts')
+        ])
+
+        if (profileResponse.ok) {
+          const profileData = await profileResponse.json()
+          setAdminUser(profileData.admin)
+        }
+
+        if (countsResponse.ok) {
+          const countsData = await countsResponse.json()
+          setCounts(countsData.counts)
         }
       } catch (error) {
         console.error('Error fetching admin data:', error)
@@ -55,12 +95,45 @@ export default function AdminSidebar({ activeSection, setActiveSection, isOpen, 
     }
 
     fetchAdminData()
+
+    // Refresh counts every 30 seconds
+    const interval = setInterval(async () => {
+      try {
+        const response = await fetch('/api/admin/sidebar-counts')
+        if (response.ok) {
+          const data = await response.json()
+          setCounts(data.counts)
+        }
+      } catch (error) {
+        console.error('Error refreshing counts:', error)
+      }
+    }, 30000)
+
+    return () => clearInterval(interval)
   }, [])
 
   const handleMenuClick = (sectionId: string) => {
     setActiveSection(sectionId)
     setIsOpen(false) // Close sidebar on mobile after selection
   }
+
+  // Function to refresh counts manually (can be called from other components)
+  const refreshCounts = async () => {
+    try {
+      const response = await fetch('/api/admin/sidebar-counts')
+      if (response.ok) {
+        const data = await response.json()
+        setCounts(data.counts)
+      }
+    } catch (error) {
+      console.error('Error refreshing counts:', error)
+    }
+  }
+
+  // Expose refresh function via ref
+  useImperativeHandle(ref, () => ({
+    refreshCounts
+  }))
   const router = useRouter();
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" })
@@ -121,7 +194,7 @@ export default function AdminSidebar({ activeSection, setActiveSection, isOpen, 
         {/* Navigation */}
         <nav className="flex-1 p-4 overflow-y-auto">
           <ul className="space-y-2">
-            {menuItems.map((item) => (
+            {getMenuItems(counts).map((item) => (
               <li key={item.id}>
                 <Button
                   variant="ghost"
@@ -185,4 +258,8 @@ export default function AdminSidebar({ activeSection, setActiveSection, isOpen, 
       </div>
     </>
   )
-}
+})
+
+AdminSidebar.displayName = 'AdminSidebar'
+
+export default AdminSidebar

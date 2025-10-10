@@ -1,14 +1,6 @@
-import nodemailer from "nodemailer"
-
-export const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST!,
-  port: parseInt(process.env.SMTP_PORT || "587"),
-  secure: parseInt(process.env.SMTP_PORT || "587") === 465,
-  auth: {
-    user: process.env.SMTP_USER!,
-    pass: process.env.SMTP_PASS!,
-  },
-})
+import { sendEmailQueued, sendEmailDirect } from "./emailQueue"
+import { DEFAULT_SENDER } from "./transporter"
+import { logger } from "@/lib/monitoring/logger"
 
 export async function sendSuspensionEmail({
   email,
@@ -25,18 +17,17 @@ export async function sendSuspensionEmail({
   suspensionEndsAt: Date
   adminMessage: string
 }) {
-  try {
-    const suspensionEndDate = suspensionEndsAt.toLocaleDateString("en-US", {
-      weekday: "long",
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    })
+  const suspensionEndDate = suspensionEndsAt.toLocaleDateString("en-US", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  })
 
-    const mailOptions = {
-      from: process.env.SMTP_FROM || '"SkillBridge" <no-reply@skillbridge.com>',
+  const emailData = {
+      from: DEFAULT_SENDER,
       to: email,
-      subject: "Account Suspension Notice - SkillBridge",
+      subject: "Account Suspension Notice - BridgeMentor",
       html: `
         <!DOCTYPE html>
         <html lang="en">
@@ -120,7 +111,7 @@ export async function sendSuspensionEmail({
         <body>
           <div class="container">
             <div class="header">
-              <div class="logo">SkillBridge</div>
+              <div class="logo">BridgeMentor</div>
               <h2 style="color: #dc2626; margin: 0;">Account Suspension Notice</h2>
             </div>
             
@@ -132,7 +123,7 @@ export async function sendSuspensionEmail({
 
               <p>Dear ${firstName} ${lastName},</p>
               
-              <p>We are writing to inform you that your SkillBridge account has been temporarily suspended due to a violation of our community guidelines and terms of service.</p>
+              <p>We are writing to inform you that your BridgeMentor account has been temporarily suspended due to a violation of our community guidelines and terms of service.</p>
               
               <div class="suspension-details">
                 <h4 style="margin-top: 0; color: #374151;">Suspension Details:</h4>
@@ -169,29 +160,42 @@ export async function sendSuspensionEmail({
 
               <div class="contact-info">
                 <h4 style="margin-top: 0; color: #0369a1;">Need Help?</h4>
-                <p>If you believe this suspension was made in error or have questions about this decision, please contact our support team at <a href="mailto:support@skillbridge.com" style="color: #0369a1;">support@skillbridge.com</a></p>
+                <p>If you believe this suspension was made in error or have questions about this decision, please contact our support team at <a href="mailto:support@bridgementor.com" style="color: #0369a1;">support@bridgementor.com</a></p>
               </div>
 
               <p>We value our community and look forward to welcoming you back after the suspension period.</p>
               
-              <p>Best regards,<br>The SkillBridge Administration Team</p>
+              <p>Best regards,<br>The BridgeMentor Administration Team</p>
             </div>
             
             <div class="footer">
               <p>This email was sent to ${email}</p>
-              <p>© ${new Date().getFullYear()} SkillBridge. All rights reserved.</p>
+              <p>© ${new Date().getFullYear()} BridgeMentor. All rights reserved.</p>
             </div>
           </div>
         </body>
         </html>
       `,
-    }
+  }
 
-    await transporter.sendMail(mailOptions)
+  try {
+    await sendEmailQueued(emailData)
+    logger.info("Suspension email queued", { to: email })
     return { success: true }
-  } catch (error) {
-    console.error("Error sending suspension email:", error)
-    return { success: false, error }
+  } catch (queueError) {
+    logger.warn("Email queue failed for suspension email, falling back to direct send", { error: queueError })
+    try {
+      const result = await sendEmailDirect(emailData)
+      if (result.success) {
+        logger.info("Suspension email sent directly", { to: email })
+      } else {
+        logger.error("Direct email send failed for suspension", { error: result.error, to: email })
+      }
+      return result
+    } catch (directError) {
+      logger.error("Email sending completely failed for suspension", { error: directError, to: email })
+      return { success: false, error: directError }
+    }
   }
 }
 
@@ -208,11 +212,10 @@ export async function sendBlacklistEmail({
   reason: string
   adminMessage: string
 }) {
-  try {
-    const mailOptions = {
-      from: process.env.SMTP_FROM || '"SkillBridge" <no-reply@skillbridge.com>',
+  const emailData = {
+      from: DEFAULT_SENDER,
       to: email,
-      subject: "Account Permanently Suspended - SkillBridge",
+      subject: "Account Permanently Suspended - BridgeMentor",
       html: `
         <!DOCTYPE html>
         <html lang="en">
@@ -296,7 +299,7 @@ export async function sendBlacklistEmail({
         <body>
           <div class="container">
             <div class="header">
-              <div class="logo">SkillBridge</div>
+              <div class="logo">BridgeMentor</div>
               <h2 style="color: #dc2626; margin: 0;">Account Permanently Suspended</h2>
             </div>
             
@@ -308,7 +311,7 @@ export async function sendBlacklistEmail({
 
               <p>Dear ${firstName} ${lastName},</p>
               
-              <p>We regret to inform you that your SkillBridge account has been permanently suspended due to a serious violation of our community guidelines and terms of service.</p>
+              <p>We regret to inform you that your BridgeMentor account has been permanently suspended due to a serious violation of our community guidelines and terms of service.</p>
               
               <div class="blacklist-details">
                 <h4 style="margin-top: 0; color: #374151;">Suspension Details:</h4>
@@ -338,7 +341,7 @@ export async function sendBlacklistEmail({
                 <li>Your account access has been permanently revoked</li>
                 <li>All scheduled sessions have been cancelled and refunded</li>
                 <li>Your profile and content have been removed from the platform</li>
-                <li>You are prohibited from creating new accounts on SkillBridge</li>
+                <li>You are prohibited from creating new accounts on BridgeMentor</li>
                 <li>Any attempts to circumvent this suspension may result in legal action</li>
               </ul>
 
@@ -351,28 +354,41 @@ export async function sendBlacklistEmail({
 
               <div class="contact-info">
                 <h4 style="margin-top: 0; color: #0369a1;">Questions?</h4>
-                <p>If you have questions about this decision (though it cannot be reversed), you may contact our support team at <a href="mailto:support@skillbridge.com" style="color: #0369a1;">support@skillbridge.com</a></p>
+                <p>If you have questions about this decision (though it cannot be reversed), you may contact our support team at <a href="mailto:support@bridgementor.com" style="color: #0369a1;">support@bridgementor.com</a></p>
               </div>
 
               <p>We take the safety and well-being of our community seriously, and this action was necessary to protect our users.</p>
               
-              <p>SkillBridge Administration Team</p>
+              <p>BridgeMentor Administration Team</p>
             </div>
             
             <div class="footer">
               <p>This email was sent to ${email}</p>
-              <p>© ${new Date().getFullYear()} SkillBridge. All rights reserved.</p>
+              <p>© ${new Date().getFullYear()} BridgeMentor. All rights reserved.</p>
             </div>
           </div>
         </body>
         </html>
       `,
-    }
+  }
 
-    await transporter.sendMail(mailOptions)
+  try {
+    await sendEmailQueued(emailData)
+    logger.info("Blacklist email queued", { to: email })
     return { success: true }
-  } catch (error) {
-    console.error("Error sending blacklist email:", error)
-    return { success: false, error }
+  } catch (queueError) {
+    logger.warn("Email queue failed for blacklist email, falling back to direct send", { error: queueError })
+    try {
+      const result = await sendEmailDirect(emailData)
+      if (result.success) {
+        logger.info("Blacklist email sent directly", { to: email })
+      } else {
+        logger.error("Direct email send failed for blacklist", { error: result.error, to: email })
+      }
+      return result
+    } catch (directError) {
+      logger.error("Email sending completely failed for blacklist", { error: directError, to: email })
+      return { success: false, error: directError }
+    }
   }
 }

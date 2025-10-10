@@ -9,7 +9,7 @@ import MentorSkillsRates from "@/components/register/mentor/MentorSkillsRate";
 import MentorAvailability from "@/components/register/mentor/MentorAvailability";
 import MentorReviewSubmit from "@/components/register/mentor/MentorReviewSubmit";
 import { useRouter } from "next/navigation";
-import Header from "@/components/landing/Header";
+import { Header } from "@/components/landing/Header";
 
 export default function MentorSignupPage() {
   const router = useRouter();
@@ -63,6 +63,7 @@ export default function MentorSignupPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
   e.preventDefault()
+  setIsSubmitting(true)
 
   try {
     const res = await fetch("/api/auth/register/mentor", {

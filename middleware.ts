@@ -13,6 +13,56 @@ async function verifyJWT(token: string) {
   }
 }
 
+/**
+ * Apply comprehensive security headers to all responses
+ */
+function applySecurityHeaders(response: NextResponse, pathname: string): NextResponse {
+  // Security headers for all responses
+  response.headers.set('X-Frame-Options', 'DENY')
+  response.headers.set('X-Content-Type-Options', 'nosniff')
+  response.headers.set('X-XSS-Protection', '1; mode=block')
+  response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
+  response.headers.set('Permissions-Policy', 'geolocation=(), microphone=(), camera=(), payment=(), usb=()')
+
+  // Add HSTS in production
+  if (process.env.NODE_ENV === 'production') {
+    response.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload')
+  }
+
+  // Content Security Policy
+  const cspDirectives = [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com data:",
+    "img-src 'self' data: https: blob:",
+    "media-src 'self' https: blob:",
+    "connect-src 'self' https://api.agora.io https://*.agora.io https://api.xendit.co wss:",
+    "frame-src 'self' https://checkout.xendit.co",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'"
+  ]
+
+  // Add upgrade-insecure-requests in production
+  if (process.env.NODE_ENV === 'production') {
+    cspDirectives.push('upgrade-insecure-requests')
+  }
+
+  response.headers.set('Content-Security-Policy', cspDirectives.join('; '))
+
+  // Additional headers for sensitive pages (auth, payments, etc.)
+  const sensitivePaths = ['/login', '/register', '/admin']
+  if (sensitivePaths.some(path => pathname.startsWith(path))) {
+    response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate, private')
+    response.headers.set('Pragma', 'no-cache')
+    response.headers.set('Expires', '0')
+  }
+
+  return response
+}
+
 export async function middleware(req: NextRequest) {
   const rawToken = req.cookies.get("session_token")?.value
   const token = rawToken && rawToken.trim().length > 0 ? rawToken : null
@@ -37,28 +87,33 @@ export async function middleware(req: NextRequest) {
       pathname.startsWith("/admin")
     ) {
       url.pathname = "/login"
-      return NextResponse.redirect(url)
+      const response = NextResponse.redirect(url)
+      return applySecurityHeaders(response, pathname)
     }
 
-    return NextResponse.next()
+    const response = NextResponse.next()
+    return applySecurityHeaders(response, pathname)
   }
 
   const role = session.role as string
 
   if (pathname === "/") {
     url.pathname = `/${role}/dashboard`
-    return NextResponse.redirect(url)
+    const response = NextResponse.redirect(url)
+    return applySecurityHeaders(response, pathname)
   }
 
   if (isPublicPath) {
     url.pathname = `/${role}/dashboard`
-    return NextResponse.redirect(url)
+    const response = NextResponse.redirect(url)
+    return applySecurityHeaders(response, pathname)
   }
 
   // Prevent mentors from accessing find-mentors page
   if (pathname === "/find-mentors" && role === "mentor") {
     url.pathname = "/mentor/dashboard"
-    return NextResponse.redirect(url)
+    const response = NextResponse.redirect(url)
+    return applySecurityHeaders(response, pathname)
   }
 
   if (
@@ -67,10 +122,12 @@ export async function middleware(req: NextRequest) {
     (pathname.startsWith("/admin") && role !== "admin")
   ) {
     url.pathname = `/${role}/dashboard`
-    return NextResponse.redirect(url)
+    const response = NextResponse.redirect(url)
+    return applySecurityHeaders(response, pathname)
   }
 
-  return NextResponse.next()
+  const response = NextResponse.next()
+  return applySecurityHeaders(response, pathname)
 }
 
 export const config = {

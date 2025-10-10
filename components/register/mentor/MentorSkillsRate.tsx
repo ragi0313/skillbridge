@@ -147,7 +147,7 @@ export default function MentorSkillsRates({ formData, setFormData, nextStep, pre
             <div>
               <h3 className="font-semibold text-amber-900 mb-2">Payment Information</h3>
               <p className="text-amber-800 text-sm leading-relaxed">
-                You'll be paid in credits that learners purchase. SkillBridge takes a 20% platform fee from each
+                You'll be paid in credits that learners purchase. BridgeMentor takes a 20% platform fee from each
                 session. Credits can be withdrawn to your bank account or PayPal.
               </p>
             </div>

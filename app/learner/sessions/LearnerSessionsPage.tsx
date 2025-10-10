@@ -47,8 +47,6 @@ export function LearnerSessionsPage() {
   // Set up real-time booking updates
   useBookingUpdates({
     onBookingStatusChange: (bookingId, newStatus, data) => {
-      console.log(`[LEARNER_SESSIONS] Booking ${bookingId} status changed to ${newStatus}`)
-
       // Update the session status in the sessions array
       setSessions(prevSessions =>
         prevSessions.map(session =>

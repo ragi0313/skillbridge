@@ -16,7 +16,7 @@ import { Settings, Globe, DollarSign, Users, Shield, Plus, X, Save } from "lucid
 export default function PlatformSettings() {
   const [settings, setSettings] = useState({
     // General Settings
-    platformName: "SkillBridge",
+    platformName: "BridgeMentor",
     platformDescription: "An Interactive Web Platform for Connecting Learners with Freelancing Professionals",
     defaultTimezone: "UTC",
     maintenanceMode: false,
@@ -98,7 +98,6 @@ export default function PlatformSettings() {
   }
 
   const saveSettings = () => {
-    console.log("Saving settings:", settings)
     // Handle settings save
   }
 
@@ -238,7 +237,6 @@ export default function PlatformSettings() {
                   <p className="text-xs text-gray-500 mt-1">1 credit = ₱{settings.creditToPHPRate} PHP</p>
                 </div>
               </div>
-
 
               <div>
                 <Label>Supported Currencies</Label>

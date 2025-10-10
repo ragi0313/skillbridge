@@ -207,7 +207,7 @@ export default function MentorDashboardPage() {
           const learnersRes = await fetch("/api/mentor/matched-learners")
           if (learnersRes.ok) {
             const learnersData = await learnersRes.json()
-            console.log("Matched learners data:", learnersData) // Debug log
+            // Debug log
             setMatchedLearners(learnersData.matchedLearners || [])
           } else {
             console.error("Failed to fetch matched learners:", learnersRes.status)
@@ -312,13 +312,11 @@ export default function MentorDashboardPage() {
               </div>
             </div>
 
-
           </motion.div>
         </div>
       </section>
 
       <main className="flex-1 container mx-auto px-4 py-12">
-
 
         {/* Recommended Learners */}
         <section className="mb-16">

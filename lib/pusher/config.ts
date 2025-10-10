@@ -17,13 +17,11 @@ if (typeof window === 'undefined' && typeof process !== 'undefined' && process.e
         cluster: process.env.PUSHER_CLUSTER,
         useTLS: true,
       })
-      console.log('[PUSHER] Server initialized successfully')
     } catch (error) {
-      console.warn('[PUSHER] Server-side Pusher not available, chat will use polling mode:', (error as Error)?.message || 'Unknown error')
+      console.error('[PUSHER] Failed to initialize Pusher server:', error instanceof Error ? error.message : 'Unknown error')
       pusherServer = null
     }
   } else {
-    console.warn('[PUSHER] Server not initialized - missing environment variables, using polling mode')
     pusherServer = null
   }
 }
@@ -48,7 +46,7 @@ export const triggerPusherEvent = async (
     await pusherServer.trigger(channel, event, data)
     return true
   } catch (error) {
-    console.warn(`[PUSHER] Failed to trigger event ${channel}/${event}, falling back to polling:`, (error as Error)?.message || 'Unknown error')
+    console.error('[PUSHER] Failed to trigger event:', error instanceof Error ? error.message : 'Unknown error')
     return false
   }
 }

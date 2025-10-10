@@ -1,8 +1,9 @@
 import { cookies } from "next/headers"
 import jwt, { JwtPayload } from "jsonwebtoken"
 import { NextRequest } from "next/server"
+import type { Session } from "./getSession"
 
-export async function verifyToken(request?: NextRequest): Promise<{ id: number; role: string } | null> {
+export async function verifyToken(request?: NextRequest): Promise<Session | null> {
   let token: string | undefined
 
   // Try to get token from Authorization header first (for API calls)
@@ -20,8 +21,7 @@ export async function verifyToken(request?: NextRequest): Promise<{ id: number; 
       token = cookieStore.get("session_token")?.value
     } catch (error) {
       // Cookies might not be available in some contexts
-      console.warn('Could not read cookies:', error)
-    }
+      }
   }
 
   if (!token) return null
@@ -31,13 +31,18 @@ export async function verifyToken(request?: NextRequest): Promise<{ id: number; 
 
     if (typeof decoded === "string") return null // invalid payload
 
-    const { id, role } = decoded as JwtPayload
+    const { id, role, email, firstName, lastName } = decoded as JwtPayload
 
     if (!id || !role) return null
 
-    return { id: Number(id), role: String(role) }
+    return {
+      id: Number(id),
+      role: String(role),
+      email: String(email || ''),
+      firstName: String(firstName || ''),
+      lastName: String(lastName || '')
+    }
   } catch (error) {
-    console.warn('Token verification failed:', error)
     return null
   }
 }

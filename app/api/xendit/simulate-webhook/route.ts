@@ -2,27 +2,49 @@ import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/db"
 import { learners, creditPurchases, creditTransactions } from "@/db/schema"
 import { eq, sql } from "drizzle-orm"
+import { getSession } from "@/lib/auth/getSession"
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  // SECURITY: Disable in production to prevent payment bypass
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({
+      error: "Test endpoints are disabled in production for security"
+    }, { status: 403 })
+  }
+
+  // Require admin access even in development
+  const session = await getSession()
+  if (!session || session.role !== "admin") {
+    return NextResponse.json({
+      error: "Forbidden - Admin only endpoint"
+    }, { status: 403 })
+  }
+
   const { invoiceData } = await req.json()
   
-  // Simulate the webhook event using your actual invoice data
+  // Simulate the webhook event using provided invoice data
   const event = {
     event: "invoice.paid",
     data: invoiceData
   }
 
   const invoice = event.data
-  const metadata = {
-    userId: "3", // Your user ID from external_id: "credit_purchase_3_1757418902873"
-    credits: "100", // Starter pack credits
-    packageId: "starter"
+
+  // Extract metadata from invoice (must be provided in invoiceData)
+  const metadata = invoice.metadata || {
+    userId: invoiceData.userId,
+    credits: invoiceData.credits,
+    packageId: invoiceData.packageId
+  }
+
+  if (!metadata.userId || !metadata.credits) {
+    return NextResponse.json({
+      error: "Invalid invoice data - missing userId or credits"
+    }, { status: 400 })
   }
   
   const learnerId = metadata.userId
   const credits = Number(metadata.credits)
-
-  console.log(`[SIMULATE_WEBHOOK] Processing payment for user ${learnerId}: ${credits} credits`)
 
   try {
     await db.transaction(async (tx) => {
@@ -41,8 +63,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       if (!currentLearner) {
         throw new Error(`Learner not found for userId: ${learnerId}`)
       }
-
-      console.log(`[SIMULATE_WEBHOOK] Current balance: ${currentLearner.creditsBalance} credits`)
 
       // Record the credit purchase
       await tx.insert(creditPurchases).values({
@@ -93,8 +113,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         },
       })
 
-      console.log(`[SIMULATE_WEBHOOK] User ${learnerId}: ${credits} credits added! New balance: ${currentLearner.creditsBalance + credits}`)
-    })
+      })
 
     return NextResponse.json({ 
       success: true,

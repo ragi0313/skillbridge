@@ -93,8 +93,7 @@ export function WaitingRoom({
       if (cameraStreamRef.current) {
         cameraStreamRef.current.getTracks().forEach(track => {
           track.stop()
-          console.log('Stopped camera track:', track.label)
-        })
+          })
         cameraStreamRef.current = null
         setCameraEnabled(false)
       }
@@ -102,8 +101,7 @@ export function WaitingRoom({
       if (microphoneStreamRef.current) {
         microphoneStreamRef.current.getTracks().forEach(track => {
           track.stop()
-          console.log('Stopped microphone track:', track.label)
-        })
+          })
         microphoneStreamRef.current = null
         setMicrophoneEnabled(false)
         setAudioLevel(0)
@@ -120,8 +118,7 @@ export function WaitingRoom({
         videoRef.current.srcObject = null
       }
       
-      console.log('Media streams cleanup completed')
-    } catch (error) {
+      } catch (error) {
       console.error("Error cleaning up media streams:", error)
     }
     
@@ -155,8 +152,7 @@ export function WaitingRoom({
       const success = await onJoinSession()
       if (success) {
         setJoinStatus("joined")
-        console.log("[WAITING_ROOM] Successfully joined session")
-      } else {
+        } else {
         setJoinStatus("error")
         setErrorMessage("Failed to join session. Please try again.")
       }
@@ -177,8 +173,7 @@ export function WaitingRoom({
         if (cameraStreamRef.current) {
           cameraStreamRef.current.getVideoTracks().forEach(track => {
             track.stop()
-            console.log('Camera track stopped:', track.label)
-          })
+            })
           cameraStreamRef.current = null
         }
         if (videoRef.current) {
@@ -194,10 +189,8 @@ export function WaitingRoom({
         // Check for camera permissions first
         try {
           const permissions = await navigator.permissions.query({ name: 'camera' as PermissionName })
-          console.log('Camera permission status:', permissions.state)
-        } catch (permError) {
-          console.log('Permission API not supported, continuing with getUserMedia')
-        }
+          } catch (permError) {
+          }
         
         const stream = await navigator.mediaDevices.getUserMedia({ 
           video: { 
@@ -218,16 +211,13 @@ export function WaitingRoom({
             if (videoRef.current) {
               try {
                 await videoRef.current.play()
-                console.log('Camera preview started successfully')
-              } catch (playError: any) {
-                console.log("Video play failed, attempting user interaction:", playError)
+                } catch (playError: any) {
                 if (playError.name === 'NotAllowedError') {
                   videoRef.current.muted = true
                   try {
                     await videoRef.current.play()
                   } catch (retryError) {
-                    console.log("Retry failed:", retryError)
-                  }
+                    }
                 }
               }
             }
@@ -270,8 +260,7 @@ export function WaitingRoom({
               gainNodeRef.current.disconnect(audioContextRef.current.destination)
             }
           } catch (disconnectError) {
-            console.log("Node already disconnected")
-          }
+            }
           audioContextRef.current.close()
         }
         setMicrophoneEnabled(false)
@@ -289,10 +278,8 @@ export function WaitingRoom({
         // Check for microphone permissions first
         try {
           const permissions = await navigator.permissions.query({ name: 'microphone' as PermissionName })
-          console.log('Microphone permission status:', permissions.state)
-        } catch (permError) {
-          console.log('Permission API not supported, continuing with getUserMedia')
-        }
+          } catch (permError) {
+          }
         
         const stream = await navigator.mediaDevices.getUserMedia({ 
           audio: { 
@@ -338,12 +325,10 @@ export function WaitingRoom({
                 setMediaError("")
               }
             } catch (disconnectError) {
-              console.log("Node already disconnected")
-            }
+              }
           }, 3000)
         } catch (playbackError) {
-          console.log("Audio playback setup failed:", playbackError)
-        }
+          }
         
         const updateAudioLevel = () => {
           if (analyserRef.current && microphoneStreamRef.current) {
@@ -371,7 +356,6 @@ export function WaitingRoom({
       setMicrophoneEnabled(false)
     }
   }, [microphoneEnabled])
-
 
   // Session status polling with proper cleanup
   useEffect(() => {
@@ -443,7 +427,6 @@ export function WaitingRoom({
   const isTimeRemaining = (timer: any): timer is { isExpired: boolean; totalSeconds: number; days: number; hours: number; minutes: number; seconds: number } => {
     return 'isExpired' in timer && 'totalSeconds' in timer
   }
-
 
   const renderJoinButton = () => {
     if (joinStatus === "joining") {
@@ -562,7 +545,6 @@ export function WaitingRoom({
       default: return "Unknown"
     }
   }
-
 
   return (
     <div className="h-screen w-full bg-gradient-to-br from-slate-950 via-blue-950 to-slate-950 flex items-center justify-center p-3 overflow-hidden">
@@ -765,8 +747,7 @@ export function WaitingRoom({
                         <div className="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent" />
                       </div>
                     </div>
-                    
-                    
+
                     <div className="pt-2 border-t border-slate-700/50">
                       <p className="text-xs text-slate-300 font-medium text-center">
                         Audio playback is automatically tested for 3 seconds when microphone is enabled.

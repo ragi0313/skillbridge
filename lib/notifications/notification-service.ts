@@ -60,7 +60,6 @@ export class NotificationService {
       const existing = await duplicateCheck
 
       if (existing.length > 0) {
-        console.log(`Duplicate notification prevented for user ${data.userId}, type: ${data.type}`)
         return { success: true, isDuplicate: true }
       }
 

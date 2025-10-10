@@ -4,6 +4,7 @@ import { db } from '@/db'
 import { bookingSessions, learners, mentors } from '@/db/schema'
 import { eq } from 'drizzle-orm'
 import { agoraService } from '@/lib/agora/AgoraService'
+import { logUserAction, AUDIT_ACTIONS, ENTITY_TYPES, extractRequestInfo } from '@/lib/admin/audit-log'
 
 export async function POST(
   request: NextRequest,
@@ -64,7 +65,6 @@ export async function POST(
 
       // Check if session is already ongoing
       if (sessionRecord.status === 'ongoing') {
-        console.log(`[SESSION_START] Session ${sessionId} already ongoing`)
         return { 
           success: true, 
           message: 'Session already ongoing',
@@ -75,7 +75,6 @@ export async function POST(
 
       // Check if session can be started - only allow confirmed/upcoming
       if (sessionRecord.status !== null && !['confirmed', 'upcoming'].includes(sessionRecord.status)) {
-        console.log(`[SESSION_START] Cannot start session ${sessionId} with status: ${sessionRecord.status}`)
         throw new Error(`Session cannot be started (status: ${sessionRecord.status})`)
       }
 
@@ -100,7 +99,6 @@ export async function POST(
       
       if (!agoraChannelName) {
         try {
-          console.log(`[SESSION_START] Creating Agora room for session ${sessionId}`)
           const agoraRoom = await agoraService.createRoom(sessionId.toString(), new Date(sessionRecord.endTime))
           agoraChannelName = agoraRoom.channel
           channelCreated = true
@@ -114,14 +112,6 @@ export async function POST(
       const learnerCurrentlyInSession = sessionRecord.learnerJoinedAt !== null && sessionRecord.learnerLeftAt === null
       const mentorCurrentlyInSession = sessionRecord.mentorJoinedAt !== null && sessionRecord.mentorLeftAt === null
       const bothUsersJoined = learnerCurrentlyInSession && mentorCurrentlyInSession
-      
-      console.log(`[SESSION_START] Session ${sessionId} status:`)
-      console.log(`  - Current status: ${sessionRecord.status}`)
-      console.log(`  - Learner in session: ${learnerCurrentlyInSession}`)
-      console.log(`  - Mentor in session: ${mentorCurrentlyInSession}`)
-      console.log(`  - Both users joined: ${bothUsersJoined}`)
-      console.log(`  - Session time reached: ${now >= sessionStart}`)
-      console.log(`  - Call already started: ${!!sessionRecord.agoraCallStartedAt}`)
       
       // Prepare update data
       const updateData: any = {
@@ -137,12 +127,10 @@ export async function POST(
         // Both users have joined and are still in session - start the call
         updateData.status = 'ongoing'
         updateData.agoraCallStartedAt = now
-        console.log(`[SESSION_START] Both users active and time reached, setting status to 'ongoing' for session ${sessionId}`)
-      } else {
+        } else {
         // Either not both users or not time yet - keep as upcoming but create channel
         updateData.status = 'upcoming'
-        console.log(`[SESSION_START] Session prepared but waiting for conditions: bothUsers=${bothUsersJoined}, timeReached=${now >= sessionStart}, notStarted=${!sessionRecord.agoraCallStartedAt}`)
-      }
+        }
 
       await tx
         .update(bookingSessions)
@@ -171,10 +159,22 @@ export async function POST(
       }
     })
 
-    console.log(`[SESSION_START] Result for session ${sessionId}:`, {
-      success: result.success,
-      sessionStarted: result.sessionStarted,
-      waitingForUsers: result.waitingForUsers
+    // Log session start
+    const { ipAddress, userAgent } = extractRequestInfo(request)
+    await logUserAction({
+      userId: session.id,
+      action: AUDIT_ACTIONS.SESSION_START,
+      entityType: ENTITY_TYPES.SESSION,
+      entityId: sessionId,
+      description: `Session ${sessionId} started by user ${session.id}`,
+      metadata: {
+        sessionId,
+        userId: session.id,
+        agoraChannelName: result.agoraChannelName,
+      },
+      ipAddress,
+      userAgent,
+      severity: "info",
     })
 
     return NextResponse.json(result)

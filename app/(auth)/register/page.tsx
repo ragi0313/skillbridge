@@ -1,4 +1,4 @@
-import Header from "@/components/landing/Header";
+import { Header } from "@/components/landing/Header";
 import SignupHero from "@/components/register/SignupHero";
 import SignupOptions from "@/components/register/SignupOptions";
 import Link from "next/link";

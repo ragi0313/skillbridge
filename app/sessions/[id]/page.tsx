@@ -78,7 +78,6 @@ export default function SessionPage() {
     setError("")
 
     try {
-      console.log("[SESSION_PAGE] Loading session data for:", sessionId)
       const response = await fetch(`/api/sessions/${sessionId}`)
       
       if (!response.ok) {
@@ -99,12 +98,6 @@ export default function SessionPage() {
 
       const data = await response.json()
       
-      console.log("[SESSION_PAGE] Session data loaded:", {
-        sessionStatus: data.session.status,
-        userRole: data.userRole,
-        isReconnection: data.isReconnection
-      })
-      
       setSessionData(data.session)
       setUserRole(data.userRole)
       setCurrentUser(data.currentUser)
@@ -119,13 +112,11 @@ export default function SessionPage() {
       
       // Check for terminal session states first
       if (["completed", "cancelled", "both_no_show", "mentor_no_show", "learner_no_show", "technical_issues"].includes(data.session.status)) {
-        console.log("[SESSION_PAGE] Session is in terminal state:", data.session.status)
         setSessionPhase("ended")
         return
       }
 
       // For active sessions, always go to waiting room first
-      console.log("[SESSION_PAGE] Setting phase to waiting_room")
       setSessionPhase("waiting_room")
 
     } catch (error) {
@@ -142,7 +133,6 @@ export default function SessionPage() {
     if (!sessionId || hasJoinedSession) return hasJoinedSession
 
     try {
-      console.log("[SESSION_PAGE] Joining session in backend...")
       const response = await fetch(`/api/sessions/${sessionId}/join`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
@@ -155,7 +145,6 @@ export default function SessionPage() {
 
       const data = await response.json()
       setHasJoinedSession(true)
-      console.log("[SESSION_PAGE] Successfully joined session:", data.message)
       return true
     } catch (error) {
       console.error("[SESSION_PAGE] Error joining session:", error)
@@ -170,7 +159,6 @@ export default function SessionPage() {
 
     // Prevent concurrent token requests
     if (isTokenRequestInProgressRef.current) {
-      console.log("[SESSION_PAGE] Token request already in progress, waiting...")
       // Wait for existing request to complete
       while (isTokenRequestInProgressRef.current) {
         await new Promise(resolve => setTimeout(resolve, 100))
@@ -181,14 +169,10 @@ export default function SessionPage() {
     isTokenRequestInProgressRef.current = true
 
     try {
-      console.log("[SESSION_PAGE] Requesting Agora tokens, forceNew:", forceNew)
-      
       const requestBody = { 
         sessionId: parseInt(sessionId),
         forceNew: forceNew || false
       }
-
-      console.log("[SESSION_PAGE] Token request body:", requestBody)
 
       const response = await fetch("/api/agora/token", {
         method: "POST",
@@ -205,18 +189,6 @@ export default function SessionPage() {
       }
 
       const data = await response.json()
-      console.log("[SESSION_PAGE] Token response received:", {
-        hasAppId: !!data.appId,
-        hasChannel: !!data.channel,
-        hasToken: !!data.token,
-        hasRtmToken: !!data.rtmToken, // Check RTM token
-        hasUid: !!data.uid,
-        tokenLength: data.token?.length || 0,
-        rtmTokenLength: data.rtmToken?.length || 0, // Log RTM token length
-        channel: data.channel,
-        uid: data.uid
-      })
-      
       // Validate the token data before returning
       if (!data.appId || !data.channel || !data.token || data.uid === undefined) {
         console.error("[SESSION_PAGE] Invalid token data received:", {
@@ -243,19 +215,13 @@ export default function SessionPage() {
       // Validate RTM token if present
       if (data.rtmToken) {
         if (data.rtmToken.length < 50) {
-          console.warn("[SESSION_PAGE] RTM token appears malformed, length:", data.rtmToken.length)
           // Don't throw error for RTM token - chat can be disabled
           data.rtmToken = undefined
         } else if (!data.rtmToken.startsWith('006') && !data.rtmToken.startsWith('007')) {
-          console.warn("[SESSION_PAGE] RTM token has unexpected prefix:", data.rtmToken.substring(0, 3))
           // Don't throw error for RTM token - chat can be disabled
           data.rtmToken = undefined
         }
-      } else {
-        console.warn("[SESSION_PAGE] No RTM token received - chat functionality will be disabled")
       }
-
-      console.log("[SESSION_PAGE] Successfully validated Agora tokens")
 
       return {
         appId: data.appId,
@@ -275,7 +241,6 @@ export default function SessionPage() {
   // Handle joining video call from waiting room - with improved error handling
   const handleJoinVideoCall = useCallback(async () => {
     if (isLoading) {
-      console.log("[SESSION_PAGE] Already loading, ignoring duplicate call")
       return
     }
 
@@ -283,17 +248,13 @@ export default function SessionPage() {
     setError("")
 
     try {
-      console.log("[SESSION_PAGE] Starting video call join process...")
-      
       // Ensure user has joined the session
       if (!hasJoinedSession) {
-        console.log("[SESSION_PAGE] User hasn't joined session yet, joining now...")
         const joinSuccess = await joinSessionBackend()
         if (!joinSuccess) {
           throw new Error("Failed to join session")
         }
         // Wait a moment for the backend state to settle
-        console.log("[SESSION_PAGE] Waiting for backend state to settle...")
         await new Promise(resolve => setTimeout(resolve, 500))
       }
 
@@ -306,25 +267,19 @@ export default function SessionPage() {
       while (tokenAttempts < maxTokenAttempts && !agoraData) {
         try {
           tokenAttempts++
-          console.log(`[SESSION_PAGE] Token attempt ${tokenAttempts}/${maxTokenAttempts}`)
-          
           // Force new token on retry attempts
           const forceNew = tokenAttempts > 1
           agoraData = await loadAgoraToken(forceNew)
           
           if (agoraData) {
-            console.log("[SESSION_PAGE] Successfully obtained Agora tokens")
             break
           }
         } catch (tokenError) {
           lastError = tokenError instanceof Error ? tokenError : new Error(String(tokenError))
-          console.warn(`[SESSION_PAGE] Agora token attempt ${tokenAttempts} failed:`, tokenError)
-          
           if (tokenAttempts < maxTokenAttempts) {
             const baseDelay = 1000 * Math.pow(2, tokenAttempts - 1)
             const jitter = Math.random() * 500
             const delay = baseDelay + jitter
-            console.log(`[SESSION_PAGE] Waiting ${delay}ms before retry...`)
             await new Promise(resolve => setTimeout(resolve, delay))
           }
         }
@@ -336,7 +291,6 @@ export default function SessionPage() {
         throw new Error(`Unable to get video call configuration after ${maxTokenAttempts} attempts. Last error: ${errorMsg}`)
       }
 
-      console.log("[SESSION_PAGE] Successfully got Agora config, transitioning to video call")
       setAgoraConfig(agoraData)
       setSessionPhase("video_call")
       
@@ -353,11 +307,8 @@ export default function SessionPage() {
 
   // Handle leaving call - CRITICAL: Don't auto-complete session
   const handleLeaveCall = useCallback(async (reason?: string) => {
-    console.log("[SESSION_PAGE] User leaving call, reason:", reason)
-    
     // If user manually clicked leave, redirect to sessions management
     if (reason === "user_action") {
-      console.log("[SESSION_PAGE] Manual leave detected, redirecting to sessions management")
       if (userRole) {
         router.push(`/${userRole}/sessions`)
       }
@@ -366,7 +317,6 @@ export default function SessionPage() {
     
     // For automatic session end (timer expired), show the completion flow
     if (reason === "session_ended") {
-      console.log("[SESSION_PAGE] Session timer expired, showing completion modal")
       setSessionPhase("ended")
       
       // Show rating modal only for learners on timer expiration
@@ -377,7 +327,6 @@ export default function SessionPage() {
     }
     
     // For other reasons (connection errors, etc.), redirect to sessions management
-    console.log("[SESSION_PAGE] Other leave reason, redirecting to sessions management")
     if (userRole) {
       router.push(`/${userRole}/sessions`)
     }
@@ -409,7 +358,6 @@ export default function SessionPage() {
 
   // Handle rating submission
   const handleRatingSubmitted = useCallback(() => {
-    console.log("[SESSION_PAGE] Rating submitted, returning to sessions")
     setShowRatingModal(false)
     if (userRole) {
       router.push(`/${userRole}/sessions`)
@@ -418,7 +366,6 @@ export default function SessionPage() {
 
   // Handle navigation back to sessions management
   const handleBackToSessions = useCallback(() => {
-    console.log("[SESSION_PAGE] Navigating back to sessions management")
     if (userRole) {
       router.push(`/${userRole}/sessions`)
     }
@@ -426,7 +373,6 @@ export default function SessionPage() {
 
   // Handle retry with complete state reset
   const handleRetry = useCallback(() => {
-    console.log("[SESSION_PAGE] Retrying - resetting all state")
     setSessionPhase("loading")
     setHasJoinedSession(false)
     setError("")
@@ -442,12 +388,9 @@ export default function SessionPage() {
   // Proper cleanup function
   const performCleanup = useCallback(async (reason: string) => {
     if (hasCalledLeaveRef.current || isUnmountingRef.current) {
-      console.log("[SESSION_PAGE] Cleanup already performed or in progress")
       return
     }
 
-    console.log(`[SESSION_PAGE] Performing cleanup: ${reason}`)
-    
     // Only call leave if we actually joined and session isn't already terminal
     if (hasJoinedSession && lastKnownStatusRef.current && 
         !["completed", "cancelled", "both_no_show", "mentor_no_show", "learner_no_show", "technical_issues"].includes(lastKnownStatusRef.current)) {
@@ -457,19 +400,16 @@ export default function SessionPage() {
       try {
         // Use navigator.sendBeacon for more reliable cleanup on page unload
         if (reason === "beforeunload" && navigator.sendBeacon) {
-          console.log("[SESSION_PAGE] Using sendBeacon for cleanup")
           const blob = new Blob([JSON.stringify({ reason })], { type: 'application/json' })
           navigator.sendBeacon(`/api/sessions/${sessionId}/leave`, blob)
         } else {
-          console.log("[SESSION_PAGE] Using fetch for cleanup")
           await fetch(`/api/sessions/${sessionId}/leave`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ reason })
           })
         }
-        console.log("[SESSION_PAGE] Successfully called leave API in cleanup")
-      } catch (error) {
+        } catch (error) {
         console.error("[SESSION_PAGE] Error in cleanup leave call:", error)
       }
     }
@@ -477,7 +417,6 @@ export default function SessionPage() {
 
   // Load session data on mount
   useEffect(() => {
-    console.log("[SESSION_PAGE] Component mounted, loading session data")
     loadSessionData()
   }, [loadSessionData])
 
@@ -485,17 +424,14 @@ export default function SessionPage() {
   useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
       if (!isUnmountingRef.current && hasJoinedSession) {
-        console.log("[SESSION_PAGE] Page unloading, performing cleanup")
         performCleanup("beforeunload")
       }
     }
 
     const handleVisibilityChange = () => {
       if (document.hidden && hasJoinedSession && sessionPhase === "video_call") {
-        console.log("[SESSION_PAGE] Page hidden during video call")
-      } else if (!document.hidden && hasJoinedSession && sessionPhase === "video_call") {
-        console.log("[SESSION_PAGE] Page visible during video call")
-      }
+        } else if (!document.hidden && hasJoinedSession && sessionPhase === "video_call") {
+        }
     }
 
     // Add event listeners
@@ -509,15 +445,13 @@ export default function SessionPage() {
         document.removeEventListener('visibilitychange', handleVisibilityChange)
       } catch (error) {
         // Ignore errors during cleanup - window might be unavailable
-        console.warn("[SESSION_PAGE] Error removing event listeners:", error)
-      }
+        }
     }
   }, [hasJoinedSession, sessionPhase, performCleanup])
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      console.log("[SESSION_PAGE] Component unmounting")
       isUnmountingRef.current = true
       performCleanup("component_unmount")
     }

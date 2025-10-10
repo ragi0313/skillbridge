@@ -43,7 +43,7 @@ export async function GET(
 }
 
 const sendMessageSchema = z.object({
-  content: z.string().min(1, 'Message content is required'),
+  content: z.string(),
   messageType: z.enum(['text', 'file', 'image']).default('text'),
   attachments: z.array(z.object({
     originalFilename: z.string(),
@@ -53,7 +53,10 @@ const sendMessageSchema = z.object({
     mimeType: z.string(),
     storagePath: z.string().optional(),
   })).optional(),
-})
+}).refine(
+  (data) => data.content.trim().length > 0 || (data.attachments && data.attachments.length > 0),
+  { message: 'Message must have either content or attachments', path: ['content'] }
+)
 
 // Apply rate limiting to message sending
 const rateLimitedPOST = withRateLimit('chat', async (

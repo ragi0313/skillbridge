@@ -23,7 +23,7 @@ export async function uploadToCloudinary(buffer: Buffer, filename: string): Prom
   const timestamp = Math.round(Date.now() / 1000)
   const params = {
     timestamp,
-    folder: 'skillbridge/profile_pictures',
+    folder: 'bridgementor/profile_pictures',
   }
 
   const signature = await generateSignature(params, API_SECRET)
@@ -31,11 +31,48 @@ export async function uploadToCloudinary(buffer: Buffer, filename: string): Prom
   const formData = new FormData()
   formData.append('file', new Blob([buffer]), filename)
   formData.append('timestamp', timestamp.toString())
-  formData.append('folder', 'skillbridge/profile_pictures')
+  formData.append('folder', 'bridgementor/profile_pictures')
   formData.append('api_key', API_KEY)
   formData.append('signature', signature)
 
   const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, {
+    method: 'POST',
+    body: formData,
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(`Cloudinary upload failed: ${response.status} ${errorText}`)
+  }
+
+  const result = await response.json()
+  return {
+    secure_url: result.secure_url,
+    public_id: result.public_id,
+  }
+}
+
+export async function uploadFileToCloudinary(buffer: Buffer, filename: string, mimeType: string): Promise<{secure_url: string, public_id: string}> {
+  const timestamp = Math.round(Date.now() / 1000)
+  const params = {
+    timestamp,
+    folder: 'bridgementor/chat_files',
+  }
+
+  const signature = await generateSignature(params, API_SECRET)
+
+  const formData = new FormData()
+  formData.append('file', new Blob([buffer]), filename)
+  formData.append('timestamp', timestamp.toString())
+  formData.append('folder', 'bridgementor/chat_files')
+  formData.append('api_key', API_KEY)
+  formData.append('signature', signature)
+
+  // Determine upload type based on mime type
+  const uploadType = mimeType.startsWith('image/') ? 'image' : 'raw'
+  const uploadUrl = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/${uploadType}/upload`
+
+  const response = await fetch(uploadUrl, {
     method: 'POST',
     body: formData,
   })
@@ -58,8 +95,6 @@ export async function deleteFromCloudinary(publicId: string) {
   }
 
   try {
-    console.log(`Deleting Cloudinary asset with public ID: ${publicId}`)
-
     const timestamp = Math.round(Date.now() / 1000)
     const params = {
       public_id: publicId,
@@ -85,8 +120,6 @@ export async function deleteFromCloudinary(publicId: string) {
     }
 
     const result = await response.json()
-    console.log(`Cloudinary deletion result:`, result)
-
     if (result.result === "ok" || result.result === "not found") {
       return result
     } else {

@@ -217,8 +217,7 @@ export function useMiniChatErrorRecovery() {
 
     // If too many errors in short time, suggest closing chat
     if (errorCount >= 3) {
-      console.warn('[MINI_CHAT] Multiple errors detected, consider closing chat')
-    }
+      }
   }, [errorCount, lastErrorTime])
 
   const shouldAutoClose = errorCount >= 5

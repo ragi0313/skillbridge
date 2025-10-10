@@ -2,32 +2,36 @@ import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/db"
 import { learners, creditPurchases, creditTransactions } from "@/db/schema"
 import { eq, sql } from "drizzle-orm"
-import { cookies } from "next/headers"
-import { verify } from "jsonwebtoken"
+import { getSession } from "@/lib/auth/getSession"
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
-  const cookieStore = await cookies()
-  const token = cookieStore.get("session_token")?.value
+  // SECURITY: Disable in production to prevent free credit injection
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({
+      error: "Test endpoints are disabled in production for security"
+    }, { status: 403 })
+  }
 
-  if (!token) {
+  const session = await getSession()
+
+  if (!session?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  let user
-  try {
-    user = verify(token, process.env.JWT_SECRET!) as { id: number; role: string }
-    if (user.role !== "learner") {
-      return NextResponse.json({ error: "Forbidden - learners only" }, { status: 403 })
-    }
-  } catch {
-    return NextResponse.json({ error: "Invalid token" }, { status: 401 })
+  // Require admin access even in development
+  if (session.role !== "admin") {
+    return NextResponse.json({
+      error: "Forbidden - Admin only endpoint"
+    }, { status: 403 })
   }
 
-  const { credits } = await req.json()
-  
+  const { credits, targetUserId } = await req.json()
+
   if (!credits || credits <= 0) {
     return NextResponse.json({ error: "Invalid credits amount" }, { status: 400 })
   }
+
+  const userId = targetUserId || session.id
 
   try {
     await db.transaction(async (tx) => {
@@ -35,14 +39,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       const [currentLearner] = await tx
         .select({ creditsBalance: learners.creditsBalance })
         .from(learners)
-        .where(eq(learners.userId, user.id))
+        .where(eq(learners.userId, userId))
         .limit(1)
 
       if (!currentLearner) {
-        throw new Error(`Learner not found for userId: ${user.id}`)
+        throw new Error(`Learner not found for userId: ${userId}`)
       }
-
-      console.log(`[TEST_CREDIT] Before: User ${user.id} has ${currentLearner.creditsBalance} credits`)
 
       // Add credits to learner balance
       await tx
@@ -50,25 +52,25 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         .set({
           creditsBalance: sql`${learners.creditsBalance} + ${credits}`,
         })
-        .where(eq(learners.userId, user.id))
+        .where(eq(learners.userId, userId))
 
       // Record credit transaction
       await tx.insert(creditTransactions).values({
-        userId: user.id,
+        userId: userId,
         type: 'purchase',
         direction: 'credit',
         amount: credits,
         balanceBefore: currentLearner.creditsBalance,
         balanceAfter: currentLearner.creditsBalance + credits,
-        description: `TEST: Manual credit addition - ${credits} credits`,
+        description: `TEST: Manual credit addition by admin ${session.id} - ${credits} credits`,
         metadata: {
           testMode: true,
-          adminGranted: true
+          adminGranted: true,
+          grantedBy: session.id
         },
       })
 
-      console.log(`[TEST_CREDIT] After: User ${user.id} should have ${currentLearner.creditsBalance + credits} credits`)
-    })
+      })
 
     return NextResponse.json({ 
       success: true, 

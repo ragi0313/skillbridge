@@ -6,27 +6,17 @@ import { eq, count, sum, avg, desc, gte, and } from "drizzle-orm"
 
 export async function GET() {
   try {
-    console.log("Dashboard stats: Starting request")
-    
     const session = await getSession()
-    console.log("Dashboard stats: Session retrieved", { hasSession: !!session, role: session?.role })
-    
     if (!session || session.role !== "mentor") {
-      console.log("Dashboard stats: Unauthorized access")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    console.log("Dashboard stats: Looking for mentor with userId", session.id)
-    
     // Find mentor profile
     const mentor = await db.query.mentors.findFirst({
       where: eq(mentors.userId, session.id),
     })
 
-    console.log("Dashboard stats: Mentor found", { hasMentor: !!mentor, mentorId: mentor?.id })
-
     if (!mentor) {
-      console.log("Dashboard stats: No mentor profile found for user", session.id)
       return NextResponse.json({ error: "Mentor profile not found" }, { status: 404 })
     }
     
@@ -41,10 +31,7 @@ export async function GET() {
       .where(eq(users.id, session.id))
       .then(rows => rows[0])
 
-    console.log("Dashboard stats: User found", { hasUser: !!user })
-
     if (!user) {
-      console.log("Dashboard stats: No user found for session", session.id)
       return NextResponse.json({ error: "User not found" }, { status: 404 })
     }
 
@@ -67,8 +54,6 @@ export async function GET() {
     }
 
     try {
-      console.log("Dashboard stats: Fetching session data...")
-
       // Get current date for time-based queries
       const now = new Date()
       const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
@@ -85,8 +70,6 @@ export async function GET() {
         .from(bookingSessions)
         .where(eq(bookingSessions.mentorId, mentor.id))
         .orderBy(desc(bookingSessions.createdAt))
-
-      console.log("Dashboard stats: Retrieved sessions", { count: allSessions.length })
 
       // Calculate stats from the retrieved sessions
       const completedSessions = allSessions.filter(s => s.status === "completed")
@@ -120,20 +103,13 @@ export async function GET() {
         earnedCredits: Math.floor(Number(session.totalCostCredits || 0) * 0.8),
       }))
 
-      console.log("Dashboard stats: Calculated basic stats", {
-        totalSessions: stats.totalSessions,
-        monthlySessions: stats.monthlySessions,
-        upcomingCount: stats.upcomingCount
-      })
-
-    } catch (sessionError) {
+      } catch (sessionError) {
       console.error("Dashboard stats: Error fetching session data:", sessionError)
       // Continue with default values for sessions
     }
 
     try {
       // Get mentor skills
-      console.log("Dashboard stats: Fetching skills...")
       const skillsData = await db
         .select({
           skillName: mentorSkills.skillName,
@@ -148,16 +124,13 @@ export async function GET() {
         )
 
       stats.skills = skillsData
-      console.log("Dashboard stats: Retrieved skills", { count: skillsData.length })
-
-    } catch (skillsError) {
+      } catch (skillsError) {
       console.error("Dashboard stats: Error fetching skills:", skillsError)
       // Continue with empty skills array
     }
 
     try {
       // Get average rating
-      console.log("Dashboard stats: Fetching ratings...")
       const ratingResult = await db
         .select({
           avgRating: avg(mentorReviews.rating),
@@ -166,21 +139,13 @@ export async function GET() {
         .where(eq(mentorReviews.mentorId, mentor.id))
 
       stats.averageRating = Math.round((Number(ratingResult[0]?.avgRating) || 0) * 10) / 10
-      console.log("Dashboard stats: Retrieved rating", { averageRating: stats.averageRating })
-
-    } catch (ratingError) {
+      } catch (ratingError) {
       console.error("Dashboard stats: Error fetching ratings:", ratingError)
       // Continue with default rating
     }
 
     // Calculate profile completeness
     stats.profileCompleteness = calculateProfileCompleteness(mentor)
-
-    console.log("Dashboard stats: Returning final stats", {
-      totalSessions: stats.totalSessions,
-      averageRating: stats.averageRating,
-      completionRate: stats.completionRate
-    })
 
     return NextResponse.json(stats)
 

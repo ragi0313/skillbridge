@@ -35,11 +35,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const paths = sessionWhiteboards[id] || []
     
     // Filter paths to only return those newer than 'since' timestamp
-    const filteredPaths = since > 0 
+    const filteredPaths = since > 0
       ? paths.filter((path: DrawingPath) => path.timestamp > since)
       : paths
-    
-    console.log(`[WHITEBOARD_API] GET /api/sessions/${id}/whiteboard - returning ${filteredPaths.length} paths (since: ${since})`)
+
     return NextResponse.json({ paths: filteredPaths })
   } catch (error) {
     console.error("[WHITEBOARD_API] Error fetching whiteboard data:", error)
@@ -65,16 +64,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (type === 'clear') {
       // Clear all paths
       sessionWhiteboards[id] = []
-      console.log(`[WHITEBOARD_API] POST /api/sessions/${id}/whiteboard - cleared whiteboard by ${userId}`)
-    } else if (type === 'draw' && path) {
+      } else if (type === 'draw' && path) {
       // Add new drawing path
       sessionWhiteboards[id].push(path)
-      console.log(`[WHITEBOARD_API] POST /api/sessions/${id}/whiteboard - added drawing path by ${userId}. Total paths: ${sessionWhiteboards[id].length}`)
-    } else if (type === 'erase' && path) {
+      } else if (type === 'erase' && path) {
       // Handle eraser - in this simple implementation, we'll treat it like drawing
       sessionWhiteboards[id].push(path)
-      console.log(`[WHITEBOARD_API] POST /api/sessions/${id}/whiteboard - added eraser path by ${userId}. Total paths: ${sessionWhiteboards[id].length}`)
-    }
+      }
     
     return NextResponse.json({ success: true, timestamp: Date.now() })
   } catch (error) {
@@ -97,7 +93,6 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       delete sessionWhiteboards[id]
     }
     
-    console.log(`[WHITEBOARD_API] DELETE /api/sessions/${id}/whiteboard - cleared session whiteboard`)
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error("[WHITEBOARD_API] Error deleting whiteboard data:", error)

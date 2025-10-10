@@ -17,11 +17,28 @@ export default function LearnerEmailVerification({ email }: Props) {
 
   const handleResendEmail = async () => {
     setIsResending(true)
-    await new Promise((resolve) => setTimeout(resolve, 2000))
-    setIsResending(false)
-    setResendCount((prev) => prev + 1)
-    setShowSuccess(true)
-    setTimeout(() => setShowSuccess(false), 3000)
+    try {
+      const response = await fetch('/api/auth/resend-verification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        setResendCount((prev) => prev + 1)
+        setShowSuccess(true)
+        setTimeout(() => setShowSuccess(false), 5000)
+      } else {
+        alert(data.error || 'Failed to resend email. Please try again.')
+      }
+    } catch (error) {
+      console.error('Resend error:', error)
+      alert('Failed to resend email. Please try again.')
+    } finally {
+      setIsResending(false)
+    }
   }
 
   return (
@@ -142,15 +159,15 @@ export default function LearnerEmailVerification({ email }: Props) {
               transition={{ delay: 0.7 }}
               className="space-y-4 mb-8"
             >
-              {/* <Button
+              <Button
                 onClick={handleResendEmail}
                 disabled={isResending}
-                className="w-full h-14 text-base bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-[1.02]"
+                className="w-full h-14 text-base bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isResending ? (
                   <>
                     <RefreshCw className="w-5 h-5 mr-2 animate-spin" />
-                    Sending magic link...
+                    Sending verification email...
                   </>
                 ) : (
                   <>
@@ -158,7 +175,12 @@ export default function LearnerEmailVerification({ email }: Props) {
                     Resend activation email
                   </>
                 )}
-              </Button> */}
+              </Button>
+              {resendCount > 0 && (
+                <p className="text-sm text-center text-gray-500">
+                  Email sent {resendCount} {resendCount === 1 ? 'time' : 'times'}
+                </p>
+              )}
             </motion.div>
 
             {/* Footer Actions */}

@@ -148,10 +148,7 @@ export async function validateFileUpload(
 
     // Validate reported MIME type matches detected (if provided)
     if (reportedMimeType && reportedMimeType !== detectedMimeType) {
-      console.warn(
-        `MIME type mismatch: reported='${reportedMimeType}', detected='${detectedMimeType}'. Using detected type.`
-      )
-    }
+      }
 
     // Additional security checks for images
     if (category === 'image') {
@@ -258,11 +255,11 @@ export function getMaxFileSize(mimeType: string): number {
   return 0 // Not allowed
 }
 
-import { getCache } from '@/lib/cache/redis'
+import { getSafeCache } from '@/lib/cache/redis-safe'
 
 // Rate limiting for file uploads (per user)
 export async function checkUploadRateLimit(userId: number, maxUploads: number = 5, windowMs: number = 600000): Promise<boolean> {
-  const cache = getCache()
+  const cache = getSafeCache()
   const key = `upload_rate_limit:${userId}`
   const now = Date.now()
 

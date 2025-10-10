@@ -24,8 +24,6 @@ export function useBookingUpdates({
   const { isConnected } = useSessionUpdates({
     onBookingUpdate: (data) => {
       if (data.type === 'booking_update' && data.bookingId) {
-        console.log('[BOOKING_UPDATE] Received update for booking', data.bookingId, data)
-
         if (data.updateType === 'status_changed' && data.newStatus) {
           onBookingStatusChange?.(data.bookingId, data.newStatus, data as BookingUpdateData)
         }

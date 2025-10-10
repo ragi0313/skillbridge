@@ -133,8 +133,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       })
     } catch (broadcastError) {
       // Log broadcast error but don't fail the request
-      console.warn("Failed to broadcast session update:", broadcastError)
-    }
+      }
 
     return NextResponse.json(result)
   } catch (error: any) {

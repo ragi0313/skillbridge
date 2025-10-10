@@ -331,9 +331,7 @@ async function processXenditWithdrawal(
       }
     }
 
-    console.log(`[XENDIT_WITHDRAWAL] Successfully processed withdrawal ${withdrawalId} via Xendit: ${payout.id}`)
-
-  } catch (error) {
+    } catch (error) {
     console.error(`[XENDIT_WITHDRAWAL] Processing failed for withdrawal ${withdrawalId}:`, error)
     
     // Update withdrawal status to failed

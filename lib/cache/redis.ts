@@ -174,13 +174,11 @@ export function createCacheStore(): CacheStore {
         return initializeRedis()
       }
     } catch (error) {
-      console.warn('Redis initialization failed, falling back to memory store:', error)
       return new MemoryStore()
     }
   }
 
   // Fallback to memory store
-  console.log('Using memory cache store (development mode or Redis unavailable)')
   return new MemoryStore()
 }
 
@@ -191,13 +189,11 @@ function initializeEdgeRedis(): CacheStore | null {
     const edgeClient = createEdgeRedisClient()
 
     if (edgeClient) {
-      console.log('Using Vercel KV (edge-compatible Redis)')
       return new EdgeRedisStore(edgeClient)
     }
 
     return null
   } catch (error) {
-    console.warn('Edge Redis initialization failed:', error)
     return null
   }
 }
@@ -219,12 +215,10 @@ function initializeRedis(): CacheStore {
       })
 
       redis.on('connect', () => {
-        console.log('Redis connected successfully')
-      })
+        })
     }
     return new RedisStore(redis)
   } catch (error) {
-    console.warn('Redis require failed, using memory store:', error)
     return new MemoryStore()
   }
 }

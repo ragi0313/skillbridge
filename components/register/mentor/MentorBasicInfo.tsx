@@ -41,22 +41,33 @@ const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/
 export default function MentorBasicInfo({ formData, setFormData, nextStep, isSettingsPage = false }: Props) {
   const [languageInput, setLanguageInput] = useState("")
 
-  const countryOptions = countries.map((country) => ({
-    value: country.cca2,
-    label: country.name.common,
-  }))
+  // Philippines-only platform, so limit country options to Philippines
+  const countryOptions = countries
+    .filter((country) => country.cca2 === "PH") // Only Philippines
+    .map((country) => ({
+      value: country.cca2,
+      label: country.name.common,
+    }))
 
   const { emailAvailable, isChecking } = useEmailAvailability(formData.email)
   const { showPassword, showConfirmPassword, togglePassword, toggleConfirmPassword } = usePasswordVisibility()
 
   useEffect(() => {
-    if (!formData.timezone) {
-      const defaultTz = getDefaultTimezone()
-      if (defaultTz) {
-        setFormData({ timezone: defaultTz })
-      }
+    // Auto-set Philippines as default country and timezone since platform is Philippines-only
+    const updates: Partial<MentorBasicInfoFormData> = {}
+
+    if (!formData.country) {
+      updates.country = "PH" // Philippines
     }
-  }, [formData.timezone, setFormData])
+
+    if (!formData.timezone) {
+      updates.timezone = getDefaultTimezone() // Asia/Manila
+    }
+
+    if (Object.keys(updates).length > 0) {
+      setFormData(updates)
+    }
+  }, [formData.country, formData.timezone, setFormData])
 
   const addLanguage = () => {
     if (languageInput.trim() && !formData.languages.includes(languageInput.trim())) {
@@ -80,11 +91,29 @@ export default function MentorBasicInfo({ formData, setFormData, nextStep, isSet
     }
   }
 
+  const validateName = (name: string = "") => {
+    const trimmedName = name.trim()
+    const nameRegex = /^[a-zA-ZÀ-ÿ\u0100-\u017F\u0180-\u024F\u1E00-\u1EFF\s'-]+$/
+    return trimmedName.length >= 2 &&
+           trimmedName.length <= 50 &&
+           nameRegex.test(trimmedName) &&
+           !trimmedName.match(/^[\s'-]+$/)
+  }
+
+  const validateLastName = (lastName: string = "") => {
+    const trimmed = lastName.trim()
+    const lastNameRegex = /^[a-zA-ZÀ-ÿ\u0100-\u017F\u0180-\u024F\u1E00-\u1EFF'-]+$/
+    return trimmed.length >= 2 &&
+           trimmed.length <= 50 &&
+           lastNameRegex.test(trimmed) &&
+           !/^[\'\-]+$/.test(trimmed)
+  }
+
   const isFormValid = () => {
-    const basicValidation = 
+    const basicValidation =
       formData.profilePicture &&
-      formData.firstName &&
-      formData.lastName &&
+      validateName(formData.firstName) &&
+      validateLastName(formData.lastName) &&
       emailRegex.test(formData.email) &&
       emailAvailable === true &&
       formData.country &&
@@ -127,10 +156,21 @@ export default function MentorBasicInfo({ formData, setFormData, nextStep, isSet
           <Input
             id="firstName"
             value={formData.firstName}
-            onChange={(e) => setFormData({ firstName: e.target.value })}
-            className="h-12"
+            onChange={(e) => {
+              const value = e.target.value
+              // Only allow letters, spaces, hyphens, and apostrophes
+              const filteredValue = value.replace(/[^a-zA-ZÀ-ÿ\u0100-\u017F\u0180-\u024F\u1E00-\u1EFF\s'-]/g, '')
+              setFormData({ firstName: filteredValue })
+            }}
+            className={`h-12 ${
+              formData.firstName && !validateName(formData.firstName) ? "border-red-500 focus:border-red-500" : ""
+            }`}
             disabled={isSettingsPage}
+            maxLength={50}
           />
+          {formData.firstName && !validateName(formData.firstName) && !isSettingsPage && (
+            <p className="text-sm text-red-600 mt-1">Name must contain only letters (2-50 characters).</p>
+          )}
         </div>
         <div>
           <Label htmlFor="lastName" className="text-sm font-semibold mb-2">
@@ -139,10 +179,21 @@ export default function MentorBasicInfo({ formData, setFormData, nextStep, isSet
           <Input
             id="lastName"
             value={formData.lastName}
-            onChange={(e) => setFormData({ lastName: e.target.value })}
-            className="h-12"
+            onChange={(e) => {
+              const value = e.target.value
+              // Only allow letters, hyphens, and apostrophes (no spaces for last name)
+              const filteredValue = value.replace(/[^a-zA-ZÀ-ÿ\u0100-\u017F\u0180-\u024F\u1E00-\u1EFF'-]/g, '')
+              setFormData({ lastName: filteredValue })
+            }}
+            className={`h-12 ${
+              formData.lastName && !validateLastName(formData.lastName) ? "border-red-500 focus:border-red-500" : ""
+            }`}
             disabled={isSettingsPage}
+            maxLength={50}
           />
+          {formData.lastName && !validateLastName(formData.lastName) && !isSettingsPage && (
+            <p className="text-sm text-red-600 mt-1">Last name must contain only letters (2-50 characters, no spaces).</p>
+          )}
         </div>
       </div>
 

@@ -25,6 +25,9 @@ export function Header() {
             <a href="/pricing" className="text-gray-600 hover:bg-gradient-to-r hover:from-blue-500 hover:to-purple-500 hover:bg-clip-text hover:text-transparent transition-colors font-medium text-sm">
               Pricing
             </a>
+            <a href="/faqs" className="text-gray-600 hover:bg-gradient-to-r hover:from-blue-500 hover:to-purple-500 hover:bg-clip-text hover:text-transparent transition-colors font-medium text-sm">
+              FAQs
+            </a>
           </div>
 
           <div className="hidden lg:flex items-center space-x-3">
@@ -63,6 +66,13 @@ export function Header() {
                 onClick={() => setIsMenuOpen(false)}
               >
                 Pricing
+              </a>
+              <a
+                href="/faqs"
+                className="block text-gray-600 hover:bg-gradient-to-r hover:from-blue-500 hover:to-purple-500 hover:bg-clip-text hover:text-transparent transition-colors font-medium text-sm py-2"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                FAQs
               </a>
               <div className="pt-4 border-t border-gray-100 space-y-3">
                  <Link href={'/register'}>

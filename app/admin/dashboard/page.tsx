@@ -1,49 +1,58 @@
 "use client"
 
-import { useState } from "react"
-import AdminSidebar from "@/components/admin/AdminSidebar"
+import { useState, useRef } from "react"
+import AdminSidebar, { AdminSidebarRef } from "@/components/admin/AdminSidebar"
 import AdminTopbar from "@/components/admin/AdminTopbar"
+import AdminDashboard from "@/components/admin/AdminDashboard"
 import PendingMentorApproval from "@/components/admin/PendingMentorApproval"
 import SkillCategoriesManagementPage from "@/components/admin/skill-categories/SkillCategoriesManagement"
 import PlatformSettings from "@/components/admin/PlatformSettings"
 import UserManagementPage from "@/components/admin/user-management/UserManagement"
+import AuditLog from "@/components/admin/AuditLog"
+import SessionLogs from "@/components/admin/SessionLogs"
+import SupportTickets from "@/components/admin/SupportTickets"
+import ReportsFeedback from "@/components/admin/ReportsFeedback"
 
-export default function AdminDashboard() {
-  const [activeSection, setActiveSection] = useState("pending-mentors")
+export default function AdminDashboardPage() {
+  const [activeSection, setActiveSection] = useState("dashboard")
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const sidebarRef = useRef<AdminSidebarRef>(null)
 
   const renderContent = () => {
     switch (activeSection) {
+      case "dashboard":
+        return <AdminDashboard />
       case "pending-mentors":
-        return <PendingMentorApproval />
+        return <PendingMentorApproval onMentorUpdate={() => sidebarRef.current?.refreshCounts()} />
       case "user-management":
         return <UserManagementPage />
       case "skill-categories":
         return <SkillCategoriesManagementPage />
-      // case "users":
-      //   return <UsersManagement />
+      case "session-logs":
+        return <SessionLogs />
+      case "support-tickets":
+        return <SupportTickets onTicketUpdate={() => sidebarRef.current?.refreshCounts()} />
+      case "audit-log":
+        return <AuditLog />
+      case "reports-feedback":
+        return <ReportsFeedback onReportUpdate={() => sidebarRef.current?.refreshCounts()} />
+      case "settings":
+        return <PlatformSettings />
       // case "learner-insights":
       //   return <LearnerInsights />
       // case "mentor-directory":
       //   return <MentorDirectory />
-      // case "session-logs":
-      //   return <SessionLogs />
-      // case "reports-feedback":
-      //   return <ReportsFeedback />
       // case "announcements":
       //   return <Announcements />
-      // case "audit-log":
-      //   return <AuditLog />
-      case "settings":
-        return <PlatformSettings />
       default:
-        return <PendingMentorApproval />
+        return <AdminDashboard />
     }
   }
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
       <AdminSidebar
+        ref={sidebarRef}
         activeSection={activeSection}
         setActiveSection={setActiveSection}
         isOpen={sidebarOpen}

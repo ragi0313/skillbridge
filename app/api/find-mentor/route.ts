@@ -9,37 +9,37 @@ export async function GET(request: NextRequest) {
     const categories = searchParams.get("categories")?.split(",").filter(Boolean) || []
     const search = searchParams.get("search")?.trim() || ""
 
-    console.log("API: Received search:", search)
-    console.log("API: Received categories:", categories)
-
     // Build WHERE conditions array
     const whereConditions: any[] = []
 
     // Search condition - Enhanced with partial word matching and case-insensitive search
+    // SECURITY: Use proper parameterization to prevent SQL injection
     if (search) {
       // Split search into individual words for partial matching
       const searchWords = search.toLowerCase().split(/\s+/).filter(word => word.length > 0)
-      
-      const searchConditions = searchWords.map(word => 
-        or(
+
+      const searchConditions = searchWords.map(word => {
+        // Use parameterized pattern instead of string interpolation
+        const pattern = `%${word}%`
+        return or(
           // Search in mentor name (supports partial word matching)
-          ilike(sql`LOWER(CONCAT(${users.firstName}, ' ', ${users.lastName}))`, `%${word}%`),
+          sql`LOWER(CONCAT(${users.firstName}, ' ', ${users.lastName})) ILIKE ${pattern}`,
           // Search in professional title
-          ilike(sql`LOWER(${mentors.professionalTitle})`, `%${word}%`),
+          sql`LOWER(${mentors.professionalTitle}) ILIKE ${pattern}`,
           // Search in bio
-          ilike(sql`LOWER(${mentors.bio})`, `%${word}%`),
+          sql`LOWER(${mentors.bio}) ILIKE ${pattern}`,
           // Search in skills
-          ilike(sql`LOWER(${mentorSkills.skillName})`, `%${word}%`),
+          sql`LOWER(${mentorSkills.skillName}) ILIKE ${pattern}`,
           // Search in country
-          ilike(sql`LOWER(${mentors.country})`, `%${word}%`)
+          sql`LOWER(${mentors.country}) ILIKE ${pattern}`
         )
-      )
-      
+      })
+
       // All search words must match (AND logic for multi-word searches)
-      const searchCondition = searchConditions.length === 1 
-        ? searchConditions[0] 
+      const searchCondition = searchConditions.length === 1
+        ? searchConditions[0]
         : and(...searchConditions)
-      
+
       whereConditions.push(searchCondition)
     }
 
@@ -182,8 +182,6 @@ export async function GET(request: NextRequest) {
         // .having(sql`COUNT(${mentorSkills.id}) > 0`)
     }
 
-    console.log("API: Found mentors:", mentorsData.length)
-
     // Apply search-based sorting if search is active
     if (search && mentorsData.length > 0) {
       mentorsData = mentorsData.sort((a, b) => {
@@ -199,9 +197,9 @@ export async function GET(request: NextRequest) {
         const ratingB = Number(b.rating) || 0
         return ratingB - ratingA
       })
-      
-      console.log("API: Applied search ranking, top scores:", 
-        mentorsData.slice(0, 3).map(m => ({ name: m.name, score: m.searchScore }))
+
+      console.log('[FIND_MENTOR] Search scoring results:',
+        mentorsData.map(m => ({ name: m.name, score: m.searchScore }))
       )
     }
 
@@ -252,7 +250,6 @@ export async function GET(request: NextRequest) {
       return result
     })
     
-    console.log("API: Returning transformed mentors:", transformedMentors.length)
     return NextResponse.json(transformedMentors)
   } catch (error) {
     console.error("Error fetching mentors:", error)

@@ -99,11 +99,11 @@ const AppealPage = () => {
                 <h4 className="font-medium text-blue-900">Prefer Email?</h4>
                 <p className="text-sm text-blue-700 mt-1">
                   You can also email us directly at{" "}
-                  <a 
-                    href={`mailto:${process.env.NEXT_PUBLIC_ADMIN_EMAIL || 'admin@skillbridge.com'}`}
+                  <a
+                    href={`mailto:${process.env.NEXT_PUBLIC_ADMIN_EMAIL || 'admin@bridgementor.com'}`}
                     className="underline font-medium"
                   >
-                    {process.env.NEXT_PUBLIC_ADMIN_EMAIL || 'admin@skillbridge.com'}
+                    {process.env.NEXT_PUBLIC_ADMIN_EMAIL || 'admin@bridgementor.com'}
                   </a>
                 </p>
               </div>

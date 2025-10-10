@@ -23,14 +23,14 @@ const Logo = ({
         >
           <Image
             src="/logo.png"
-            alt="SkillBridge Logo"
+            alt="BridgeMentor Logo"
             className="object-contain rounded"
             fill
             priority
           />
         </div>
         <span className={`font-bold tracking-wide ${fontSize} ${textColor}`}>
-          SkillBridge
+          BridgeMentor
         </span>
       </Link>
     </div>

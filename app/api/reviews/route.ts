@@ -7,19 +7,14 @@ import { getSession } from "@/lib/auth/getSession"
 
 export async function POST(request: NextRequest) {
   try {
-    console.log("[DEBUG] Reviews API called")
-    
     const session = await getSession()
     if (!session?.id || session.role !== "learner") {
-      console.log("[ERROR] Unauthorized access - learners only")
       return NextResponse.json({ error: "Unauthorized - learners only can review mentors" }, { status: 401 })
     }
 
     const body = await request.json()
     const { sessionId, rating, reviewText } = body
     
-    console.log("[DEBUG] Review submission:", { sessionId, rating, hasReviewText: !!reviewText, userId: session.id })
-
     // Validate required fields
     if (!sessionId) {
       return NextResponse.json({ error: "Session ID is required" }, { status: 400 })
@@ -53,8 +48,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    console.log("[DEBUG] Starting database queries...")
-
     // Get session details efficiently with single query
     const [bookingSession] = await db
       .select({
@@ -71,20 +64,11 @@ export async function POST(request: NextRequest) {
       .limit(1)
 
     if (!bookingSession) {
-      console.log("[ERROR] Session not found:", sessionIdInt)
       return NextResponse.json({ error: "Session not found" }, { status: 404 })
     }
 
-    console.log("[DEBUG] Session found:", { 
-      sessionId: bookingSession.id, 
-      status: bookingSession.status,
-      learnerUserId: bookingSession.learnerUserId,
-      currentUserId: session.id 
-    })
-
     // Verify user is the learner for this session
     if (bookingSession.learnerUserId !== session.id) {
-      console.log("[ERROR] Unauthorized access to session")
       return NextResponse.json({ error: "You can only review sessions you participated in" }, { status: 403 })
     }
 
@@ -115,8 +99,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log("[DEBUG] Creating mentor review...")
-
     // Create the mentor review
     const [review] = await db
       .insert(mentorReviews)
@@ -128,8 +110,6 @@ export async function POST(request: NextRequest) {
         rating: ratingInt,
       })
       .returning({ id: mentorReviews.id })
-
-    console.log("[DEBUG] Mentor review created successfully:", review.id)
 
     return NextResponse.json(
       { 

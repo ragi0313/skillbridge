@@ -38,8 +38,6 @@ class SessionTerminationService {
           )
         )
 
-      console.log(`Found ${expiredSessions.length} expired sessions to terminate`)
-
       for (const { session, learner, mentor } of expiredSessions) {
         const result = await this.terminateSession(
           session.id, 
@@ -223,8 +221,6 @@ class SessionTerminationService {
       result.paymentProcessed = true
       result.status = updateData.status
 
-      console.log(`Session ${sessionId} terminated: ${reason}`)
-
       return result
     } catch (error) {
       console.error(`Error terminating session ${sessionId}:`, error)
@@ -272,8 +268,7 @@ class SessionTerminationService {
 
         default:
           // For other reasons (force_disconnect, etc.), handle case by case
-          console.log(`No payment processing defined for reason: ${reason}`)
-      }
+          }
     } catch (error) {
       console.error('Error processing termination payments:', error)
       throw error

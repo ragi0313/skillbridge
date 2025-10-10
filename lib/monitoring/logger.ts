@@ -31,7 +31,7 @@ class Logger {
   private currentLevel: LogLevelValue
   private service: string
 
-  constructor(service: string = 'skillbridge', level?: LogLevelKey) {
+  constructor(service: string = 'bridgementor', level?: LogLevelKey) {
     this.service = service
     this.currentLevel = LOG_LEVELS[level || this.getDefaultLogLevel()]
   }
@@ -91,7 +91,6 @@ class Logger {
         console.error(formattedMessage)
         break
       case 'WARN':
-        console.warn(formattedMessage)
         break
       case 'INFO':
         console.info(formattedMessage)

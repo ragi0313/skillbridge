@@ -61,7 +61,6 @@ export const useConversations = ({ userId, onError }: UseConversationsOptions = 
       if (!response.ok) {
         // Handle 401 (unauthorized) silently for unauthenticated users
         if (response.status === 401) {
-          console.log('User not authenticated, skipping conversation fetch')
           return
         }
         throw new Error('Failed to fetch conversations')

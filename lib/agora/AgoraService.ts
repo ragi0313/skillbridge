@@ -34,11 +34,11 @@ class AgoraService {
     }
 
     if (this.appCertificate.length !== 32) {
-      console.error(`Invalid AGORA_APP_CERTIFICATE format - expected 32 chars, got ${this.appCertificate.length}`) 
+      console.error(`Invalid AGORA_APP_CERTIFICATE format - expected 32 chars, got ${this.appCertificate.length}`)
       throw new Error("Invalid AGORA_APP_CERTIFICATE format")
     }
 
-    console.log(`[AGORA_SERVICE] Initialized with App ID: ${this.appId.substring(0, 8)}...`)
+    console.log(`[AGORA_SERVICE] Initialized with app ID: ${this.appId.substring(0, 8)}...`)
   }
 
   async createRoom(sessionId: string, expirationTime?: Date): Promise<AgoraRoom> {
@@ -46,8 +46,6 @@ class AgoraService {
     const timestamp = Date.now().toString(36) // Base36 for shorter string
     const channel = `s${sessionId}_${timestamp}`
     const expiresAt = expirationTime || new Date(Date.now() + 4 * 60 * 60 * 1000) // 4 hours
-
-    console.log(`[AGORA_SERVICE] Creating room with channel: ${channel}`)
 
     return {
       channel,
@@ -89,11 +87,7 @@ class AgoraService {
         throw new Error(`Invalid expiration time: ${privilegeExpiredTs} <= ${currentTimestamp}`)
       }
 
-      console.log(`[AGORA_SERVICE] Generating RTC token for:`, {
-        channel,
-        uid,
-        role,
-        originalUserId: userId,
+      console.log(`[AGORA_SERVICE] Token expiration details:`, {
         currentTime: new Date(currentTimestamp * 1000).toISOString(),
         expiresAt: new Date(privilegeExpiredTs * 1000).toISOString(),
         secondsUntilExpiry: privilegeExpiredTs - currentTimestamp
@@ -112,9 +106,8 @@ class AgoraService {
         throw new Error("Generated RTC token failed validation")
       }
 
-      console.log(`[AGORA_SERVICE] Successfully generated RTC token:`, {
-        rtcTokenLength: rtcToken.length,
-        rtcTokenPrefix: rtcToken.substring(0, 10) + "...",
+      console.log(`[AGORA_SERVICE] RTC token successfully generated:`, {
+        tokenPrefix: rtcToken.substring(0, 10) + "...",
         uid,
         channel
       })
@@ -136,7 +129,6 @@ class AgoraService {
       // If userId is already numeric and valid, use it directly
       const numericUserId = parseInt(userId)
       if (!isNaN(numericUserId) && numericUserId > 0 && numericUserId < 2147483647) {
-        console.log(`[AGORA_SERVICE] Using numeric userId as UID: ${numericUserId}`)
         return numericUserId
       }
 
@@ -152,14 +144,12 @@ class AgoraService {
       // Use modulo to keep in safe range
       const uid = (hash % 2000000000) + 1000 // Range: 1000 to 2000001000
       
-      console.log(`[AGORA_SERVICE] Generated UID ${uid} from userId: ${userId}`)
       return uid
 
     } catch (error) {
       console.error("[AGORA_SERVICE] Error generating UID:", error)
       // Fallback to random UID
       const fallbackUid = Math.floor(Math.random() * 1000000) + 1000
-      console.log(`[AGORA_SERVICE] Using fallback UID: ${fallbackUid}`)
       return fallbackUid
     }
   }
@@ -192,8 +182,8 @@ class AgoraService {
       // Both mentors and learners should be able to publish and subscribe
       const agoraRole = RtcRole.PUBLISHER
 
-      console.log(`[AGORA_SERVICE] Building RTC token with parameters:`, {
-        appId: this.appId.substring(0, 8) + "...",
+      console.log(`[AGORA_SERVICE] Building RTC token with:`, {
+        appIdPrefix: this.appId.substring(0, 8) + "...",
         appCertLength: this.appCertificate.length,
         channel,
         uid,
@@ -223,14 +213,10 @@ class AgoraService {
         throw new Error(`RTC token has unexpected prefix: ${token.substring(0, 3)}`)
       }
 
-      console.log(`[AGORA_SERVICE] Successfully built RTC token:`, {
-        channel,
-        uid,
-        role,
-        tokenLength: token.length,
+      console.log(`[AGORA_SERVICE] RTC token built successfully:`, {
         tokenPrefix: token.substring(0, 10) + "..."
       })
-      
+
       return token
 
     } catch (error) {
@@ -242,24 +228,21 @@ class AgoraService {
     }
   }
 
-
   async validateToken(token: string, channel: string): Promise<boolean> {
     try {
       // Basic validation - check if token contains expected components
       if (!token || !channel) {
-        console.log("[AGORA_SERVICE] Token validation failed: missing token or channel")
         return false
       }
 
       // Agora tokens should be long and start with specific prefixes
       const isValidFormat = token.length > 50 && (token.startsWith("006") || token.startsWith("007"))
-      
-      console.log(`[AGORA_SERVICE] Token validation result: ${isValidFormat}`, {
-        tokenLength: token.length,
-        tokenPrefix: token.substring(0, 3),
+
+      console.log(`[AGORA_SERVICE] Token validation result:`, {
+        isValid: isValidFormat,
         channel
       })
-      
+
       return isValidFormat
 
     } catch (error) {
@@ -289,8 +272,6 @@ class AgoraService {
         }
       }
 
-      console.warn(`[AGORA_SERVICE] Failed to get channel info for ${channel}, status: ${response.status}`)
-      
       // Fallback if API call fails
       return {
         channel,
@@ -309,12 +290,9 @@ class AgoraService {
 
   async endCall(channel: string): Promise<void> {
     try {
-      console.log(`[AGORA_SERVICE] Ending call for channel: ${channel}`)
-
       // Optional: Use Agora's RESTful API to kick all users from channel
       await this.kickAllUsersFromChannel(channel)
-      
-      console.log(`[AGORA_SERVICE] Successfully ended call for channel: ${channel}`)
+      console.log(`[AGORA_SERVICE] Call ended for channel: ${channel}`)
     } catch (error) {
       console.error("[AGORA_SERVICE] Error ending call:", error)
     }
@@ -322,8 +300,6 @@ class AgoraService {
 
   async endRoom(channel: string, reason: string = 'session_ended'): Promise<void> {
     try {
-      console.log(`[AGORA_SERVICE] Ending room for channel: ${channel}, reason: ${reason}`)
-      
       await this.endCall(channel)
       
     } catch (error) {
@@ -350,9 +326,9 @@ class AgoraService {
         })
 
         if (response.ok) {
-          console.log(`[AGORA_SERVICE] Successfully cleared channel: ${channel}`)
+          console.log(`[AGORA_SERVICE] Successfully kicked all users from channel: ${channel}`)
         } else {
-          console.warn(`[AGORA_SERVICE] Failed to clear channel: ${channel}, status: ${response.status}`)
+          console.warn(`[AGORA_SERVICE] Failed to kick users from channel: ${channel}`)
         }
       }
     } catch (error) {
@@ -385,7 +361,6 @@ class AgoraService {
         return data.resourceId
       }
 
-      console.warn(`[AGORA_SERVICE] Failed to start recording, status: ${response.status}`)
       return null
     } catch (error) {
       console.error("[AGORA_SERVICE] Error starting recording:", error)
@@ -444,12 +419,9 @@ class AgoraService {
       const testChannel = `test_${Date.now()}`
       const testUserId = "test_user_123"
       
-      console.log("[AGORA_SERVICE] Testing connection...")
-      
       const tokenData = await this.generateToken(testChannel, testUserId, "learner")
       const isRTCValid = await this.validateToken(tokenData.token, tokenData.channel)
       
-      console.log(`[AGORA_SERVICE] Connection test result: RTC=${isRTCValid}`)
       return isRTCValid
     } catch (error) {
       console.error("[AGORA_SERVICE] Connection test failed:", error)

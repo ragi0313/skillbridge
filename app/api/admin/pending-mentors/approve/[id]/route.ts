@@ -5,6 +5,10 @@ import { users, mentors, mentorSkills, mentorSkillCategories, pendingMentors, pe
 } from "@/db/schema"
 import { eq, sql } from "drizzle-orm"
 import { NextResponse } from "next/server"
+import { sendMentorApprovedEmail } from "@/lib/email/approvedMail"
+import { getSession } from "@/lib/auth/getSession"
+import { logAdminAction, AUDIT_ACTIONS, ENTITY_TYPES, extractRequestInfo } from "@/lib/admin/audit-log"
+import { withRateLimit } from "@/lib/middleware/rate-limit"
 
 // Helper to convert "09:00 AM" to "09:00" (24-hour format)
 function to24Hour(time: string): string {
@@ -16,7 +20,15 @@ function to24Hour(time: string): string {
   return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`
 }
 
-export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handleApproveMentor(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  // SECURITY: Check admin authentication
+  const session = await getSession()
+  if (!session || session.role !== 'admin') {
+    return NextResponse.json({
+      error: 'Unauthorized - Admin access required'
+    }, { status: 401 })
+  }
+
   const { id: idString } = await params
   const id = Number(idString)
 
@@ -148,6 +160,30 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       )
     }
 
+    // Send approval email
+    await sendMentorApprovedEmail(pending.email, `${pending.firstName} ${pending.lastName}`)
+
+    // Log admin action
+    const { ipAddress, userAgent } = extractRequestInfo(request as any)
+    await logAdminAction({
+      adminId: session.id,
+      action: AUDIT_ACTIONS.APPROVE_MENTOR,
+      entityType: ENTITY_TYPES.MENTOR,
+      entityId: mentor.id,
+      description: `Admin ${session.id} approved mentor: ${pending.firstName} ${pending.lastName} (${pending.email})`,
+      metadata: {
+        pendingMentorId: id,
+        mentorId: mentor.id,
+        userId: user.id,
+        email: pending.email,
+        skillCount: pendingSkills.length,
+        categoryAssignments: skillCategoryAssignments.length
+      },
+      ipAddress,
+      userAgent,
+      severity: 'info'
+    })
+
     // Cleanup
     await db.delete(pendingMentorSkills).where(eq(pendingMentorSkills.mentorId, id))
     await db.delete(pendingMentorAvailability).where(eq(pendingMentorAvailability.mentorId, id))
@@ -159,3 +195,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Failed to approve mentor" }, { status: 500 })
   }
 }
+
+// Apply rate limiting to prevent abuse
+export const POST = withRateLimit('admin', handleApproveMentor)

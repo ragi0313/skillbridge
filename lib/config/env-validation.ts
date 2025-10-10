@@ -19,8 +19,10 @@ const envSchema = z.object({
   NEXT_PUBLIC_PUSHER_KEY: z.string().optional(),
   NEXT_PUBLIC_PUSHER_CLUSTER: z.string().optional(),
 
-  // File storage
-  BLOB_READ_WRITE_TOKEN: z.string().min(1, 'BLOB_READ_WRITE_TOKEN is required for file uploads'),
+  // File storage (Cloudinary - required)
+  CLOUDINARY_CLOUD_NAME: z.string().min(1, 'CLOUDINARY_CLOUD_NAME is required for file uploads'),
+  CLOUDINARY_API_KEY: z.string().min(1, 'CLOUDINARY_API_KEY is required for file uploads'),
+  CLOUDINARY_API_SECRET: z.string().min(1, 'CLOUDINARY_API_SECRET is required for file uploads'),
 
   // Cron jobs
   CRON_SECRET: z.string().min(32, 'CRON_SECRET must be at least 32 characters long'),
@@ -29,7 +31,7 @@ const envSchema = z.object({
   XENDIT_SECRET_KEY: z.string().min(1, 'XENDIT_SECRET_KEY is required'),
   XENDIT_PLATFORM_ACCOUNT_NUMBER: z.string().min(1, 'XENDIT_PLATFORM_ACCOUNT_NUMBER is required'),
   XENDIT_PLATFORM_BANK_CODE: z.string().default('BPI'),
-  XENDIT_PLATFORM_ACCOUNT_NAME: z.string().default('SkillBridge Inc'),
+  XENDIT_PLATFORM_ACCOUNT_NAME: z.string().default('BridgeMentor Inc'),
   XENDIT_WEBHOOK_TOKEN: z.string().optional(),
 
   // Agora (for video calls)
@@ -54,7 +56,7 @@ export type EnvConfig = z.infer<typeof envSchema>
 export class EnvironmentValidator {
   private static readonly OPTIONAL_VARS_WITH_DEFAULTS = {
     'XENDIT_PLATFORM_BANK_CODE': 'BPI',
-    'XENDIT_PLATFORM_ACCOUNT_NAME': 'SkillBridge Inc',
+    'XENDIT_PLATFORM_ACCOUNT_NAME': 'BridgeMentor Inc',
     'NODE_ENV': 'development'
   }
 
@@ -71,16 +73,16 @@ export class EnvironmentValidator {
 
       // Additional production checks
       if (config.NODE_ENV === 'production') {
-        // Check for production-critical optional variables
+        // Check for production-critical required variables
         if (!config.REDIS_URL && !config.KV_URL) {
-          warnings.push('No Redis/KV URL provided. Rate limiting will use memory store (not recommended for production)')
+          throw new Error('Redis/KV URL is required in production for email queue and rate limiting')
         }
 
-        if (!config.SMTP_HOST) {
-          warnings.push('No SMTP configuration provided. Email functionality will be disabled')
+        if (!config.SMTP_HOST || !config.SMTP_USER || !config.SMTP_PASS) {
+          throw new Error('SMTP configuration (SMTP_HOST, SMTP_USER, SMTP_PASS) is required in production')
         }
 
-        if (!config.AGORA_APP_ID) {
+        if (!config.AGORA_APP_ID || !config.AGORA_APP_CERTIFICATE) {
           warnings.push('No Agora configuration provided. Video call functionality will be disabled')
         }
 
@@ -89,9 +91,8 @@ export class EnvironmentValidator {
           warnings.push('JWT_SECRET should be at least 64 characters in production')
         }
 
-
         // Check that we're not using default values in production
-        if (config.XENDIT_PLATFORM_ACCOUNT_NAME === 'SkillBridge Inc') {
+        if (config.XENDIT_PLATFORM_ACCOUNT_NAME === 'BridgeMentor Inc') {
           warnings.push('Using default XENDIT_PLATFORM_ACCOUNT_NAME in production')
         }
       }
@@ -124,11 +125,8 @@ export class EnvironmentValidator {
   static logEnvironmentStatus(): void {
     const { isValid, config, errors, warnings } = this.validateEnvironment()
 
-    console.log('[ENV_VALIDATION] Environment validation results:')
-
     if (isValid && config) {
-      console.log('✅ All required environment variables are present')
-      console.log(`🏗️  Environment: ${config.NODE_ENV}`)
+      console.log('✅ Environment validation passed')
     } else {
       console.error('❌ Environment validation failed:')
       errors?.forEach(error => console.error(`  - ${error}`))
@@ -143,7 +141,7 @@ export class EnvironmentValidator {
     if (isValid && config) {
       for (const [varName, defaultValue] of Object.entries(this.OPTIONAL_VARS_WITH_DEFAULTS)) {
         if (!process.env[varName]) {
-          console.log(`📝 Using default for ${varName}: ${defaultValue}`)
+          console.log(`ℹ️  Using default for ${varName}: ${defaultValue}`)
         }
       }
     }
@@ -160,9 +158,6 @@ export class EnvironmentValidator {
       if (process.env.NODE_ENV === 'production') {
         process.exit(1)
       } else {
-        console.warn('[ENV_VALIDATION] Continuing in development mode with validation errors')
-        console.warn('[ENV_VALIDATION] Please check your .env file and ensure all required variables are set')
-
         // In development, return a minimal config to allow the app to start
         // This allows developers to see what's missing in the logs
         return {
@@ -175,12 +170,14 @@ export class EnvironmentValidator {
           PUSHER_CLUSTER: process.env.PUSHER_CLUSTER,
           NEXT_PUBLIC_PUSHER_KEY: process.env.NEXT_PUBLIC_PUSHER_KEY,
           NEXT_PUBLIC_PUSHER_CLUSTER: process.env.NEXT_PUBLIC_PUSHER_CLUSTER,
-          BLOB_READ_WRITE_TOKEN: process.env.BLOB_READ_WRITE_TOKEN || '',
+          CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME || '',
+          CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY || '',
+          CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET || '',
           CRON_SECRET: process.env.CRON_SECRET || 'dev-cron-secret',
           XENDIT_SECRET_KEY: process.env.XENDIT_SECRET_KEY || '',
           XENDIT_PLATFORM_ACCOUNT_NUMBER: process.env.XENDIT_PLATFORM_ACCOUNT_NUMBER || '',
           XENDIT_PLATFORM_BANK_CODE: process.env.XENDIT_PLATFORM_BANK_CODE || 'BPI',
-          XENDIT_PLATFORM_ACCOUNT_NAME: process.env.XENDIT_PLATFORM_ACCOUNT_NAME || 'SkillBridge Inc',
+          XENDIT_PLATFORM_ACCOUNT_NAME: process.env.XENDIT_PLATFORM_ACCOUNT_NAME || 'BridgeMentor Inc',
           XENDIT_WEBHOOK_TOKEN: process.env.XENDIT_WEBHOOK_TOKEN,
           AGORA_APP_ID: process.env.AGORA_APP_ID,
           AGORA_APP_CERTIFICATE: process.env.AGORA_APP_CERTIFICATE,
@@ -250,10 +247,10 @@ export class EnvironmentValidator {
     }
 
     try {
-      // Storage check (Vercel Blob)
+      // Storage check (Cloudinary)
       const config = this.ensureValidEnvironment()
-      if (config.BLOB_READ_WRITE_TOKEN) {
-        health.storage = true // Basic check - token exists
+      if (config.CLOUDINARY_CLOUD_NAME && config.CLOUDINARY_API_KEY && config.CLOUDINARY_API_SECRET) {
+        health.storage = true // Basic check - credentials exist
       }
     } catch (error) {
       console.error('Storage health check failed:', error)

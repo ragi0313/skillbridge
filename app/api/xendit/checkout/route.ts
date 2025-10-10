@@ -43,7 +43,7 @@ async function handleCheckout(req: NextRequest): Promise<NextResponse> {
         externalId: `credit_purchase_${user.id}_${Date.now()}`,
         amount: creditPack.price,
         payerEmail: 'customer@example.com', // Required field
-        description: `SkillBridge Credit Purchase - ${creditPack.name}`,
+        description: `BridgeMentor Credit Purchase - ${creditPack.name}`,
         invoiceDuration: 86400, // 24 hours
         successRedirectUrl: `${process.env.NEXT_PUBLIC_BASE_URL}/learner/dashboard`,
         failureRedirectUrl: `${process.env.NEXT_PUBLIC_BASE_URL}/pricing`,
@@ -58,7 +58,7 @@ async function handleCheckout(req: NextRequest): Promise<NextResponse> {
           userId: user.id.toString(),
           credits: creditPack.credits.toString(),
           packageId: packageId,
-          platform: 'skillbridge'
+          platform: 'bridgementor'
         },
         // Enable Philippine payment methods
         paymentMethods: [

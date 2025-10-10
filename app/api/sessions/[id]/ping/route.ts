@@ -24,8 +24,6 @@ export async function POST(
       return NextResponse.json({ error: "Invalid session ID" }, { status: 400 })
     }
 
-    console.log(`[PING] Processing ping for session ${sessionId} from user ${session.id}`)
-
     const sessionQuery = await db
       .select({
         id: bookingSessions.id,
@@ -75,8 +73,6 @@ export async function POST(
 
     // Allow ping for any non-terminal session, even if user hasn't technically "joined" yet
     // This handles cases where user is in waiting room or about to join
-    console.log(`[PING] Session ${sessionId} ping from ${isLearner ? 'learner' : 'mentor'}, status: ${sessionData.status}, userInSession: ${isUserCurrentlyInSession}`)
-
     // Update lastActiveAt timestamp to show user is actively in the session
     const now = new Date()
     const updateData: any = {}

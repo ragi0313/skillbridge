@@ -17,7 +17,6 @@ export const MESSAGE_LIMITS = {
 // Message validation schema
 export const messageValidationSchema = z.object({
   content: z.string()
-    .min(MESSAGE_LIMITS.content.min, 'Message cannot be empty')
     .max(MESSAGE_LIMITS.content.max, `Message cannot exceed ${MESSAGE_LIMITS.content.max} characters`),
   messageType: z.enum(['text', 'file', 'image']).default('text'),
   attachments: z.array(z.object({
@@ -28,7 +27,10 @@ export const messageValidationSchema = z.object({
     mimeType: z.string().min(1),
     storagePath: z.string().optional(),
   })).max(MESSAGE_LIMITS.attachments.max, `Maximum ${MESSAGE_LIMITS.attachments.max} attachments per message`).optional(),
-})
+}).refine(
+  (data) => data.content.trim().length > 0 || (data.attachments && data.attachments.length > 0),
+  { message: 'Message must have either content or attachments' }
+)
 
 export type MessageValidationInput = z.infer<typeof messageValidationSchema>
 
@@ -108,6 +110,18 @@ function validateMessageContent(content: string): {
   const errors: string[] = []
   const warnings: string[] = []
   let riskLevel: 'low' | 'medium' | 'high' = 'low'
+
+  // Allow empty content (for messages with only attachments)
+  if (!content || content.trim().length === 0) {
+    return {
+      isValid: true,
+      errors: [],
+      warnings: [],
+      sanitizedContent: '',
+      isSpam: false,
+      riskLevel: 'low'
+    }
+  }
 
   // Basic length validation
   if (content.length > MESSAGE_LIMITS.content.warning) {

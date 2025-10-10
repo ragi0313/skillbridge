@@ -7,6 +7,8 @@ import { hash } from "bcryptjs"
 import { nanoid } from "nanoid"
 import { sendVerificationEmail } from "@/lib/email/activationMail"
 import { eq, or } from "drizzle-orm"
+import { isValidPhilippineTimezone } from "@/lib/timeZones"
+import { logUserAction, AUDIT_ACTIONS, ENTITY_TYPES, extractRequestInfo } from "@/lib/admin/audit-log"
 
 
 async function handleRegisterLearner(req: NextRequest) {
@@ -45,6 +47,21 @@ async function handleRegisterLearner(req: NextRequest) {
   if (!emailRegex.test(email.trim())) {
     return NextResponse.json(
       { error: "Please enter a valid email address." },
+      { status: 400 }
+    )
+  }
+
+  // Validate Philippines-only constraints
+  if (country !== "PH") {
+    return NextResponse.json(
+      { error: "Only Philippines is currently supported." },
+      { status: 400 }
+    )
+  }
+
+  if (!isValidPhilippineTimezone(timezone)) {
+    return NextResponse.json(
+      { error: "Only Philippine Standard Time is supported." },
       { status: 400 }
     )
   }
@@ -121,6 +138,25 @@ async function handleRegisterLearner(req: NextRequest) {
       to: email,
       token: verificationToken,
       id: newUserId,
+    })
+
+    // Log registration
+    const { ipAddress, userAgent } = extractRequestInfo(req)
+    await logUserAction({
+      action: AUDIT_ACTIONS.USER_REGISTER,
+      entityType: ENTITY_TYPES.LEARNER,
+      entityId: newUserId,
+      description: `New learner registered: ${firstName} ${lastName} (${email})`,
+      metadata: {
+        email,
+        country,
+        timezone,
+        experienceLevel,
+        role: "learner"
+      },
+      ipAddress,
+      userAgent,
+      severity: "info",
     })
 
     return NextResponse.json({ success: true })

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { withRateLimit } from "@/lib/middleware/rate-limit"
 import { uploadToCloudinary } from "@/lib/cloudinary"
+import { getSession } from "@/lib/auth/getSession"
 
 // Helper to convert ReadableStream to Node Readable
 async function streamToBuffer(readableStream: ReadableStream<Uint8Array>): Promise<Buffer> {
@@ -18,6 +19,12 @@ async function streamToBuffer(readableStream: ReadableStream<Uint8Array>): Promi
 
 async function handleUpload(req: NextRequest) {
   try {
+    // Check authentication
+    const session = await getSession()
+    if (!session?.id) {
+      return NextResponse.json({ error: "Unauthorized - Please login to upload files" }, { status: 401 })
+    }
+
     const formData = await req.formData()
     const file = formData.get("file") as File
 
@@ -41,6 +48,7 @@ async function handleUpload(req: NextRequest) {
     const upload = await uploadToCloudinary(buffer, file.name)
 
     return NextResponse.json({
+      url: upload.secure_url,
       secure_url: upload.secure_url,
       public_id: upload.public_id,
     })

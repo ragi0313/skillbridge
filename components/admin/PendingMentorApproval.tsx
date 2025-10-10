@@ -8,7 +8,11 @@ import { LoadingState } from "./pending-mentors/LoadingState"
 import { EmptyState } from "./pending-mentors/EmptyState"
 
 
-export default function PendingMentorApprovals() {
+interface PendingMentorApprovalsProps {
+  onMentorUpdate?: () => void
+}
+
+export default function PendingMentorApprovals({ onMentorUpdate }: PendingMentorApprovalsProps) {
   const [mentors, setMentors] = useState<PendingMentor[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
@@ -35,6 +39,7 @@ export default function PendingMentorApprovals() {
         body: JSON.stringify({ notes }),
       })
       setMentors((prev) => prev.filter((m) => m.id !== id))
+      onMentorUpdate?.() // Refresh sidebar counts
     } catch (error) {
       console.error("Failed to approve mentor:", error)
     }
@@ -49,6 +54,7 @@ export default function PendingMentorApprovals() {
         body: JSON.stringify({ id, notes }),
       })
       setMentors((prev) => prev.filter((m) => m.id !== id))
+      onMentorUpdate?.() // Refresh sidebar counts
     } catch (error) {
       console.error("Failed to reject mentor:", error)
     }

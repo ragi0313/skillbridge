@@ -3,11 +3,25 @@ import { validateServiceHealth } from '@/lib/config/env-validation'
 import { db } from '@/db'
 import { bookingSessions } from '@/db/schema'
 import { sql } from 'drizzle-orm'
+import { getSession } from '@/lib/auth/getSession'
 
 export async function GET(request: NextRequest) {
   try {
     const startTime = Date.now()
-    const detailed = request.nextUrl.searchParams.get('detailed') === 'true'
+    const requestedDetailed = request.nextUrl.searchParams.get('detailed') === 'true'
+
+    // SECURITY: Only allow detailed health info for authenticated admins
+    const session = await getSession()
+    const isAdmin = session?.role === 'admin'
+    const detailed = requestedDetailed && isAdmin
+
+    // If user requested detailed but is not admin, return warning
+    if (requestedDetailed && !isAdmin) {
+      return NextResponse.json({
+        error: 'Detailed health information requires admin authentication',
+        message: 'Use basic health check without ?detailed=true parameter'
+      }, { status: 403 })
+    }
 
     // Comprehensive health checks using the new service validation
     const serviceHealth = await validateServiceHealth()
@@ -61,9 +75,13 @@ export async function GET(request: NextRequest) {
           message: sessionMonitorHealth.message,
           details: detailed ? sessionMonitorHealth : undefined
         }
-      },
-      environment: process.env.NODE_ENV,
-      version: process.env.npm_package_version || 'unknown'
+      }
+    }
+
+    // Only include environment info for admins
+    if (isAdmin) {
+      healthResponse.environment = process.env.NODE_ENV
+      healthResponse.version = process.env.npm_package_version || 'unknown'
     }
 
     // Add detailed information if requested

@@ -74,25 +74,19 @@ export default function FindMentorsPage() {
         // Add search query if present
         if (searchQuery.trim()) {
           params.append("search", searchQuery.trim())
-          console.log("Frontend: Adding search query:", searchQuery.trim())
         }
 
         // Add selected categories if present
         if (selectedCategories.length > 0) {
           params.append("categories", selectedCategories.join(","))
-          console.log("Frontend: Adding categories:", selectedCategories.join(","))
         }
 
         const url = `/api/find-mentor${params.toString() ? `?${params.toString()}` : ""}`
-        console.log("Frontend: Fetching from URL:", url)
-
         const response = await fetch(url)
         if (response.ok) {
           const data = await response.json()
-          console.log("Frontend: Received mentors:", data)
           // Ensure data is an array
           const mentorsArray = Array.isArray(data) ? data : []
-          console.log("Frontend: Mentor count:", mentorsArray.length)
           setMentors(mentorsArray)
           setFilteredMentors(mentorsArray)
         } else {
@@ -122,8 +116,7 @@ export default function FindMentorsPage() {
         if (response.ok) {
           const data = await response.json()
           setCategories(data.categories || [])
-          console.log("Frontend: Loaded categories:", data.categories?.length || 0)
-        } else {
+          } else {
           console.error("Failed to fetch categories")
         }
       } catch (error) {

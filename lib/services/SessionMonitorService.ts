@@ -38,11 +38,9 @@ export class SessionMonitorService {
 
   start(): void {
     if (this.isRunning) {
-      console.log('[SESSION_MONITOR] Service already running')
       return
     }
 
-    console.log('[SESSION_MONITOR] Starting session monitoring service')
     this.isRunning = true
     this.consecutiveErrors = 0
     this.lastHealthCheck = new Date()
@@ -61,7 +59,6 @@ export class SessionMonitorService {
       return
     }
 
-    console.log('[SESSION_MONITOR] Stopping session monitoring service')
     this.isRunning = false
     
     if (this.intervalId) {
@@ -179,7 +176,6 @@ export class SessionMonitorService {
             .limit(1)
 
           if (currentBooking.status !== 'pending' || currentBooking.refundProcessedAt) {
-            console.log(`[SESSION_MONITOR] Booking ${booking.id} already processed, skipping`)
             return
           }
 
@@ -241,8 +237,6 @@ export class SessionMonitorService {
 
         this.stats.expiredBookings++
         const expiredReason = new Date() > booking.expiresAt ? '24-hour timeout' : 'session start time passed'
-        console.log(`[SESSION_MONITOR] Processed expired booking ${booking.id} - Reason: ${expiredReason}`)
-
         // Broadcast booking status update to affected users
         if (booking.learner && booking.mentor) {
           await broadcastBookingUpdate(
@@ -262,7 +256,6 @@ export class SessionMonitorService {
     }
   }
 
-
   private async updateToUpcoming(): Promise<void> {
     try {
       const now = new Date()
@@ -281,7 +274,6 @@ export class SessionMonitorService {
       console.error('[SESSION_MONITOR] Error updating to upcoming status:', error)
     }
   }
-
 
   private async detectNoShows(): Promise<void> {
     try {
@@ -352,7 +344,6 @@ export class SessionMonitorService {
     }
   }
 
-
   private async processNoShow(session: {
     id: number
     learnerId: number
@@ -378,7 +369,6 @@ export class SessionMonitorService {
 
         if (currentSession.status !== null && (currentSession.noShowCheckedAt || 
             ['completed', 'cancelled', 'both_no_show', 'mentor_no_show', 'learner_no_show'].includes(currentSession.status))) {
-          console.log(`[SESSION_MONITOR] Session ${session.id} already processed, skipping no-show`)
           return
         }
 
@@ -538,9 +528,7 @@ export class SessionMonitorService {
         )
       }
 
-      console.log(`[SESSION_MONITOR] Processed ${noShowType} for session ${session.id}`)
-
-    } catch (error) {
+      } catch (error) {
       console.error(`[SESSION_MONITOR] Error processing ${noShowType} for session ${session.id}:`, error)
     }
   }

@@ -35,10 +35,13 @@ interface LearnerSettingsFormProps {
 
 export function LearnerSettingsForm({ initialData }: LearnerSettingsFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const countryOptions = countries.map((country) => ({
-    value: country.cca2,
-    label: country.name.common,
-  }))
+  // Philippines-only platform, so limit country options to Philippines
+  const countryOptions = countries
+    .filter((country) => country.cca2 === "PH") // Only Philippines
+    .map((country) => ({
+      value: country.cca2,
+      label: country.name.common,
+    }))
 
   const form = useForm<LearnerProfileUpdateFormValues>({
     resolver: zodResolver(learnerProfileUpdateSchema),

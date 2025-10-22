@@ -132,36 +132,49 @@ class SessionCompletionService {
         platformFeePhp = platformFeeCredits * this.CREDITS_TO_PHP_RATE
 
         // PLATFORM FEE COLLECTION: Transfer platform fee to Xendit account
+        // Note: This requires verified Xendit business account with payout permissions
         try {
-          // Create a payout to transfer platform fee to your business account
-          const platformFeePayout = await Payout.createPayout({
-            idempotencyKey: `platform_fee_${sessionId}_${Date.now()}`,
-            data: {
-              referenceId: `platform_fee_${sessionId}_${Date.now()}`,
-              channelCode: `PH_${process.env.XENDIT_PLATFORM_BANK_CODE || 'BPI'}`,
-              channelProperties: {
-                accountHolderName: process.env.XENDIT_PLATFORM_ACCOUNT_NAME || 'BridgeMentor Inc',
-                accountNumber: process.env.XENDIT_PLATFORM_ACCOUNT_NUMBER!,
-              },
-              description: `Platform fee - Session ${sessionId} (${platformFeeCredits} credits)`,
-              amount: Math.round(platformFeePhp * 100) / 100,
-              currency: 'PHP',
-              metadata: {
-                sessionId: sessionId.toString(),
-                platformFeeCredits: platformFeeCredits.toString(),
-                platformFeePhp: platformFeePhp.toString(),
-                type: 'platform_fee',
-                learnerUserId: sessionRecord.learner_user_id.toString(),
-                mentorUserId: sessionRecord.mentor_user_id.toString(),
+          // Check if Xendit account details are configured
+          if (!process.env.XENDIT_PLATFORM_ACCOUNT_NUMBER) {
+            console.warn(`[PLATFORM_FEE] Xendit platform account not configured. Platform fee of ₱${platformFeePhp} will be tracked but not transferred.`)
+          } else {
+            // Create a payout to transfer platform fee to your business account
+            const platformFeePayout = await Payout.createPayout({
+              idempotencyKey: `platform_fee_${sessionId}_${Date.now()}`,
+              data: {
+                referenceId: `platform_fee_${sessionId}_${Date.now()}`,
+                channelCode: `PH_${process.env.XENDIT_PLATFORM_BANK_CODE || 'BPI'}`,
+                channelProperties: {
+                  accountHolderName: process.env.XENDIT_PLATFORM_ACCOUNT_NAME || 'SkillBridge',
+                  accountNumber: process.env.XENDIT_PLATFORM_ACCOUNT_NUMBER!,
+                },
+                description: `Platform fee - Session ${sessionId} (${platformFeeCredits} credits)`,
+                amount: Math.round(platformFeePhp * 100) / 100,
+                currency: 'PHP',
+                metadata: {
+                  sessionId: sessionId.toString(),
+                  platformFeeCredits: platformFeeCredits.toString(),
+                  platformFeePhp: platformFeePhp.toString(),
+                  type: 'platform_fee',
+                  learnerUserId: sessionRecord.learner_user_id.toString(),
+                  mentorUserId: sessionRecord.mentor_user_id.toString(),
+                }
               }
-            }
-          })
-          
-          // Record the Xendit payout ID for reference
-          platformFeeChargeId = platformFeePayout.id
-        } catch (xenditError) {
-          console.error(`[PLATFORM_FEE] Failed to create Xendit payout for platform fee:`, xenditError)
+            })
+
+            // Record the Xendit payout ID for reference
+            platformFeeChargeId = platformFeePayout.id
+            console.log(`[PLATFORM_FEE] Successfully created Xendit payout: ${platformFeeChargeId} for ₱${platformFeePhp}`)
+          }
+        } catch (xenditError: any) {
+          // Handle specific Xendit errors
+          if (xenditError?.status === 403 || xenditError?.errorCode === 'REQUEST_FORBIDDEN_ERROR') {
+            console.warn(`[PLATFORM_FEE] Xendit account not verified for payouts yet. Platform fee of ₱${platformFeePhp} will be tracked in database. Error: ${xenditError?.errorMessage || 'Permission denied'}`)
+          } else {
+            console.error(`[PLATFORM_FEE] Failed to create Xendit payout for platform fee:`, xenditError)
+          }
           // Continue processing - don't fail the session completion
+          // Platform fees are still tracked in the database for manual processing
         }
         
         // Record platform fee capture for accounting purposes

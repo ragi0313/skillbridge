@@ -213,78 +213,79 @@ export default function SupportTickets({ onTicketUpdate }: SupportTicketsProps) 
       </div>
 
       {/* Filters */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-              <Input
-                placeholder="Search tickets..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
-            </div>
+      <div className="flex flex-col md:flex-row items-start md:items-center gap-3 bg-gray-50 p-4 rounded-lg border border-gray-200">
+        <div className="flex items-center gap-2 text-gray-700 font-medium min-w-fit">
+          <Filter className="w-4 h-4" />
+          <span className="text-sm">Filters:</span>
+        </div>
 
-            <Select value={filter.status} onValueChange={(value) => setFilter({...filter, status: value})}>
-              <SelectTrigger>
-                <SelectValue placeholder="Filter by status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="open">Open</SelectItem>
-                <SelectItem value="in_progress">In Progress</SelectItem>
-                <SelectItem value="resolved">Resolved</SelectItem>
-                <SelectItem value="closed">Closed</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select value={filter.category} onValueChange={(value) => setFilter({...filter, category: value})}>
-              <SelectTrigger>
-                <SelectValue placeholder="Filter by category" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Categories</SelectItem>
-                <SelectItem value="general">General Inquiry</SelectItem>
-                <SelectItem value="technical">Technical Issue</SelectItem>
-                <SelectItem value="billing">Billing & Payments</SelectItem>
-                <SelectItem value="account">Account Support</SelectItem>
-                <SelectItem value="mentorship">Mentorship Questions</SelectItem>
-                <SelectItem value="report">Report an Issue</SelectItem>
-                <SelectItem value="feedback">Feedback & Suggestions</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select value={filter.priority} onValueChange={(value) => setFilter({...filter, priority: value})}>
-              <SelectTrigger>
-                <SelectValue placeholder="Filter by priority" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Priorities</SelectItem>
-                <SelectItem value="low">Low</SelectItem>
-                <SelectItem value="medium">Medium</SelectItem>
-                <SelectItem value="high">High</SelectItem>
-                <SelectItem value="urgent">Urgent</SelectItem>
-              </SelectContent>
-            </Select>
+        <div className="flex flex-wrap items-center gap-3 flex-1 w-full md:w-auto">
+          <div className="relative flex-1 min-w-[250px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Input
+              placeholder="Search tickets..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10 h-10"
+            />
           </div>
-        </CardContent>
-      </Card>
 
-      {/* Tickets List */}
-      <div className="grid gap-4">
+          <Select value={filter.status} onValueChange={(value) => setFilter({...filter, status: value})}>
+            <SelectTrigger className="w-[160px] h-10">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Status</SelectItem>
+              <SelectItem value="open">Open</SelectItem>
+              <SelectItem value="in_progress">In Progress</SelectItem>
+              <SelectItem value="resolved">Resolved</SelectItem>
+              <SelectItem value="closed">Closed</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={filter.category} onValueChange={(value) => setFilter({...filter, category: value})}>
+            <SelectTrigger className="w-[180px] h-10">
+              <SelectValue placeholder="Category" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Categories</SelectItem>
+              <SelectItem value="general">General Inquiry</SelectItem>
+              <SelectItem value="technical">Technical Issue</SelectItem>
+              <SelectItem value="billing">Billing & Payments</SelectItem>
+              <SelectItem value="account">Account Support</SelectItem>
+              <SelectItem value="mentorship">Mentorship Questions</SelectItem>
+              <SelectItem value="report">Report an Issue</SelectItem>
+              <SelectItem value="feedback">Feedback & Suggestions</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={filter.priority} onValueChange={(value) => setFilter({...filter, priority: value})}>
+            <SelectTrigger className="w-[150px] h-10">
+              <SelectValue placeholder="Priority" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Priorities</SelectItem>
+              <SelectItem value="low">Low</SelectItem>
+              <SelectItem value="medium">Medium</SelectItem>
+              <SelectItem value="high">High</SelectItem>
+              <SelectItem value="urgent">Urgent</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {/* Tickets List - No Card Wrapper */}
+      <div className="space-y-4">
         {filteredTickets.length === 0 ? (
-          <Card>
-            <CardContent className="p-8 text-center">
-              <Mail className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">No tickets found</h3>
-              <p className="text-gray-600">No support tickets match your current filters.</p>
-            </CardContent>
-          </Card>
+          <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+            <Mail className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">No tickets found</h3>
+            <p className="text-gray-600">No support tickets match your current filters.</p>
+          </div>
         ) : (
           filteredTickets.map((ticket) => (
-            <Card key={ticket.id} className="hover:shadow-md transition-shadow cursor-pointer">
-              <CardContent className="p-6">
+            <div key={ticket.id} className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-lg transition-all duration-200 hover:border-purple-200">
+              <div className="">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center space-x-3 mb-2">
@@ -521,8 +522,8 @@ export default function SupportTickets({ onTicketUpdate }: SupportTicketsProps) 
                     </Select>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           ))
         )}
       </div>

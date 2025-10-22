@@ -56,8 +56,8 @@ const getMenuItems = (counts: SidebarCounts) => [
     icon: MessageSquare,
     badge: counts.pendingReports > 0 ? counts.pendingReports.toString() : undefined
   },
-  { id: "announcements", label: "Announcements", icon: Megaphone },
-  { id: "settings", label: "Platform Settings", icon: Settings },
+  // Future features:
+  // { id: "announcements", label: "Announcements", icon: Megaphone },
 ]
 
 const AdminSidebar = forwardRef<AdminSidebarRef, Props>(({ activeSection, setActiveSection, isOpen, setIsOpen }, ref) => {

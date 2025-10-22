@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { withRateLimit } from "@/lib/middleware/rate-limit"
-import nodemailer from 'nodemailer'
+import { sendEmail } from "@/lib/email/resend"
+import { logger } from "@/lib/monitoring/logger"
 
 async function handleAppeal(req: NextRequest) {
   try {
@@ -9,30 +10,19 @@ async function handleAppeal(req: NextRequest) {
     // Validate input
     if (!email || !firstName || !appealReason) {
       return NextResponse.json(
-        { error: "Email, name, and appeal reason are required" }, 
+        { error: "Email, name, and appeal reason are required" },
         { status: 400 }
       )
     }
 
     if (appealReason.trim().length < 10) {
       return NextResponse.json(
-        { error: "Appeal reason must be at least 10 characters long" }, 
+        { error: "Appeal reason must be at least 10 characters long" },
         { status: 400 }
       )
     }
 
-    // Create transporter
-    const transporter = nodemailer.createTransporter({
-      host: process.env.SMTP_HOST,
-      port: parseInt(process.env.SMTP_PORT || '587'),
-      secure: false,
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-    })
-
-    const adminEmail = process.env.ADMIN_EMAIL || 'admin@bridgementor.com'
+    const adminEmail = process.env.ADMIN_EMAIL || 'contact@bridge-mentor.com'
     const currentDate = new Date().toLocaleString()
 
     // Send appeal to admin
@@ -92,13 +82,21 @@ async function handleAppeal(req: NextRequest) {
       </html>
     `
 
-    await transporter.sendMail({
-      from: `"BridgeMentor Appeals" <${process.env.SMTP_USER}>`,
+    // Send appeal to admin
+    const adminResult = await sendEmail({
       to: adminEmail,
-      subject: `🔄 Account Appeal - ${email}`,
+      subject: `Account Appeal - ${email}`,
       html: adminEmailContent,
       replyTo: email,
     })
+
+    if (!adminResult.success) {
+      logger.error("Failed to send appeal to admin", { error: adminResult.error, email })
+      return NextResponse.json(
+        { error: "Failed to submit appeal. Please try again." },
+        { status: 500 }
+      )
+    }
 
     // Send confirmation to user
     const userConfirmationEmail = `
@@ -142,12 +140,17 @@ async function handleAppeal(req: NextRequest) {
       </html>
     `
 
-    await transporter.sendMail({
-      from: `"BridgeMentor Support" <${process.env.SMTP_USER}>`,
+    // Send confirmation to user
+    const userResult = await sendEmail({
       to: email,
-      subject: '✅ Appeal Submitted - Under Review',
+      subject: 'Appeal Submitted - Under Review',
       html: userConfirmationEmail,
     })
+
+    if (!userResult.success) {
+      logger.warn("Failed to send appeal confirmation to user", { error: userResult.error, email })
+      // Don't fail the request - appeal was already sent to admin
+    }
 
     return NextResponse.json({
       success: true,
@@ -164,8 +167,4 @@ async function handleAppeal(req: NextRequest) {
 }
 
 // Apply rate limiting to appeal endpoint (more restrictive)
-export const POST = withRateLimit('appeal', handleAppeal, {
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 2, // Only 2 appeals per 15 minutes per IP
-  message: "Too many appeal requests. Please wait before submitting another appeal."
-})
+export const POST = withRateLimit('appeal', handleAppeal)

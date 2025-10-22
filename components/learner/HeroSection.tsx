@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Search } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { motion } from "framer-motion"
 
 export default function HeroSection() {
   const [searchQuery, setSearchQuery] = useState("")
@@ -74,43 +75,43 @@ export default function HeroSection() {
             </div>
           </form>
 
-          <div className="mb-8">
-            <p className="text-sm text-gray-400 mb-3">Popular searches:</p>
-            <div className="flex flex-wrap justify-center gap-2">
-              {["React", "JavaScript", "UI/UX Design", "Node.js", "Python", "Career Advice"].map((skill) => (
-                <button
-                  key={skill}
-                  onClick={() => {
-                    setSearchQuery(skill)
-                    router.push(`/learner/browse-mentors?search=${encodeURIComponent(skill)}`)
-                  }}
-                  className="px-3 py-1 text-sm bg-white/10 hover:bg-white/20 text-gray-300 hover:text-white rounded-full border border-gray-600 hover:border-gray-500 transition-all duration-200"
-                >
-                  {skill}
-                </button>
-              ))}
-            </div>
-          </div>
+          {/* Quick Stats or Popular Skills */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-3xl mx-auto">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20 hover:bg-white/20 transition-all"
+            >
+              <div className="text-center">
+                <p className="text-white font-semibold">Expert Mentors</p>
+                <p className="text-gray-400 text-sm">Professional guidance</p>
+              </div>
+            </motion.div>
 
-          <div className="mt-12 flex justify-center space-x-8 opacity-80">
-            <div className="text-center">
-              <div className="w-12 h-12 bg-blue-600/20 border border-blue-500/30 rounded-full flex items-center justify-center mx-auto mb-2">
-                <span className="text-2xl">🎯</span>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20 hover:bg-white/20 transition-all"
+            >
+              <div className="text-center">
+                <p className="text-white font-semibold">Personalized Match</p>
+                <p className="text-gray-400 text-sm">Find your mentor</p>
               </div>
-              <p className="text-sm text-gray-400">Set Goals</p>
-            </div>
-            <div className="text-center">
-              <div className="w-12 h-12 bg-green-600/20 border border-green-500/30 rounded-full flex items-center justify-center mx-auto mb-2">
-                <span className="text-2xl">🤝</span>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="bg-white/10 backdrop-blur-sm rounded-xl p-4 border border-white/20 hover:bg-white/20 transition-all"
+            >
+              <div className="text-center">
+                <p className="text-white font-semibold">Accelerate Growth</p>
+                <p className="text-gray-400 text-sm">Learn faster</p>
               </div>
-              <p className="text-sm text-gray-400">Connect</p>
-            </div>
-            <div className="text-center">
-              <div className="w-12 h-12 bg-purple-600/20 border border-purple-500/30 rounded-full flex items-center justify-center mx-auto mb-2">
-                <span className="text-2xl">🚀</span>
-              </div>
-              <p className="text-sm text-gray-400">Grow</p>
-            </div>
+            </motion.div>
           </div>
         </div>
       </div>

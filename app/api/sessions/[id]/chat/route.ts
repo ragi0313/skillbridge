@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSession } from "@/lib/auth/getSession"
 import { withRateLimit } from "@/lib/middleware/rate-limit"
-import { triggerPusherEvent } from "@/lib/pusher/config"
 import { db } from "@/db"
 import { users } from "@/db/schema"
 import { eq } from "drizzle-orm"
@@ -57,12 +56,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   try {
     const session = await getSession()
     if (!session?.id) {
+      console.warn("[SESSION_CHAT] Unauthorized request to post message")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const { id: sessionId } = await params
     const body = await request.json()
     const { message, messageType, senderName, senderRole, attachment } = body
+
+    console.log(`[SESSION_CHAT] Received message for session ${sessionId} from ${senderName} (${senderRole})`)
 
     // Validate input
     if (!message && !attachment) {
@@ -78,9 +80,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ error: "Message too long (max 1000 characters)" }, { status: 400 })
     }
 
-    // Validate file size if attachment exists
-    if (attachment && attachment.fileSize > 1024 * 1024) {
-      return NextResponse.json({ error: "File too large (max 1MB)" }, { status: 400 })
+    // Validate file size if attachment exists (5MB limit for session chat)
+    // Note: Files are stored in-memory for the session duration only (ephemeral)
+    if (attachment && attachment.fileSize > 5 * 1024 * 1024) {
+      return NextResponse.json({ error: "File too large (max 5MB for session chat)" }, { status: 400 })
     }
 
     // Basic spam detection for session chat
@@ -127,11 +130,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       senderName: senderName || `${user.firstName} ${user.lastName}`,
       senderRole: senderRole || user.role,
       senderId: expectedSenderId,
-      attachment: attachment ? {
-        ...attachment,
-        // Remove base64 data from stored message to save memory
-        fileData: attachment.fileData ? '[FILE_DATA_REMOVED]' : undefined
-      } : undefined
+      // Keep attachment data for polling - it's ephemeral anyway (cleared after 2 hours)
+      attachment: attachment || undefined
     }
 
     // Store in memory for the session (ephemeral)
@@ -143,23 +143,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // Schedule cleanup timer for this session
     scheduleSessionCleanup(sessionId)
 
-    // Broadcast via Pusher for real-time delivery
-    const channelName = `session-chat-${sessionId}`
-    const pusherMessage = {
-      ...newMessage,
-      // Include file data in real-time broadcast but not in storage
-      attachment: attachment
-    }
+    console.log(`[SESSION_CHAT] Message stored successfully for session ${sessionId}`)
 
-    const success = await triggerPusherEvent(channelName, 'session-message', pusherMessage)
-
-    if (!success) {
-      }
+    // NOTE: Not using Pusher for session chat to avoid conflicts with global ChatContext
+    // Video call chat uses polling mode to fetch messages every 3 seconds
+    // This keeps session chat separate from the regular messaging system
 
     return NextResponse.json({
       message: newMessage,
-      success: true,
-      broadcasted: success
+      success: true
     })
   } catch (error) {
     console.error("[SESSION_CHAT] Error posting message:", error)

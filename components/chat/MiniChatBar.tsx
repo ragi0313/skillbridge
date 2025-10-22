@@ -140,24 +140,34 @@ export function MiniChatBar({ user, className }: MiniChatBarProps) {
   // Listen for custom events to open chat
   useEffect(() => {
     const handleOpenMiniChat = (event: CustomEvent) => {
+      console.log('MiniChatBar: Received openMiniChat event', event.detail)
       const { conversationId, conversation } = event.detail
 
       if (conversation) {
+        console.log('MiniChatBar: Opening conversation from event', conversation.id)
         setCurrentConversation(conversation)
         setIsOpen(true)
         setIsMinimized(false)
       } else if (conversationId) {
+        console.log('MiniChatBar: Looking up conversation by ID', conversationId)
         const conv = getConversation(conversationId)
         if (conv) {
+          console.log('MiniChatBar: Found conversation', conv.id)
           setCurrentConversation(conv)
           setIsOpen(true)
           setIsMinimized(false)
+        } else {
+          console.warn('MiniChatBar: Conversation not found in cache', conversationId)
         }
+      } else {
+        console.warn('MiniChatBar: No conversation or conversationId in event detail')
       }
     }
 
+    console.log('MiniChatBar: Registering openMiniChat event listener')
     window.addEventListener('openMiniChat', handleOpenMiniChat as EventListener)
     return () => {
+      console.log('MiniChatBar: Removing openMiniChat event listener')
       window.removeEventListener('openMiniChat', handleOpenMiniChat as EventListener)
     }
   }, []) // No dependencies needed since getConversation is accessed directly in the handler
@@ -216,9 +226,10 @@ export function MiniChatBar({ user, className }: MiniChatBarProps) {
         // Don't subscribe if already subscribed
         if (!conversationSubscriptions.current.has(conversationId)) {
           const unsubscribe = subscribeToConversation(conversationId, (message: ChatMessage) => {
-            // This will trigger the ChatContext to update the conversations list
-            // The MiniChatBar will automatically re-render with new message info
-            })
+            // The ChatContext already updates the conversations list via updateConversationWithMessage
+            // The conversation list will automatically re-render with the new message
+            // No need to do anything here - the subscription ensures Pusher events are handled
+          })
 
           conversationSubscriptions.current.set(conversationId, unsubscribe)
         }
@@ -461,20 +472,21 @@ export function MiniChatBar({ user, className }: MiniChatBarProps) {
 
   // Render conversation list
   const renderConversationList = () => {
-    // Show all conversations (including those without messages)
-    const allConversations = conversations
+    // Only show conversations that have at least one message
+    const conversationsWithMessages = conversations.filter(conv => conv.lastMessageAt)
 
     return (
       <div className="p-4">
         <h3 className="font-semibold text-lg mb-4">Messages</h3>
         <div className="space-y-3">
-          {allConversations.length === 0 ? (
+          {conversationsWithMessages.length === 0 ? (
             <div className="text-center text-gray-500 py-8">
               <MessageCircle className="w-12 h-12 mx-auto mb-2 opacity-50" />
               <p>No conversations yet</p>
+              <p className="text-xs mt-2">Start chatting with mentors or learners!</p>
             </div>
           ) : (
-            allConversations.map((conversation) => {
+            conversationsWithMessages.map((conversation) => {
             const otherParticipant = conversation.mentor.userId === user?.id
               ? conversation.learner
               : conversation.mentor
@@ -516,9 +528,25 @@ export function MiniChatBar({ user, className }: MiniChatBarProps) {
                   </div>
                   {conversation.lastMessage ? (
                     <p className="text-sm text-gray-600 truncate mt-1">
-                      {conversation.lastMessage.content ||
-                        (conversation.lastMessage.messageType === 'image' ? '📷 Photo' :
-                         conversation.lastMessage.messageType === 'file' ? '📎 File' : '')}
+                      {(() => {
+                        // Determine if current user sent the message
+                        const isCurrentUserSender = user && conversation.lastMessage.senderId === user.id
+
+                        // Get message preview
+                        let preview = conversation.lastMessage.content
+                        if (!preview || preview.trim().length === 0) {
+                          if (conversation.lastMessage.messageType === 'image') {
+                            preview = '📷 Photo'
+                          } else if (conversation.lastMessage.messageType === 'file') {
+                            preview = '📎 File'
+                          } else {
+                            preview = 'New message'
+                          }
+                        }
+
+                        // Prepend "You: " only if current user sent it
+                        return isCurrentUserSender ? `You: ${preview}` : preview
+                      })()}
                     </p>
                   ) : (
                     <p className="text-sm text-gray-400 italic truncate mt-1">
@@ -590,7 +618,7 @@ export function MiniChatBar({ user, className }: MiniChatBarProps) {
                       {message.attachments && message.attachments.length > 0 && (
                         <div className={message.content ? 'mb-2' : ''}>
                           {message.attachments.map((attachment, idx) => (
-                            <div key={idx}>
+                            <div key={`${message.id}-attachment-${attachment.id || idx}`}>
                               {attachment.mimeType.startsWith('image/') ? (
                                 <a
                                   href={attachment.fileUrl}
@@ -618,9 +646,7 @@ export function MiniChatBar({ user, className }: MiniChatBarProps) {
                                       </p>
                                     </div>
                                     <a
-                                      href={attachment.fileUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
+                                      href={`/api/files/download?url=${encodeURIComponent(attachment.fileUrl)}&filename=${encodeURIComponent(attachment.originalFilename)}`}
                                       className="text-xs underline flex-shrink-0"
                                     >
                                       Download

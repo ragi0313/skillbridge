@@ -1,5 +1,6 @@
 import { Card } from "@/components/ui/card"
-import { DollarSign, Calendar, TrendingUp, Shield } from "lucide-react"
+import { Calendar, TrendingUp, Shield } from "lucide-react"
+import { CreditsIcon } from "@/components/ui/credits-icon"
 
 export function EarnWhileTeachSection() {
   return (
@@ -14,7 +15,7 @@ export function EarnWhileTeachSection() {
           <div className="space-y-8">
             <div className="flex items-start space-x-4">
               <div className="bg-primary rounded-full p-2 mt-1">
-                <DollarSign className="w-5 h-5 text-primary-foreground" />
+                <CreditsIcon className="w-5 h-5 text-primary-foreground" />
               </div>
               <div>
                 <h3 className="text-xl font-semibold mb-2">Set Your Own Rates</h3>

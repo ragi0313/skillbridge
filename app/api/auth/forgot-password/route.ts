@@ -25,23 +25,27 @@ async function handleForgotPassword(request: NextRequest) {
 
     const foundUser = user[0]
 
-    // Check for existing valid tokens (prevent spam)
-    const existingToken = await db
+    // Check for recent tokens (prevent spam) - 1 minute cooldown
+    const oneMinuteAgo = new Date(Date.now() - 1 * 60 * 1000)
+    const recentToken = await db
       .select()
       .from(passwordResetTokens)
       .where(
         and(
           eq(passwordResetTokens.userId, foundUser.id),
           eq(passwordResetTokens.isUsed, false),
-          gt(passwordResetTokens.expiresAt, new Date()),
+          gt(passwordResetTokens.createdAt, oneMinuteAgo),
         ),
       )
       .limit(1)
 
-    if (existingToken.length > 0) {
+    if (recentToken.length > 0) {
+      const tokenAge = Date.now() - new Date(recentToken[0].createdAt).getTime()
+      const secondsRemaining = Math.ceil((60000 - tokenAge) / 1000)
+
       return NextResponse.json(
         {
-          error: "A password reset code was already sent. Please check your email or wait before requesting a new one.",
+          error: `A password reset code was sent ${Math.ceil(tokenAge / 1000)} seconds ago. Please wait ${secondsRemaining} more seconds before requesting a new one, or check your spam/junk folder.`,
         },
         { status: 429 },
       )

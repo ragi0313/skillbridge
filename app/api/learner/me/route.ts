@@ -3,6 +3,7 @@ import { learners, users } from "@/db/schema"
 import { eq } from "drizzle-orm"
 import { getSession } from "@/lib/auth/getSession"
 import { NextResponse } from "next/server"
+import { deleteFromCloudinary, extractPublicIdFromUrl } from "@/lib/cloudinary"
 
 export async function GET() {
   const session = await getSession()
@@ -55,6 +56,28 @@ export async function PATCH(req: Request) {
   }
 
   try {
+    // Get current profile picture URL to delete old one if changed
+    const [currentLearner] = await db
+      .select({ profilePictureUrl: learners.profilePictureUrl })
+      .from(learners)
+      .where(eq(learners.userId, session.id))
+
+    // Delete old profile picture from Cloudinary if it's being replaced
+    if (currentLearner?.profilePictureUrl &&
+        profilePictureUrl &&
+        currentLearner.profilePictureUrl !== profilePictureUrl) {
+      try {
+        const extracted = extractPublicIdFromUrl(currentLearner.profilePictureUrl)
+        if (extracted) {
+          await deleteFromCloudinary(extracted.publicId, extracted.resourceType)
+          console.log('Deleted old profile picture from Cloudinary:', extracted.publicId)
+        }
+      } catch (error) {
+        console.error('Failed to delete old profile picture from Cloudinary:', error)
+        // Continue with update even if deletion fails
+      }
+    }
+
     await db
       .update(learners)
       .set({ country, experienceLevel, learningGoals, profilePictureUrl, timezone })

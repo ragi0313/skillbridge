@@ -9,7 +9,7 @@ import {
   mentorSkills,
   sessionFeedback
 } from "@/db/schema"
-import { desc, like, and, gte, sql, eq, or } from "drizzle-orm"
+import { desc, like, and, gte, sql, eq, or, inArray } from "drizzle-orm"
 import { logAdminAction, AUDIT_ACTIONS, ENTITY_TYPES, extractRequestInfo } from "@/lib/admin/audit-log"
 
 export async function GET(req: NextRequest) {
@@ -19,7 +19,6 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // We'll handle mentor and learner names differently to avoid alias issues
 
     const { searchParams } = new URL(req.url)
     const page = parseInt(searchParams.get("page") || "1")
@@ -101,7 +100,7 @@ export async function GET(req: NextRequest) {
       })
       .from(mentors)
       .leftJoin(usersTable, eq(mentors.userId, usersTable.id))
-      .where(sql`${mentors.id} = ANY(${mentorIds})`) : []
+      .where(inArray(mentors.id, mentorIds)) : []
 
     const learnerNames = learnerIds.length > 0 ? await db
       .select({
@@ -110,7 +109,7 @@ export async function GET(req: NextRequest) {
       })
       .from(learners)
       .leftJoin(usersTable, eq(learners.userId, usersTable.id))
-      .where(sql`${learners.id} = ANY(${learnerIds})`) : []
+      .where(inArray(learners.id, learnerIds)) : []
 
     // Create lookup maps
     const mentorNameMap = new Map(mentorNames.map(m => [m.mentorId, m.name]))
@@ -130,7 +129,10 @@ export async function GET(req: NextRequest) {
       // Convert to CSV
       const csvHeaders = [
         "ID", "Mentor", "Learner", "Skill", "Status", "Scheduled Date",
-        "Duration (min)", "Cost (credits)", "Overall Rating", "Communication Rating",
+        "Duration (min)", "Cost (credits)",
+        "Learner Joined At", "Learner Left At", "Learner Duration (min)",
+        "Mentor Joined At", "Mentor Left At", "Mentor Duration (min)",
+        "Overall Rating", "Communication Rating",
         "Session Notes", "Created At"
       ]
 
@@ -143,6 +145,12 @@ export async function GET(req: NextRequest) {
         session.scheduledDate ? new Date(session.scheduledDate).toISOString() : "",
         session.durationMinutes || 0,
         session.totalCostCredits || 0,
+        session.learnerJoinedAt ? new Date(session.learnerJoinedAt).toISOString() : "",
+        session.learnerLeftAt ? new Date(session.learnerLeftAt).toISOString() : "",
+        session.learnerConnectionDurationMs ? Math.round(session.learnerConnectionDurationMs / 60000) : "",
+        session.mentorJoinedAt ? new Date(session.mentorJoinedAt).toISOString() : "",
+        session.mentorLeftAt ? new Date(session.mentorLeftAt).toISOString() : "",
+        session.mentorConnectionDurationMs ? Math.round(session.mentorConnectionDurationMs / 60000) : "",
         session.overallRating || "",
         session.communicationRating || "",
         `"${(session.sessionNotes || "").replace(/"/g, '""')}"`, // Escape quotes

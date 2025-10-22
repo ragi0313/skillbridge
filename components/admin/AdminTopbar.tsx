@@ -32,27 +32,9 @@ export default function AdminTopbar({ sidebarOpen, setSidebarOpen }: Props) {
         </div>
       </div>
 
-      {/* Right Section - Notifications */}
+      {/* Right Section */}
       <div className="flex items-center space-x-4">
-        {/* Platform Stats - Hidden on mobile */}
-        <div className="hidden md:flex items-center space-x-4 text-sm text-gray-600">
-          <div className="flex items-center space-x-1">
-            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-            <span>1,247 Active Users</span>
-          </div>
-          <div className="flex items-center space-x-1">
-            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-            <span>89 Sessions Today</span>
-          </div>
-        </div>
-
-        {/* Notifications */}
-        <Button variant="ghost" size="sm" className="relative">
-          <Bell className="w-5 h-5" />
-          <Badge className="absolute -top-1 -right-1 w-5 h-5 p-0 flex items-center justify-center text-xs bg-red-500">
-            7
-          </Badge>
-        </Button>
+        {/* Reserved for future features */}
       </div>
     </header>
   )

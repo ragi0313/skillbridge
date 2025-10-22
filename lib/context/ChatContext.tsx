@@ -97,6 +97,19 @@ export function ChatProvider({ children, user }: ChatProviderProps) {
     }
   }, [user?.id, fetchConversations]) // Include fetchConversations in dependencies
 
+  // Listen for refresh conversations event
+  useEffect(() => {
+    const handleRefreshConversations = () => {
+      console.log('ChatContext: Refreshing conversations after new conversation created')
+      fetchConversations()
+    }
+
+    window.addEventListener('refreshConversations', handleRefreshConversations)
+    return () => {
+      window.removeEventListener('refreshConversations', handleRefreshConversations)
+    }
+  }, [fetchConversations])
+
   // Subscribe to conversation for real-time updates
   const subscribeToConversation = useCallback((conversationId: number, onMessage: (message: any) => void) => {
     if (!pusherClient) {

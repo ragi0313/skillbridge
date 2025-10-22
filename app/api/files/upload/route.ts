@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { withRateLimit } from "@/lib/middleware/rate-limit"
-import { uploadFileToCloudinary } from "@/lib/cloudinary"
+import { uploadToVercelBlob } from "@/lib/vercel-blob"
 import { getSession } from "@/lib/auth/getSession"
 
 // Helper to convert ReadableStream to Node Readable
@@ -53,13 +53,16 @@ async function handleUpload(req: NextRequest) {
 
     const buffer = await streamToBuffer(file.stream())
 
-    // Upload to Cloudinary
-    const upload = await uploadFileToCloudinary(buffer, file.name, file.type)
+    // Upload to Vercel Blob
+    const upload = await uploadToVercelBlob(buffer, file.name, {
+      contentType: file.type,
+      addRandomSuffix: true,
+    })
 
     return NextResponse.json({
-      url: upload.secure_url,
-      secure_url: upload.secure_url,
-      public_id: upload.public_id,
+      url: upload.url,
+      downloadUrl: upload.downloadUrl,
+      pathname: upload.pathname,
       filename: file.name,
     })
   } catch (error) {

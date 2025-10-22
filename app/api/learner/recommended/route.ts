@@ -176,6 +176,7 @@ export async function GET() {
 
     return {
       mentorId: mentor.mentorId,
+      userId: mentor.userId,
       firstName: mentor.firstName,
       lastName: mentor.lastName,
       title: mentor.title,

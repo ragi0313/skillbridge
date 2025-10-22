@@ -158,8 +158,6 @@ export async function POST(req: Request) {
           },
           severity: "info",
         })
-
-        `);
       });
     } catch (error) {
       console.error("Failed to process Xendit credit purchase:", error);

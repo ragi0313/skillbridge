@@ -139,7 +139,7 @@ const faqSections = [
       },
       {
         question: "What if I need help or support?",
-        answer: "You can reach out to our support team by emailing bridgementor@gmail.com. We're here to assist you with any questions or issues."
+        answer: "You can reach out to our support team by emailing contact@bridge-mentor.com. We're here to assist you with any questions or issues."
       },
       {
         question: "How can I report inappropriate behavior or content?",

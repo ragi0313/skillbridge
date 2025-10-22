@@ -19,10 +19,13 @@ const envSchema = z.object({
   NEXT_PUBLIC_PUSHER_KEY: z.string().optional(),
   NEXT_PUBLIC_PUSHER_CLUSTER: z.string().optional(),
 
-  // File storage (Cloudinary - required)
+  // File storage (Cloudinary - required for profile pictures)
   CLOUDINARY_CLOUD_NAME: z.string().min(1, 'CLOUDINARY_CLOUD_NAME is required for file uploads'),
   CLOUDINARY_API_KEY: z.string().min(1, 'CLOUDINARY_API_KEY is required for file uploads'),
   CLOUDINARY_API_SECRET: z.string().min(1, 'CLOUDINARY_API_SECRET is required for file uploads'),
+
+  // Vercel Blob storage (for chat files - required in production)
+  BLOB_READ_WRITE_TOKEN: z.string().optional(),
 
   // Cron jobs
   CRON_SECRET: z.string().min(32, 'CRON_SECRET must be at least 32 characters long'),
@@ -38,11 +41,8 @@ const envSchema = z.object({
   AGORA_APP_ID: z.string().optional(),
   AGORA_APP_CERTIFICATE: z.string().optional(),
 
-  // Email (optional but recommended for production)
-  SMTP_HOST: z.string().optional(),
-  SMTP_PORT: z.string().transform(val => val ? parseInt(val) : undefined).optional(),
-  SMTP_USER: z.string().optional(),
-  SMTP_PASS: z.string().optional(),
+  // Email (Resend - optional but recommended for production)
+  RESEND_API_KEY: z.string().optional(),
   FROM_EMAIL: z.string().email().optional(),
 
   // Redis/Cache (optional)
@@ -73,13 +73,13 @@ export class EnvironmentValidator {
 
       // Additional production checks
       if (config.NODE_ENV === 'production') {
-        // Check for production-critical required variables
+        // Redis/KV is optional now - we use Resend directly (no queue needed)
         if (!config.REDIS_URL && !config.KV_URL) {
-          throw new Error('Redis/KV URL is required in production for email queue and rate limiting')
+          warnings.push('Redis/KV not configured. Rate limiting and caching will use fallbacks.')
         }
 
-        if (!config.SMTP_HOST || !config.SMTP_USER || !config.SMTP_PASS) {
-          throw new Error('SMTP configuration (SMTP_HOST, SMTP_USER, SMTP_PASS) is required in production')
+        if (!config.RESEND_API_KEY) {
+          warnings.push('RESEND_API_KEY not configured. Email functionality will not work.')
         }
 
         if (!config.AGORA_APP_ID || !config.AGORA_APP_CERTIFICATE) {
@@ -173,6 +173,7 @@ export class EnvironmentValidator {
           CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME || '',
           CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY || '',
           CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET || '',
+          BLOB_READ_WRITE_TOKEN: process.env.BLOB_READ_WRITE_TOKEN,
           CRON_SECRET: process.env.CRON_SECRET || 'dev-cron-secret',
           XENDIT_SECRET_KEY: process.env.XENDIT_SECRET_KEY || '',
           XENDIT_PLATFORM_ACCOUNT_NUMBER: process.env.XENDIT_PLATFORM_ACCOUNT_NUMBER || '',
@@ -181,10 +182,7 @@ export class EnvironmentValidator {
           XENDIT_WEBHOOK_TOKEN: process.env.XENDIT_WEBHOOK_TOKEN,
           AGORA_APP_ID: process.env.AGORA_APP_ID,
           AGORA_APP_CERTIFICATE: process.env.AGORA_APP_CERTIFICATE,
-          SMTP_HOST: process.env.SMTP_HOST,
-          SMTP_PORT: process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT) : undefined,
-          SMTP_USER: process.env.SMTP_USER,
-          SMTP_PASS: process.env.SMTP_PASS,
+          RESEND_API_KEY: process.env.RESEND_API_KEY,
           FROM_EMAIL: process.env.FROM_EMAIL,
           REDIS_URL: process.env.REDIS_URL,
           KV_URL: process.env.KV_URL,
@@ -259,7 +257,7 @@ export class EnvironmentValidator {
     try {
       // Email check (basic config validation)
       const config = this.ensureValidEnvironment()
-      if (config.SMTP_HOST && config.SMTP_USER) {
+      if (config.RESEND_API_KEY) {
         health.email = true // Basic check - config exists
       }
     } catch (error) {

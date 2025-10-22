@@ -176,7 +176,7 @@ export default function ConductContent({ session }: ConductContentProps) {
               <h3>Formal Reporting Process</h3>
               <ol>
                 <li><strong>Document the incident</strong>: Record relevant details including dates, times, and specific behaviors</li>
-                <li><strong>Submit report</strong>: Send detailed information to bridgementor@gmail.com</li>
+                <li><strong>Submit report</strong>: Send detailed information to contact@bridge-mentor.com</li>
                 <li><strong>Follow up</strong>: Respond to any requests for additional information from our review team</li>
                 <li><strong>Maintain confidentiality</strong>: Avoid discussing the incident publicly while under investigation</li>
               </ol>
@@ -232,7 +232,7 @@ export default function ConductContent({ session }: ConductContentProps) {
               <h3>Appeals Process</h3>
               <ul>
                 <li><strong>Right to appeal</strong>: Users may appeal decisions within 30 days of notification</li>
-                <li><strong>Appeal submission</strong>: Submit written appeals to bridgementor@gmail.com</li>
+                <li><strong>Appeal submission</strong>: Submit written appeals to contact@bridge-mentor.com</li>
                 <li><strong>Review process</strong>: Appeals will be reviewed by different personnel than the original decision-makers</li>
                 <li><strong>Final decision</strong>: Appeal decisions are final and binding</li>
               </ul>
@@ -382,10 +382,10 @@ export default function ConductContent({ session }: ConductContentProps) {
 
               <h3>Getting Help</h3>
               <ul>
-                <li><strong>Platform support</strong>: Contact bridgementor@gmail.com for technical issues</li>
-                <li><strong>Conduct concerns</strong>: Report violations to bridgementor@gmail.com</li>
-                <li><strong>Appeals</strong>: Submit appeals to bridgementor@gmail.com</li>
-                <li><strong>General feedback</strong>: Share suggestions at bridgementor@gmail.com</li>
+                <li><strong>Platform support</strong>: Contact contact@bridge-mentor.com for technical issues</li>
+                <li><strong>Conduct concerns</strong>: Report violations to contact@bridge-mentor.com</li>
+                <li><strong>Appeals</strong>: Submit appeals to contact@bridge-mentor.com</li>
+                <li><strong>General feedback</strong>: Share suggestions at contact@bridge-mentor.com</li>
                 <li><strong>Legal assistance</strong>: Contact the Department of Trade and Industry for consumer concerns</li>
                 <li><strong>Cybercrime reporting</strong>: Report serious violations to the Philippine National Police Anti-Cybercrime Group</li>
               </ul>
@@ -434,7 +434,7 @@ export default function ConductContent({ session }: ConductContentProps) {
               <hr className="my-8" />
 
               <p className="text-center font-semibold">
-                For questions about this Code of Conduct, please contact us at bridgementor@gmail.com
+                For questions about this Code of Conduct, please contact us at contact@bridge-mentor.com
               </p>
 
               <div className="mt-8 text-center">

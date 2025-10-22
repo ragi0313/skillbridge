@@ -68,10 +68,9 @@ export function FilterBar({
   clearAllFilters,
 }: FilterBarProps) {
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
+    <div className="mb-8">
       {/* Main Filter Row */}
       <div className="flex flex-wrap items-center gap-3 mb-4">
-        <span className="text-sm font-medium text-gray-700">Filter by:</span>
 
         {/* Categories Filter */}
         <Popover>
@@ -296,38 +295,6 @@ export function FilterBar({
               </h3>
 
               <div className="grid grid-cols-2 gap-6">
-                {/* Countries Filter */}
-                <div className="space-y-3">
-                  <Label className="text-sm font-medium text-gray-900">
-                    Country
-                  </Label>
-                  <div className="space-y-3 max-h-48 overflow-y-auto">
-                    {allCountries && allCountries.length > 0 ? (
-                      allCountries.map((country) => (
-                        <div
-                          key={country}
-                          className="flex items-center space-x-3 p-3 hover:bg-gray-50 rounded-lg transition-colors"
-                        >
-                          <Checkbox
-                            id={`country-${country}`}
-                            checked={selectedCountries.includes(country)}
-                            onCheckedChange={() => handleCountryToggle(country)}
-                            className="border-2 border-gray-300"
-                          />
-                          <Label
-                            htmlFor={`country-${country}`}
-                            className="text-sm cursor-pointer font-medium text-gray-700"
-                          >
-                            {country}
-                          </Label>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="text-sm text-gray-500 text-center py-4">No countries available</div>
-                    )}
-                  </div>
-                </div>
-
                 {/* Experience Range */}
                 <div className="space-y-3">
                   <Label className="text-sm font-medium text-gray-900">
@@ -350,9 +317,7 @@ export function FilterBar({
                     </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="grid grid-cols-1 gap-6">
                 {/* Rating Range */}
                 <div className="space-y-3">
                   <Label className="text-sm font-medium text-gray-900">
@@ -477,18 +442,6 @@ export function FilterBar({
                 <X
                   className="ml-2 h-3 w-3 cursor-pointer hover:text-green-900 transition-colors"
                   onClick={() => handleLanguageToggle(language)}
-                />
-              </Badge>
-            ))}
-            {selectedCountries.map((country) => (
-              <Badge
-                key={country}
-                className="bg-gray-100 text-gray-700 border-gray-200 px-3 py-1 rounded-lg text-xs font-medium"
-              >
-                {country}
-                <X
-                  className="ml-2 h-3 w-3 cursor-pointer hover:text-gray-900 transition-colors"
-                  onClick={() => handleCountryToggle(country)}
                 />
               </Badge>
             ))}

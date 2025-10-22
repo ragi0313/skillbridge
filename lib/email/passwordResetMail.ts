@@ -1,11 +1,9 @@
-import { sendEmailQueued, sendEmailDirect } from "./emailQueue"
-import { DEFAULT_SENDER } from "./transporter"
+import { sendEmail } from "./email-service"
 import { logger } from "@/lib/monitoring/logger"
 
 export async function sendPasswordResetEmail(email: string, firstName: string, resetCode: string) {
   const emailData = {
     to: email,
-    from: DEFAULT_SENDER,
     subject: "Skillbridge - Password Reset Code",
     html: `
         <!DOCTYPE html>
@@ -114,23 +112,18 @@ export async function sendPasswordResetEmail(email: string, firstName: string, r
       `,
   }
 
-  try {
-    await sendEmailQueued(emailData)
-    logger.info("Password reset email queued", { to: email })
-    return { success: true }
-  } catch (queueError) {
-    logger.warn("Email queue failed, falling back to direct send", { error: queueError })
-    try {
-      const result = await sendEmailDirect(emailData)
-      if (result.success) {
-        logger.info("Password reset email sent directly", { to: email })
-      } else {
-        logger.error("Direct email send failed", { error: result.error, to: email })
-      }
-      return result
-    } catch (directError) {
-      logger.error("Email sending completely failed", { error: directError, to: email })
-      return { success: false, error: directError }
-    }
+  const result = await sendEmail(emailData, {
+    mode: 'direct', // Use direct mode for time-sensitive password resets
+    metadata: {
+      action: 'password_reset',
+    },
+  })
+
+  if (result.success) {
+    logger.info("Password reset email sent successfully", { to: email })
+  } else {
+    logger.error("Failed to send password reset email", { error: result.error, to: email })
   }
+
+  return result
 }

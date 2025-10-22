@@ -5,10 +5,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import UnifiedHeader from '@/components/UnifiedHeader'
 import { Footer } from '@/components/landing/Footer'
-import { Mail, Phone, MapPin, Send, MessageCircle, Clock, CheckCircle } from 'lucide-react'
+import { Mail, Send, MessageCircle, Clock, CheckCircle } from 'lucide-react'
 import { toast } from 'sonner'
 
 export default function ContactContent() {
@@ -17,10 +16,8 @@ export default function ContactContent() {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
-    category: '',
     subject: '',
-    message: '',
-    priority: 'medium'
+    message: ''
   })
 
   const handleInputChange = (field: string, value: string) => {
@@ -47,17 +44,15 @@ export default function ContactContent() {
         setFormData({
           name: '',
           email: '',
-          category: '',
           subject: '',
-          message: '',
-          priority: 'medium'
+          message: ''
         })
       } else {
         throw new Error('Failed to send message')
       }
     } catch (error) {
       toast.error('Failed to send message', {
-        description: 'Please try again or contact us directly at bridgementor@gmail.com'
+        description: 'Please try again or contact us directly at contact@bridge-mentor.com'
       })
     } finally {
       setIsSubmitting(false)
@@ -65,217 +60,258 @@ export default function ContactContent() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
       <UnifiedHeader />
 
       {/* Hero Section */}
-      <section className="bg-gradient-to-r from-blue-600 to-purple-700 text-white py-16">
-        <div className="container mx-auto px-6 lg:px-8">
-          <div className="max-w-3xl mx-auto text-center">
-            <h1 className="text-4xl md:text-5xl font-bold mb-6">Contact Support</h1>
-            <p className="text-xl text-blue-100 mb-8">
-              Need help? Our support team is here to assist you with any questions or issues.
+      <section className="relative bg-slate-900 text-white py-20 overflow-hidden">
+        {/* Background decoration */}
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute top-0 left-0 w-96 h-96 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl"></div>
+          <div className="absolute bottom-0 right-0 w-96 h-96 bg-purple-500 rounded-full mix-blend-multiply filter blur-3xl"></div>
+        </div>
+
+        <div className="container mx-auto px-6 lg:px-8 relative z-10">
+          <div className="max-w-4xl mx-auto text-center">
+            <div className="inline-block px-4 py-2 bg-blue-500/20 backdrop-blur-sm border border-blue-400/30 rounded-full text-sm font-semibold text-blue-300 mb-6">
+              We're Here to Help
+            </div>
+            <h1 className="text-4xl md:text-6xl font-bold mb-6">Get in Touch</h1>
+            <p className="text-xl text-slate-300 mb-10 leading-relaxed">
+              Have a question or need assistance? We'd love to hear from you. Send us a message and we'll respond as soon as possible.
             </p>
-            <div className="flex items-center justify-center space-x-6 text-blue-100">
-              <div className="flex items-center">
-                <Clock className="w-5 h-5 mr-2" />
-                <span>24h response time</span>
+            <div className="flex flex-wrap items-center justify-center gap-8 text-slate-300">
+              <div className="flex items-center gap-3">
+                <div className="bg-blue-500/20 p-3 rounded-lg">
+                  <Clock className="w-5 h-5 text-blue-400" />
+                </div>
+                <div className="text-left">
+                  <div className="font-semibold text-white">Quick Response</div>
+                  <div className="text-sm text-slate-400">Usually within 24 hours</div>
+                </div>
               </div>
-              <div className="flex items-center">
-                <MessageCircle className="w-5 h-5 mr-2" />
-                <span>Expert support</span>
+              <div className="flex items-center gap-3">
+                <div className="bg-blue-500/20 p-3 rounded-lg">
+                  <MessageCircle className="w-5 h-5 text-blue-400" />
+                </div>
+                <div className="text-left">
+                  <div className="font-semibold text-white">Friendly Support</div>
+                  <div className="text-sm text-slate-400">Real people, not bots</div>
+                </div>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      <main className="py-16">
+      <main className="py-20">
         <div className="container mx-auto px-6 lg:px-8">
           <div className="max-w-6xl mx-auto">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-12">
 
               {/* Contact Form */}
-              <div className="lg:col-span-2">
-                <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-8">
-                  <h2 className="text-2xl font-bold text-gray-900 mb-6">Send us a message</h2>
+              <div className="lg:col-span-3">
+                <div className="bg-white rounded-2xl shadow-xl border border-slate-200 p-8 md:p-10">
+                  <div className="flex items-center gap-3 mb-8">
+                    <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                      <Send className="w-5 h-5 text-blue-600" />
+                    </div>
+                    <h2 className="text-3xl font-bold text-slate-900">Send a Message</h2>
+                  </div>
 
                   {isSubmitted ? (
-                    <div className="text-center py-12">
-                      <CheckCircle className="w-16 h-16 text-green-600 mx-auto mb-4" />
-                      <h3 className="text-xl font-semibold text-gray-900 mb-2">Message sent successfully!</h3>
-                      <p className="text-gray-600 mb-6">
-                        Thank you for contacting us. We'll get back to you within 24 hours.
+                    <div className="text-center py-16">
+                      <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <CheckCircle className="w-12 h-12 text-green-600" />
+                      </div>
+                      <h3 className="text-2xl font-bold text-slate-900 mb-3">We got your message!</h3>
+                      <p className="text-lg text-slate-600 mb-8 max-w-md mx-auto">
+                        Thanks for reaching out. Our team will review your message and get back to you soon.
                       </p>
-                      <Button onClick={() => setIsSubmitted(false)} className="bg-blue-600 hover:bg-blue-700">
-                        Send another message
+                      <Button
+                        onClick={() => setIsSubmitted(false)}
+                        className="bg-blue-600 hover:bg-blue-700 px-8 py-6 text-lg"
+                      >
+                        Send Another Message
                       </Button>
                     </div>
                   ) : (
                     <form onSubmit={handleSubmit} className="space-y-6">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
-                          <Label htmlFor="name">Full Name *</Label>
+                          <Label htmlFor="name" className="text-slate-700 font-semibold">Your Name *</Label>
                           <Input
                             id="name"
                             required
                             value={formData.name}
                             onChange={(e) => handleInputChange('name', e.target.value)}
-                            placeholder="Your full name"
-                            className="mt-1"
+                            placeholder="John Doe"
+                            className="mt-2 h-12 border-slate-300 focus:border-blue-500 focus:ring-blue-500"
                           />
                         </div>
                         <div>
-                          <Label htmlFor="email">Email Address *</Label>
+                          <Label htmlFor="email" className="text-slate-700 font-semibold">Email Address *</Label>
                           <Input
                             id="email"
                             type="email"
                             required
                             value={formData.email}
                             onChange={(e) => handleInputChange('email', e.target.value)}
-                            placeholder="your@email.com"
-                            className="mt-1"
+                            placeholder="john@example.com"
+                            className="mt-2 h-12 border-slate-300 focus:border-blue-500 focus:ring-blue-500"
                           />
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                          <Label htmlFor="category">Category *</Label>
-                          <Select value={formData.category} onValueChange={(value) => handleInputChange('category', value)}>
-                            <SelectTrigger className="mt-1">
-                              <SelectValue placeholder="Select a category" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="general">General Inquiry</SelectItem>
-                              <SelectItem value="technical">Technical Issue</SelectItem>
-                              <SelectItem value="billing">Billing & Payments</SelectItem>
-                              <SelectItem value="account">Account Support</SelectItem>
-                              <SelectItem value="mentorship">Mentorship Questions</SelectItem>
-                              <SelectItem value="report">Report an Issue</SelectItem>
-                              <SelectItem value="feedback">Feedback & Suggestions</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div>
-                          <Label htmlFor="priority">Priority</Label>
-                          <Select value={formData.priority} onValueChange={(value) => handleInputChange('priority', value)}>
-                            <SelectTrigger className="mt-1">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="low">Low</SelectItem>
-                              <SelectItem value="medium">Medium</SelectItem>
-                              <SelectItem value="high">High</SelectItem>
-                              <SelectItem value="urgent">Urgent</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-
                       <div>
-                        <Label htmlFor="subject">Subject *</Label>
+                        <Label htmlFor="subject" className="text-slate-700 font-semibold">Subject *</Label>
                         <Input
                           id="subject"
                           required
                           value={formData.subject}
                           onChange={(e) => handleInputChange('subject', e.target.value)}
-                          placeholder="Brief description of your inquiry"
-                          className="mt-1"
+                          placeholder="How can we help you?"
+                          className="mt-2 h-12 border-slate-300 focus:border-blue-500 focus:ring-blue-500"
                         />
                       </div>
 
                       <div>
-                        <Label htmlFor="message">Message *</Label>
+                        <Label htmlFor="message" className="text-slate-700 font-semibold">Your Message *</Label>
                         <Textarea
                           id="message"
                           required
                           value={formData.message}
                           onChange={(e) => handleInputChange('message', e.target.value)}
-                          placeholder="Please describe your question or issue in detail..."
+                          placeholder="Tell us what's on your mind..."
                           rows={6}
-                          className="mt-1"
+                          className="mt-2 border-slate-300 focus:border-blue-500 focus:ring-blue-500 resize-none"
                         />
                       </div>
 
                       <Button
                         type="submit"
                         disabled={isSubmitting}
-                        className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3"
+                        className="w-full bg-blue-600 hover:bg-blue-700 text-white py-6 text-lg font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all"
                       >
                         {isSubmitting ? (
-                          <div className="flex items-center">
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                            Sending...
+                          <div className="flex items-center justify-center">
+                            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-3"></div>
+                            Sending your message...
                           </div>
                         ) : (
                           <div className="flex items-center justify-center">
-                            <Send className="w-4 h-4 mr-2" />
+                            <Send className="w-5 h-5 mr-2" />
                             Send Message
                           </div>
                         )}
                       </Button>
+
+                      <p className="text-sm text-slate-500 text-center mt-4">
+                        We typically respond within 24 hours during business days.
+                      </p>
                     </form>
                   )}
                 </div>
               </div>
 
-              {/* Contact Info */}
-              <div className="space-y-8">
-                <div className="bg-gray-50 rounded-xl p-6">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Get in Touch</h3>
+              {/* Contact Info Sidebar */}
+              <div className="lg:col-span-2 space-y-6">
+                {/* Direct Contact */}
+                <div className="bg-gradient-to-br from-blue-50 to-white rounded-2xl p-8 border border-blue-100 shadow-lg">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+                      <Mail className="w-5 h-5 text-white" />
+                    </div>
+                    <h3 className="text-xl font-bold text-slate-900">Direct Contact</h3>
+                  </div>
                   <div className="space-y-4">
-                    <div className="flex items-start space-x-3">
-                      <Mail className="w-5 h-5 text-blue-600 mt-1" />
-                      <div>
-                        <p className="font-medium text-gray-900">Email</p>
-                        <a href="mailto:bridgementor@gmail.com" className="text-blue-600 hover:text-blue-700">
-                          bridgementor@gmail.com
-                        </a>
-                      </div>
+                    <div>
+                      <p className="text-sm font-semibold text-slate-600 mb-1">Email Us</p>
+                      <a
+                        href="mailto:contact@bridge-mentor.com"
+                        className="text-lg font-medium text-blue-600 hover:text-blue-700 transition-colors"
+                      >
+                        contact@bridge-mentor.com
+                      </a>
                     </div>
-                    <div className="flex items-start space-x-3">
-                      <Clock className="w-5 h-5 text-blue-600 mt-1" />
-                      <div>
-                        <p className="font-medium text-gray-900">Response Time</p>
-                        <p className="text-gray-600">Within 24 hours</p>
+                    <div className="pt-4 border-t border-slate-200">
+                      <div className="flex items-start gap-3 mb-3">
+                        <Clock className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                        <div>
+                          <p className="font-semibold text-slate-900">Response Time</p>
+                          <p className="text-sm text-slate-600">Usually within 24 hours</p>
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex items-start space-x-3">
-                      <MessageCircle className="w-5 h-5 text-blue-600 mt-1" />
-                      <div>
-                        <p className="font-medium text-gray-900">Support Hours</p>
-                        <p className="text-gray-600">Monday - Friday, 9 AM - 6 PM PST</p>
+                      <div className="flex items-start gap-3">
+                        <MessageCircle className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                        <div>
+                          <p className="font-semibold text-slate-900">Support Hours</p>
+                          <p className="text-sm text-slate-600">Mon - Fri, 9 AM - 6 PM PST</p>
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
 
-                <div className="bg-blue-50 rounded-xl p-6 border border-blue-200">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Help</h3>
+                {/* Quick Links */}
+                <div className="bg-white rounded-2xl p-8 border border-slate-200 shadow-lg">
+                  <h3 className="text-xl font-bold text-slate-900 mb-6">Helpful Resources</h3>
                   <div className="space-y-3">
-                    <a href="/faqs" className="block text-blue-600 hover:text-blue-700 hover:underline">
-                      📋 Frequently Asked Questions
+                    <a
+                      href="/faqs"
+                      className="flex items-center gap-3 p-3 rounded-lg hover:bg-slate-50 transition-colors group"
+                    >
+                      <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center group-hover:bg-blue-100 transition-colors">
+                        <span className="text-xl">❓</span>
+                      </div>
+                      <div>
+                        <div className="font-semibold text-slate-900 group-hover:text-blue-600 transition-colors">FAQs</div>
+                        <div className="text-sm text-slate-600">Common questions answered</div>
+                      </div>
                     </a>
-                    <a href="/terms-of-service" className="block text-blue-600 hover:text-blue-700 hover:underline">
-                      📄 Terms of Service
+                    <a
+                      href="/terms-of-service"
+                      className="flex items-center gap-3 p-3 rounded-lg hover:bg-slate-50 transition-colors group"
+                    >
+                      <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center group-hover:bg-blue-100 transition-colors">
+                        <span className="text-xl">📄</span>
+                      </div>
+                      <div>
+                        <div className="font-semibold text-slate-900 group-hover:text-blue-600 transition-colors">Terms of Service</div>
+                        <div className="text-sm text-slate-600">Platform guidelines</div>
+                      </div>
                     </a>
-                    <a href="/privacy-policy" className="block text-blue-600 hover:text-blue-700 hover:underline">
-                      🔒 Privacy Policy
-                    </a>
-                    <a href="/code-of-conduct" className="block text-blue-600 hover:text-blue-700 hover:underline">
-                      🤝 Code of Conduct
+                    <a
+                      href="/privacy-policy"
+                      className="flex items-center gap-3 p-3 rounded-lg hover:bg-slate-50 transition-colors group"
+                    >
+                      <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center group-hover:bg-blue-100 transition-colors">
+                        <span className="text-xl">🔒</span>
+                      </div>
+                      <div>
+                        <div className="font-semibold text-slate-900 group-hover:text-blue-600 transition-colors">Privacy Policy</div>
+                        <div className="text-sm text-slate-600">How we protect your data</div>
+                      </div>
                     </a>
                   </div>
                 </div>
 
-                <div className="bg-purple-50 rounded-xl p-6 border border-purple-200">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Urgent Issues?</h3>
-                  <p className="text-gray-600 text-sm mb-4">
-                    For urgent technical issues affecting active sessions, please mark your priority as "Urgent" and we'll respond as soon as possible.
-                  </p>
-                  <div className="text-xs text-gray-500">
-                    Urgent issues include: payment problems, session access issues, account security concerns.
+                {/* Urgent Help */}
+                <div className="bg-gradient-to-br from-red-50 to-orange-50 rounded-2xl p-8 border border-red-100 shadow-lg">
+                  <div className="flex items-start gap-3 mb-4">
+                    <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <span className="text-xl">⚡</span>
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold text-slate-900 mb-2">Urgent Issue?</h3>
+                      <p className="text-slate-700 text-sm leading-relaxed">
+                        For time-sensitive problems during an active session, email us at{' '}
+                        <a href="mailto:contact@bridge-mentor.com" className="font-semibold text-red-600 hover:text-red-700">
+                          contact@bridge-mentor.com
+                        </a>
+                        {' '}with "URGENT" in the subject line.
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>

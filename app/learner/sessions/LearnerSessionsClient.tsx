@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
+import { useSearchParams } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -30,6 +31,7 @@ import {
   Archive,
   ArchiveRestore
 } from "lucide-react"
+import { CreditsIcon } from "@/components/ui/credits-icon"
 import { format, isPast, isFuture, isToday } from "date-fns"
 import { SessionRatingModal } from "@/components/session/SessionRatingModal"
 import { toast } from "sonner"
@@ -72,6 +74,7 @@ interface LearnerSessionsClientProps {
 }
 
 export function LearnerSessionsClient({ sessions }: LearnerSessionsClientProps) {
+  const searchParams = useSearchParams()
   const [selectedTab, setSelectedTab] = useState("all")
   const [ratingModalOpen, setRatingModalOpen] = useState(false)
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(null)
@@ -89,6 +92,22 @@ export function LearnerSessionsClient({ sessions }: LearnerSessionsClientProps) 
 
   // Archive functionality - sessions older than 6 months are eligible for archiving
   const [archivedSessions, setArchivedSessions] = useState<Set<number>>(new Set())
+
+  // Check for feedback query parameter and open rating modal
+  useEffect(() => {
+    const feedbackSessionId = searchParams.get('feedback')
+    if (feedbackSessionId) {
+      const sessionId = parseInt(feedbackSessionId, 10)
+      const session = sessions.find(s => s.id === sessionId)
+
+      // Only open modal if session exists, is completed, and hasn't been reviewed yet
+      if (session && session.status === 'completed' && !session.reviewId) {
+        setSelectedSessionId(sessionId)
+        setRatingModalOpen(true)
+        setSelectedTab('completed') // Switch to completed tab
+      }
+    }
+  }, [searchParams, sessions])
 
   const isSessionArchivable = (session: Session) => {
     const sessionDate = new Date(session.startTime || session.scheduledDate)
@@ -469,7 +488,17 @@ export function LearnerSessionsClient({ sessions }: LearnerSessionsClientProps) 
               </div>
             </div>
           </div>
-          {getStatusBadge(session.status)}
+          <div className="text-right space-y-2">
+            {getStatusBadge(session.status)}
+            {session.refundAmount !== 0 && session.refundAmount != null && (
+              <div className="flex items-center justify-end space-x-1 text-green-600">
+                <CreditsIcon className="w-4 h-4" />
+                <span className="text-sm font-medium">
+                  +{session.refundAmount} refunded
+                </span>
+              </div>
+            )}
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -494,13 +523,8 @@ export function LearnerSessionsClient({ sessions }: LearnerSessionsClientProps) 
             </span>
           </div>
           <div className="flex items-center space-x-2">
-            <CreditCard className="w-4 h-4 text-gray-500" />
-            <span>Total Cost: {session.totalCostCredits} credits</span>
-            {session.refundAmount !== 0 && session.refundAmount != null && (
-              <Badge variant="secondary" className="ml-2">
-                Refunded: {session.refundAmount} credits
-              </Badge>
-            )}
+            <CreditsIcon className="w-4 h-4 text-gray-500" />
+            <span>Cost: {session.totalCostCredits} credits</span>
           </div>
           {(session.learnerJoinedAt || session.mentorJoinedAt) && (
             <div className="flex items-center space-x-2">
@@ -529,13 +553,67 @@ export function LearnerSessionsClient({ sessions }: LearnerSessionsClientProps) 
           </div>
         )}
 
+        {/* No-Show Status Indicators */}
+        {session.status === 'learner_no_show' && (
+          <div className="bg-red-50 border border-red-200 rounded-md p-3">
+            <div className="flex items-center gap-2 mb-1">
+              <XCircle className="w-4 h-4 text-red-600" />
+              <span className="text-sm font-semibold text-red-800">You Missed This Session</span>
+            </div>
+            <p className="text-sm text-red-700">
+              You didn't join this session. No refund was issued.
+            </p>
+          </div>
+        )}
+
+        {session.status === 'mentor_no_show' && (
+          <div className="bg-green-50 border border-green-200 rounded-md p-3">
+            <div className="flex items-center gap-2 mb-1">
+              <CheckCircle2 className="w-4 h-4 text-green-600" />
+              <span className="text-sm font-semibold text-green-800">Mentor No-Show - Full Refund</span>
+            </div>
+            <p className="text-sm text-green-700">
+              The mentor didn't attend. You received a full refund of {session.totalCostCredits} credits.
+            </p>
+          </div>
+        )}
+
+        {session.status === 'both_no_show' && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-md p-3">
+            <div className="flex items-center gap-2 mb-1">
+              <AlertCircle className="w-4 h-4 text-yellow-600" />
+              <span className="text-sm font-semibold text-yellow-800">Session Not Attended</span>
+            </div>
+            <p className="text-sm text-yellow-700">
+              Neither party joined this session.
+            </p>
+          </div>
+        )}
+
+        {/* Technical Issues Indicator */}
+        {session.status === 'technical_issues' && (
+          <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
+            <div className="flex items-center gap-2 mb-1">
+              <AlertCircle className="w-4 h-4 text-blue-600" />
+              <span className="text-sm font-semibold text-blue-800">Technical Issues Encountered</span>
+            </div>
+            <p className="text-sm text-blue-700">
+              This session experienced technical difficulties. Please contact support if you have concerns.
+            </p>
+          </div>
+        )}
+
         {/* Rejection/Cancellation Reason */}
         {(session.rejectionReason || session.cancellationReason) && (
           <div className="bg-red-50 border border-red-200 rounded-md p-3">
-            <p className="text-sm text-red-800">
-              <strong>
-                {session.rejectionReason ? "Rejection Reason: " : "Cancellation Reason: "}
-              </strong>
+            <div className="flex items-center gap-2 mb-1">
+              <XCircle className="w-4 h-4 text-red-600" />
+              <span className="text-sm font-semibold text-red-800">
+                {session.rejectionReason ? "Session Rejected" : "Session Cancelled"}
+              </span>
+            </div>
+            <p className="text-sm text-red-700">
+              <strong>Reason: </strong>
               {session.rejectionReason || session.cancellationReason}
             </p>
           </div>
@@ -659,41 +737,40 @@ export function LearnerSessionsClient({ sessions }: LearnerSessionsClientProps) 
     <>
       {/* Search and Filter Controls */}
       <div className="mb-6 space-y-4">
-        {/* Search Bar */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-          <Input
-            placeholder="Search by mentor name, skill, or notes..."
-            value={searchTerm}
-            onChange={(e) => {
-              setSearchTerm(e.target.value)
-              resetPagination()
-            }}
-            className="pl-10 pr-4 h-11"
-          />
+        {/* Date Range Filter */}
+        <div className="flex flex-wrap gap-3">
+          <Select value={dateRangeFilter} onValueChange={(value) => { setDateRangeFilter(value); resetPagination() }}>
+            <SelectTrigger className="w-[160px]">
+              <SelectValue placeholder="All Time" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Time</SelectItem>
+              <SelectItem value="week">Past Week</SelectItem>
+              <SelectItem value="month">Past Month</SelectItem>
+              <SelectItem value="quarter">Past 3 Months</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
-        {/* Filters Row */}
-        <div className="flex flex-wrap gap-4 items-center justify-between">
-          <div className="flex flex-wrap gap-3">
-            {/* Date Range Filter */}
-            <Select value={dateRangeFilter} onValueChange={(value) => { setDateRangeFilter(value); resetPagination() }}>
-              <SelectTrigger className="w-[160px]">
-                <SelectValue placeholder="All Time" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Time</SelectItem>
-                <SelectItem value="week">Past Week</SelectItem>
-                <SelectItem value="month">Past Month</SelectItem>
-                <SelectItem value="quarter">Past 3 Months</SelectItem>
-              </SelectContent>
-            </Select>
+        {/* Search Bar and Options Menu Row */}
+        <div className="flex gap-3 items-center">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+            <Input
+              placeholder="Search by mentor name, skill, or notes..."
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value)
+                resetPagination()
+              }}
+              className="pl-10 pr-4 h-11"
+            />
           </div>
 
           {/* Options Menu */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="default" className="h-11 px-3">
                 <MoreVertical className="w-4 h-4" />
               </Button>
             </DropdownMenuTrigger>

@@ -546,18 +546,18 @@ export default function BookMentorSessionPageClient({ session }: Props) {
   const selectedSkill = mentor.skills.find((s) => s.id === selectedSkillId)
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-purple-50">
       {/* Header */}
       <UnifiedHeader />
 
       <div className="max-w-6xl mx-auto px-4 py-8">
         {/* Page Title */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-semibold text-gray-900 mb-2">
-            Book Mentoring Session
+        <div className="mb-8 text-center">
+          <h1 className="text-4xl font-bold text-gray-900 mb-3">
+            Book Your Mentoring Session
           </h1>
-          <p className="text-gray-600">
-            Schedule a 1-on-1 session with {mentor.fullName}
+          <p className="text-lg text-gray-600">
+            Schedule a personalized 1-on-1 session with <span className="font-semibold text-purple-600">{mentor.fullName}</span>
           </p>
         </div>
 
@@ -565,16 +565,19 @@ export default function BookMentorSessionPageClient({ session }: Props) {
           {/* Left Column - Session Details */}
           <div className="lg:col-span-2 space-y-8">
             {/* Date & Time Selection */}
-            <div className="bg-white border border-gray-200 rounded-lg p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-6">
+            <div className="bg-white shadow-lg border-0 rounded-2xl p-8 hover:shadow-xl transition-shadow duration-300">
+              <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
+                  <Clock className="w-5 h-5 text-white" />
+                </div>
                 Select Date & Time
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div>
-                  <Label className="text-base font-semibold mb-4 text-gray-700 block">
+                  <Label className="text-base font-semibold mb-4 text-gray-800 block">
                     Choose Date
                   </Label>
-                  <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                  <div className="border-2 border-purple-100 rounded-xl p-4 bg-gradient-to-br from-white to-purple-50 shadow-sm">
                       <DayPicker
                         mode="single"
                         selected={selectedDate}
@@ -602,11 +605,12 @@ export default function BookMentorSessionPageClient({ session }: Props) {
 
                 {selectedDate && (
                   <div>
-                    <Label className="text-base font-semibold mb-4 text-gray-700 block">
-                      Available Times - {format(selectedDate, "MMM d, yyyy")}
+                    <Label className="text-base font-semibold mb-4 text-gray-800 block">
+                      Available Times
+                      <span className="text-purple-600 ml-2">- {format(selectedDate, "MMM d, yyyy")}</span>
                       {mentor?.timezone && (
-                        <span className="text-sm text-gray-500 font-normal block mt-1">
-                          Times shown in mentor's timezone: {mentor.timezone}
+                        <span className="text-sm text-gray-500 font-normal block mt-2 bg-blue-50 px-3 py-1.5 rounded-lg">
+                          🌍 Times shown in mentor's timezone: {mentor.timezone}
                         </span>
                       )}
                     </Label>
@@ -620,27 +624,32 @@ export default function BookMentorSessionPageClient({ session }: Props) {
                         <p className="font-medium text-gray-500">No availability for this date</p>
                       </div>
                     ) : (
-                      <div className="grid gap-3 max-h-64 overflow-y-auto">
+                      <div className="grid gap-3 max-h-80 overflow-y-auto pr-2 custom-scrollbar">
                         {availableTimeSlotsForSelectedDay.map((slot, index) => (
                           <button
                             key={`${slot.startTime}-${index}`}
                             className={cn(
-                              "p-4 rounded-lg border text-left transition-all duration-200",
+                              "p-4 rounded-xl border-2 text-left transition-all duration-200 transform hover:scale-102",
                               !slot.available
-                                ? "border-red-200 bg-red-50 text-red-500 cursor-not-allowed"
+                                ? "border-red-200 bg-red-50 text-red-600 cursor-not-allowed opacity-60"
                                 : selectedTimeSlot?.startTime === slot.startTime
-                                  ? "border-blue-300 bg-blue-50 text-blue-800"
-                                  : "border-gray-200 bg-white hover:border-blue-300 hover:bg-blue-50",
+                                  ? "border-purple-400 bg-gradient-to-r from-purple-50 to-blue-50 text-purple-900 shadow-md ring-2 ring-purple-200"
+                                  : "border-gray-200 bg-white hover:border-purple-300 hover:shadow-md hover:bg-gradient-to-r hover:from-purple-50 hover:to-blue-50",
                             )}
                             onClick={() => slot.available && setSelectedTimeSlot(slot)}
                             disabled={!slot.available}
                             title={slot.conflictReason || (slot.available ? "Available" : "Unavailable")}
                           >
-                            <div className="font-semibold">
-                              {slot.startTime} – {slot.endTime}
+                            <div className="flex items-center gap-2">
+                              {selectedTimeSlot?.startTime === slot.startTime && slot.available && (
+                                <CheckCircle className="w-5 h-5 text-purple-600" />
+                              )}
+                              <div className="font-bold text-base">
+                                {slot.startTime} – {slot.endTime}
+                              </div>
                             </div>
                             {!slot.available && slot.conflictReason && (
-                              <div className="text-sm text-red-500 mt-1">
+                              <div className="text-xs text-red-600 mt-1.5 ml-7">
                                 {slot.conflictReason}
                               </div>
                             )}
@@ -701,8 +710,13 @@ export default function BookMentorSessionPageClient({ session }: Props) {
             </div>
 
             {/* Session Notes */}
-            <div className="bg-white border border-gray-200 rounded-lg p-6">
-              <h2 className="text-xl font-semibold text-gray-900 mb-6">
+            <div className="bg-white shadow-lg border-0 rounded-2xl p-8 hover:shadow-xl transition-shadow duration-300">
+              <h2 className="text-2xl font-bold text-gray-900 mb-6 flex items-center gap-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-teal-600 rounded-xl flex items-center justify-center">
+                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                </div>
                 Session Notes
               </h2>
               <div className="relative">
@@ -726,8 +740,10 @@ export default function BookMentorSessionPageClient({ session }: Props) {
           {/* Right Column - Booking Summary */}
           <div className="lg:col-span-1">
             <div className="sticky top-8">
-              <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-                <div className="bg-blue-600 p-6 text-white">
+              <div className="bg-white shadow-2xl border-0 rounded-2xl overflow-hidden transform hover:scale-105 transition-transform duration-300">
+                <div className="bg-gradient-to-r from-purple-600 via-blue-600 to-indigo-600 p-6 text-white relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16"></div>
+                  <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/5 rounded-full -ml-12 -mb-12"></div>
                   <div className="flex items-start space-x-4">
                     <div className="relative">
                       <img
@@ -752,29 +768,32 @@ export default function BookMentorSessionPageClient({ session }: Props) {
 
                 {/* Skill Selection Grid */}
                 <div className="mb-6">
-                  <Label className="text-base font-semibold mb-4 text-gray-700 block">
-                    Select Skill
+                  <Label className="text-base font-semibold mb-4 text-gray-800 block">
+                    Select Your Focus Area
                   </Label>
                   <div className="grid gap-3">
                     {mentor.skills.map((skill) => (
                       <button
                         key={skill.id}
                         className={cn(
-                          "p-4 rounded-lg border text-left transition-all duration-200",
+                          "p-4 rounded-xl border-2 text-left transition-all duration-200 transform hover:scale-102",
                           selectedSkillId === skill.id
-                            ? "border-blue-300 bg-blue-50 text-blue-800"
-                            : "border-gray-200 bg-white hover:border-blue-300 hover:bg-blue-50",
+                            ? "border-purple-400 bg-gradient-to-r from-purple-50 to-blue-50 shadow-md ring-2 ring-purple-200"
+                            : "border-gray-200 bg-white hover:border-purple-300 hover:shadow-md",
                         )}
                         onClick={() => setSelectedSkillId(skill.id)}
                       >
                         <div className="flex justify-between items-center">
                           <div className="flex-1">
-                            <div className="font-semibold text-sm flex items-center gap-2">
-                              <div className={cn("w-2 h-2 rounded-full", selectedSkillId === skill.id ? "bg-blue-500" : "bg-gray-300")}></div>
+                            <div className="font-bold text-sm flex items-center gap-2">
+                              <div className={cn("w-3 h-3 rounded-full transition-all", selectedSkillId === skill.id ? "bg-purple-500 animate-pulse" : "bg-gray-300")}></div>
                               {skill.skillName}
                             </div>
-                            <div className="text-xs text-gray-600 mt-1 ml-4">{skill.ratePerHour} credits/hour</div>
+                            <div className="text-xs text-gray-600 mt-1.5 ml-5 font-medium">{skill.ratePerHour} credits/hour</div>
                           </div>
+                          {selectedSkillId === skill.id && (
+                            <CheckCircle className="w-5 h-5 text-purple-600" />
+                          )}
                         </div>
                       </button>
                     ))}
@@ -784,12 +803,17 @@ export default function BookMentorSessionPageClient({ session }: Props) {
                 {/* Session Details */}
                 <div className="space-y-4 mb-6">
                   {estimatedCost !== null && (
-                    <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                    <div className="p-5 bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-200 rounded-xl shadow-sm">
                       <div className="flex items-center justify-between">
-                        <span className="text-green-800 font-semibold">
-                          Estimated Cost:
-                        </span>
-                        <span className="text-green-900 font-bold text-xl bg-white px-3 py-1 rounded-lg shadow-sm">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center">
+                            <span className="text-white text-lg">💰</span>
+                          </div>
+                          <span className="text-green-800 font-bold text-base">
+                            Total Cost:
+                          </span>
+                        </div>
+                        <span className="text-green-900 font-bold text-2xl bg-white px-4 py-2 rounded-xl shadow-md">
                           {estimatedCost} credits
                         </span>
                       </div>
@@ -801,15 +825,16 @@ export default function BookMentorSessionPageClient({ session }: Props) {
                 <Button
                   onClick={handleBooking}
                   disabled={submitting || !selectedDate || !selectedTimeSlot || !sessionNotes.trim() || (selectedDate && isDateBlocked(selectedDate))}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-lg font-semibold text-lg transition-all duration-200 border-0"
+                  className="w-full bg-gradient-to-r from-purple-600 via-blue-600 to-indigo-600 hover:from-purple-700 hover:via-blue-700 hover:to-indigo-700 text-white py-5 rounded-xl font-bold text-lg transition-all duration-300 border-0 shadow-lg hover:shadow-xl transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
                 >
                   {submitting ? (
                     <>
-                      <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                      <Loader2 className="w-6 h-6 animate-spin mr-2" />
                       Booking Session...
                     </>
                   ) : (
                     <>
+                      <CheckCircle className="w-5 h-5 mr-2" />
                       Confirm & Book Session
                       <ArrowRight className="w-5 h-5 ml-2" />
                     </>

@@ -9,7 +9,7 @@ import {
   learners,
   users
 } from '@/db/schema'
-import { eq, and, desc, notExists, gt, inArray } from 'drizzle-orm'
+import { eq, and, or, desc, notExists, gt, inArray } from 'drizzle-orm'
 import { triggerPusherEvent, getConversationChannel, PUSHER_EVENTS } from '@/lib/pusher/config'
 import { validateChatMessage } from '@/lib/validation/messageValidation'
 import { Metrics } from '@/lib/monitoring/metrics'
@@ -43,6 +43,7 @@ export interface ConversationWithParticipants {
     content: string
     messageType: string
     createdAt: string
+    senderId: number
     senderName: string
   }
   unreadCount?: number
@@ -279,6 +280,7 @@ export class ChatService {
             content: lastMsg.messages.content,
             messageType: lastMsg.messages.messageType,
             createdAt: lastMsg.messages.createdAt.toISOString(),
+            senderId: lastMsg.messages.senderId,
             senderName: `${lastMsg.users.firstName} ${lastMsg.users.lastName}`.trim(),
           }
         }
@@ -575,10 +577,148 @@ export class ChatService {
   }
 
   static async deleteConversationForUser(conversationId: number, userId: number): Promise<void> {
-    await db.insert(conversationUserDeletions)
-      .values({
-        conversationId,
-        userId,
+    // First, check if the conversation still exists
+    const conversation = await db.select().from(conversations).where(eq(conversations.id, conversationId)).limit(1)
+
+    // If conversation doesn't exist, it was already hard-deleted by both users
+    // Just return success since the goal (deleting the conversation) is achieved
+    if (!conversation[0]) {
+      console.log(`[CHAT] Conversation ${conversationId} already deleted, skipping`)
+      return
+    }
+
+    // Check if deletion record already exists
+    const existingDeletion = await db.select()
+      .from(conversationUserDeletions)
+      .where(and(
+        eq(conversationUserDeletions.conversationId, conversationId),
+        eq(conversationUserDeletions.userId, userId)
+      ))
+      .limit(1)
+
+    // Only insert if deletion record doesn't exist yet
+    if (existingDeletion.length === 0) {
+      await db.insert(conversationUserDeletions)
+        .values({
+          conversationId,
+          userId,
+        })
+    }
+
+    // Get both participant user IDs (we already have conversation from above)
+    const mentorData = await db.select({ userId: users.id })
+      .from(mentors)
+      .innerJoin(users, eq(mentors.userId, users.id))
+      .where(eq(mentors.id, conversation[0].mentorId))
+      .limit(1)
+
+    const learnerData = await db.select({ userId: users.id })
+      .from(learners)
+      .innerJoin(users, eq(learners.userId, users.id))
+      .where(eq(learners.id, conversation[0].learnerId))
+      .limit(1)
+
+    if (!mentorData[0] || !learnerData[0]) return
+
+    const mentorUserId = mentorData[0].userId
+    const learnerUserId = learnerData[0].userId
+
+    // Check if both users have deletion records
+    const deletionRecords = await db.select()
+      .from(conversationUserDeletions)
+      .where(
+        and(
+          eq(conversationUserDeletions.conversationId, conversationId),
+          or(
+            eq(conversationUserDeletions.userId, mentorUserId),
+            eq(conversationUserDeletions.userId, learnerUserId)
+          )
+        )
+      )
+
+    const mentorDeleted = deletionRecords.some(r => r.userId === mentorUserId)
+    const learnerDeleted = deletionRecords.some(r => r.userId === learnerUserId)
+
+    // If both users deleted the conversation, permanently delete it
+    if (mentorDeleted && learnerDeleted) {
+      console.log(`[CHAT] Both users deleted conversation ${conversationId}, performing hard delete`)
+      await this.hardDeleteConversation(conversationId)
+    }
+  }
+
+  /**
+   * Permanently delete a conversation and all its data from database and storage
+   */
+  private static async hardDeleteConversation(conversationId: number): Promise<void> {
+    const { deleteFromVercelBlob, isVercelBlobUrl } = await import('@/lib/vercel-blob')
+    const { deleteFromCloudinary, extractPublicIdFromUrl } = await import('@/lib/cloudinary')
+
+    try {
+      // Get all messages with attachments
+      const messagesWithAttachments = await db.select()
+        .from(messages)
+        .innerJoin(messageAttachments, eq(messageAttachments.messageId, messages.id))
+        .where(eq(messages.conversationId, conversationId))
+
+      // Delete all attachments from storage (Vercel Blob or Cloudinary)
+      for (const row of messagesWithAttachments) {
+        try {
+          const fileUrl = row.message_attachments.fileUrl
+
+          // Check if it's a Vercel Blob URL or Cloudinary URL
+          if (isVercelBlobUrl(fileUrl)) {
+            await deleteFromVercelBlob(fileUrl)
+            console.log(`[CHAT] Deleted file from Vercel Blob: ${fileUrl}`)
+          } else {
+            // Fallback to Cloudinary for old files
+            const extracted = extractPublicIdFromUrl(fileUrl)
+            if (extracted) {
+              await deleteFromCloudinary(extracted.publicId, extracted.resourceType)
+              console.log(`[CHAT] Deleted file from Cloudinary: ${extracted.publicId}`)
+            }
+          }
+        } catch (error) {
+          console.error(`[CHAT] Failed to delete file from storage:`, error)
+          // Continue with other deletions
+        }
+      }
+
+      // Delete all records in transaction
+      await db.transaction(async (tx) => {
+        // Delete message attachments
+        await tx
+          .delete(messageAttachments)
+          .where(
+            inArray(
+              messageAttachments.messageId,
+              tx.select({ id: messages.id }).from(messages).where(eq(messages.conversationId, conversationId))
+            )
+          )
+
+        // Delete message user deletions
+        await tx
+          .delete(messageUserDeletions)
+          .where(
+            inArray(
+              messageUserDeletions.messageId,
+              tx.select({ id: messages.id }).from(messages).where(eq(messages.conversationId, conversationId))
+            )
+          )
+
+        // Delete messages
+        await tx.delete(messages).where(eq(messages.conversationId, conversationId))
+
+        // Delete conversation user deletions
+        await tx.delete(conversationUserDeletions).where(eq(conversationUserDeletions.conversationId, conversationId))
+
+        // Delete conversation
+        await tx.delete(conversations).where(eq(conversations.id, conversationId))
       })
+
+      console.log(`[CHAT] Successfully hard deleted conversation ${conversationId}`)
+    } catch (error) {
+      console.error(`[CHAT] Error hard deleting conversation ${conversationId}:`, error)
+      throw error
+    }
   }
 }

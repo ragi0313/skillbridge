@@ -7,9 +7,11 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Star, MapPin, Clock, ChevronLeft, ChevronRight, Settings } from "lucide-react"
+import { MessageMentorButtonWrapper as MessageMentorButton } from "@/components/mentors/MessageMentorButtonWrapper"
 
 type Mentor = {
   mentorId: number
+  userId: number
   firstName: string
   lastName: string
   title: string | null
@@ -54,53 +56,57 @@ export default function RecommendedMentors() {
   const visibleMentors = mentors.slice(currentMentorIndex, currentMentorIndex + 2)
 
   return (
-    <section className="py-16 bg-white">
-      <div className="container mx-auto px-4">
-        <div className="max-w-6xl mx-auto">
-          <div className="flex items-center justify-between mb-12">
-            <div className="text-center flex-1">
-              <h2 className="text-3xl font-bold text-gray-900 mb-4">Recommended for you</h2>
-              <p className="text-gray-600 text-lg max-w-2xl mx-auto">
-                Based on your learning goals, here are mentors who can help you grow.
-              </p>
-            </div>
-            {mentors.length > 2 && (
-              <div className="flex items-center space-x-2">
-                <button onClick={prevMentor} className="p-2 rounded-full border border-gray-300 hover:bg-gray-50">
-                  <ChevronLeft className="w-5 h-5 text-gray-600" />
-                </button>
-                <button onClick={nextMentor} className="p-2 rounded-full border border-gray-300 hover:bg-gray-50">
-                  <ChevronRight className="w-5 h-5 text-gray-600" />
-                </button>
-              </div>
-            )}
-          </div>
+    <>
+      <div className="text-center mb-12">
+        <h2 className="text-3xl font-bold text-gray-900 mb-2">Recommended for you</h2>
+        <p className="text-gray-600">Based on your learning goals, here are mentors who can help you grow</p>
+      </div>
 
-          {loading ? (
-            <div className="text-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto mb-4"></div>
-              <p className="text-gray-600">Finding matching mentors...</p>
-            </div>
-          ) : mentors.length === 0 ? (
-            <div className="text-center py-12">
-              <Star className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">No matching mentors found</h3>
-              <p className="text-gray-600 mb-4">
-                Update your learning goals to find mentors who match your interests.
-              </p>
-              <Link href="/learner/settings">
-                <Button className="gradient-bg text-white">
-                  <Settings className="w-4 h-4 mr-2" />
-                  Update Learning Goals
-                </Button>
-              </Link>
-            </div>
-          ) : (
-            <>
+        {loading ? (
+          <div className="text-center py-12">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Finding matching mentors...</p>
+          </div>
+        ) : mentors.length === 0 ? (
+          <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
+            <Star className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">No matching mentors found</h3>
+            <p className="text-gray-600 mb-4">
+              Update your learning goals to find mentors who match your interests.
+            </p>
+            <Link href="/learner/settings">
+              <Button className="gradient-bg text-white">
+                <Settings className="w-4 h-4 mr-2" />
+                Update Learning Goals
+              </Button>
+            </Link>
+          </div>
+        ) : (
+          <div className="relative">
+            {/* Navigation arrows */}
+            {mentors.length > 2 && (
+              <>
+                <button
+                  onClick={prevMentor}
+                  className="absolute left-0 top-1/2 -translate-y-1/2 z-10 p-3 rounded-full bg-white border border-gray-300 hover:bg-gray-50 shadow-lg transition-colors"
+                >
+                  <ChevronLeft className="w-6 h-6 text-gray-600" />
+                </button>
+                <button
+                  onClick={nextMentor}
+                  className="absolute right-0 top-1/2 -translate-y-1/2 z-10 p-3 rounded-full bg-white border border-gray-300 hover:bg-gray-50 shadow-lg transition-colors"
+                >
+                  <ChevronRight className="w-6 h-6 text-gray-600" />
+                </button>
+              </>
+            )}
+
+            {/* Mentor cards carousel */}
+            <div className="px-12">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {visibleMentors.map((mentor) => (
-                <Card key={mentor.mentorId} className="hover:shadow-lg transition-all duration-300 border-0 shadow-md">
-                  <CardContent className="p-6">
+                  <Card key={mentor.mentorId} className="bg-white rounded-2xl border border-gray-200 shadow-lg hover:shadow-xl transition-all duration-300">
+                    <CardContent className="p-8">
                     <div className="flex items-start space-x-4 mb-4">
                       <Avatar className="h-16 w-16">
                         <AvatarImage src={mentor.profilePicture || "/placeholder.svg"} alt="Mentor" />
@@ -159,39 +165,48 @@ export default function RecommendedMentors() {
                       </div>
                     </div>
 
-                    <Button asChild className="w-full gradient-bg text-white">
-                      <Link href={`/mentors/${mentor.mentorId}/${`${mentor.firstName}-${mentor.lastName}`.toLowerCase().replace(/\s+/g, "-")}`}>View Profile</Link>
-                    </Button>
+                    <div className="flex gap-2">
+                      <MessageMentorButton
+                        mentorUserId={mentor.userId}
+                        mentorName={`${mentor.firstName} ${mentor.lastName}`}
+                        variant="outline"
+                        className="flex-1"
+                      />
+                      <Button asChild className="flex-1 gradient-bg text-white">
+                        <Link href={`/mentors/${mentor.mentorId}/${`${mentor.firstName}-${mentor.lastName}`.toLowerCase().replace(/\s+/g, "-")}`}>View Profile</Link>
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
                 ))}
               </div>
 
               {mentors.length > 2 && (
-                <div className="flex justify-center mt-6">
+                <div className="flex justify-center mt-8">
                   <div className="flex space-x-2">
                     {Array.from({ length: Math.ceil(mentors.length / 2) }).map((_, index) => (
                       <button
                         key={index}
                         onClick={() => setCurrentMentorIndex(index * 2)}
-                        className={`w-3 h-3 rounded-full ${
-                          Math.floor(currentMentorIndex / 2) === index ? "bg-purple-600" : "bg-gray-300"
+                        className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${
+                          Math.floor(currentMentorIndex / 2) === index
+                            ? "bg-purple-600 w-8"
+                            : "bg-gray-300 hover:bg-gray-400"
                         }`}
                       />
                     ))}
                   </div>
                 </div>
               )}
-            </>
-          )}
-
-          <div className="text-center mt-12">
-            <Button asChild variant="outline" size="lg" className="px-8 gradient-bg text-white">
-              <Link href="/find-mentors">View All Mentors</Link>
-            </Button>
+            </div>
           </div>
-        </div>
+        )}
+
+      <div className="text-center mt-12">
+        <Button asChild variant="outline" size="lg" className="px-8 gradient-bg text-white">
+          <Link href="/find-mentors">View All Mentors</Link>
+        </Button>
       </div>
-    </section>
+    </>
   )
 }

@@ -13,8 +13,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { CreditCard, User, Settings, LogOut, Bell, Menu, X, MoreVertical, Check, Trash2, CheckCheck, Trash } from "lucide-react"
+import { User, Settings, LogOut, Bell, Menu, X, MoreVertical, Check, Trash2, CheckCheck, Trash } from "lucide-react"
 import Logo from "../ui/logo"
+import { CreditsIcon } from "@/components/ui/credits-icon"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { toast } from "sonner"
 import { formatDistanceToNow } from "date-fns"
@@ -325,7 +326,7 @@ export function LearnerHeader() {
               variant="outline"
               className="hidden sm:flex cursor-pointer px-3 py-2 bg-yellow-600 border-yellow-500 text-white hover:bg-yellow-700"
             >
-              <CreditCard className="w-4 h-4 mr-2" />
+              <CreditsIcon className="w-4 h-4 mr-2" />
               {learner.creditsBalance} credits
             </Badge>
 
@@ -483,7 +484,7 @@ export function LearnerHeader() {
                 <div className="md:hidden">
                   <DropdownMenuItem asChild className="text-gray-300 hover:bg-gray-700 hover:text-white cursor-pointer">
                     <div className="flex items-center px-2 py-2">
-                      <CreditCard className="mr-2 h-4 w-4" />
+                      <CreditsIcon className="mr-2 h-4 w-4" />
                       {learner.creditsBalance} credits
                     </div>
                   </DropdownMenuItem>
@@ -495,12 +496,6 @@ export function LearnerHeader() {
                   </DropdownMenuItem>
                   <DropdownMenuSeparator className="bg-gray-700" />
                 </div>
-                <DropdownMenuItem asChild className="text-gray-300 hover:bg-gray-700 hover:text-white cursor-pointer">
-                  <Link href="/learner/profile">
-                    <User className="mr-2 h-4 w-4" />
-                    Profile
-                  </Link>
-                </DropdownMenuItem>
                 <DropdownMenuItem asChild className="text-gray-300 hover:bg-gray-700 hover:text-white cursor-pointer">
                   <Link href="/learner/settings">
                     <Settings className="mr-2 h-4 w-4" />

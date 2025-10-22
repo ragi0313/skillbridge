@@ -55,10 +55,10 @@ export default function LearnerMessagesPage() {
     }
   }, [user, fetchConversations])
 
-  // Show all conversations (including empty ones)
-  // const conversationsWithMessages = conversations.filter(conversation =>
-  //   conversation.lastMessage && conversation.lastMessageAt
-  // )
+  // Only show conversations that have at least one message
+  const conversationsWithMessages = conversations.filter(conversation =>
+    conversation.lastMessageAt
+  )
 
   const formatMessageTime = (timestamp: string) => {
     const date = new Date(timestamp)
@@ -77,27 +77,8 @@ export default function LearnerMessagesPage() {
       return 'Start a conversation...'
     }
 
-    const mentor = conversation.mentor
-    const learner = conversation.learner
-
-    // Determine who sent the last message based on the sender name
-    let senderName = ''
-    if (conversation.lastMessage.senderName) {
-      const senderFirstName = conversation.lastMessage.senderName.split(' ')[0]
-
-      // Only show "You" if the current user sent the message
-      if (user && senderFirstName === user.firstName) {
-        senderName = 'You'
-      }
-      // For other participants, show their first name only
-      else {
-        // Since this is learner messages page, the other participant is always the mentor
-        senderName = mentor.firstName
-      }
-    } else {
-      // If no senderName, fallback
-      senderName = 'Someone'
-    }
+    // Determine if current user sent the message using senderId
+    const isCurrentUserSender = user && conversation.lastMessage.senderId === user.id
 
     // Handle empty content (file/image only messages)
     let preview = conversation.lastMessage.content
@@ -111,7 +92,13 @@ export default function LearnerMessagesPage() {
       }
     }
 
-    return `${senderName}: ${preview}`
+    // Only prepend "You: " if current user sent the message
+    if (isCurrentUserSender) {
+      return `You: ${preview}`
+    }
+
+    // Otherwise, just show the message preview without any prefix
+    return preview
   }
 
   const selectConversation = (conversation: any) => {
@@ -140,8 +127,7 @@ export default function LearnerMessagesPage() {
   const didCurrentUserSendLastMessage = (conversation: any) => {
     if (!conversation.lastMessage || !user) return false
 
-    const senderFirstName = conversation.lastMessage.senderName?.split(' ')[0]
-    return senderFirstName === user.firstName
+    return conversation.lastMessage.senderId === user.id
   }
 
   // Get seen status text for display
@@ -165,6 +151,12 @@ export default function LearnerMessagesPage() {
   const handleDeleteConversation = async (conversationId: number) => {
     try {
       await deleteConversation(conversationId)
+
+      // If the deleted conversation is currently selected, close it
+      if (selectedConversation?.id === conversationId) {
+        setSelectedConversation(null)
+      }
+
       toast.success('Conversation deleted successfully')
     } catch (error) {
       toast.error('Failed to delete conversation')
@@ -212,7 +204,7 @@ export default function LearnerMessagesPage() {
 
         {/* Conversations List */}
         <div className="flex-1 overflow-y-auto bg-white/50">
-          {conversations.length === 0 ? (
+          {conversationsWithMessages.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full p-8 text-center">
               <div className="bg-gradient-to-br from-blue-100 to-purple-100 p-4 rounded-full mb-6">
                 <MessageCircle className="w-12 h-12 text-blue-600" />
@@ -224,7 +216,7 @@ export default function LearnerMessagesPage() {
             </div>
           ) : (
             <div className="divide-y divide-gray-100/50">
-              {conversations.map((conversation) => {
+              {conversationsWithMessages.map((conversation) => {
                 const mentor = conversation.mentor
                 const isUnread = hasUnreadMessages(conversation)
                 const hasLastMessage = conversation.lastMessage && conversation.lastMessageAt
@@ -255,18 +247,20 @@ export default function LearnerMessagesPage() {
                       </div>
 
                       <div className="flex items-center justify-between mt-1">
-                        <p className={`text-sm truncate ${isUnread ? 'font-medium text-gray-900' : 'text-gray-500'}`}>
+                        <p className={`text-sm truncate ${isUnread ? 'font-semibold text-gray-900' : 'text-gray-500'}`}>
                           {getLastMessagePreview(conversation)}
                         </p>
                         <div className="flex items-center space-x-2 flex-shrink-0">
-                          {seenStatus && (
+                          {/* Only show seen status for messages sent by current user */}
+                          {seenStatus && didCurrentUserSendLastMessage(conversation) && (
                             <span className={`text-xs font-medium ${
                               seenStatus === 'Seen' ? 'text-blue-600' : 'text-gray-400'
                             }`}>
                               {seenStatus}
                             </span>
                           )}
-                          {isUnread && (
+                          {/* Show unread indicator only for received messages */}
+                          {isUnread && !didCurrentUserSendLastMessage(conversation) && (
                             <div className="w-2 h-2 bg-blue-500 rounded-full shadow-sm animate-pulse"></div>
                           )}
                         </div>

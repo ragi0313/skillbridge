@@ -201,6 +201,20 @@ export const rateLimitConfigs = {
     windowMs: 60 * 1000, // 1 minute
     maxRequests: 120, // 120 requests per minute (1 every 500ms)
     message: "Chat polling too frequent. Please slow down."
+  },
+
+  // Very strict for appeals
+  appeal: {
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    maxRequests: 2, // Only 2 appeals per 15 minutes per IP
+    message: "Too many appeal requests. Please wait before submitting another appeal."
+  },
+
+  // Strict for contact form
+  contact: {
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    maxRequests: 5, // 5 submissions per 15 minutes
+    message: "Too many contact form submissions. Please wait before submitting again."
   }
 }
 

@@ -10,6 +10,7 @@ import {
 import { eq, and, inArray } from "drizzle-orm"
 import { getSession } from "@/lib/auth/getSession"
 import { NextResponse } from "next/server"
+import { deleteFromCloudinary, extractPublicIdFromUrl } from "@/lib/cloudinary"
 
 export async function GET() {
   const session = await getSession()
@@ -110,6 +111,28 @@ export async function PATCH(req: Request) {
     }
 
     const mentorId = mentorRecord.id
+
+    // Get current profile picture URL to delete old one if changed
+    const [currentMentor] = await db
+      .select({ profilePictureUrl: mentors.profilePictureUrl })
+      .from(mentors)
+      .where(eq(mentors.id, mentorId))
+
+    // Delete old profile picture from Cloudinary if it's being replaced
+    if (currentMentor?.profilePictureUrl &&
+        profilePictureUrl &&
+        currentMentor.profilePictureUrl !== profilePictureUrl) {
+      try {
+        const extracted = extractPublicIdFromUrl(currentMentor.profilePictureUrl)
+        if (extracted) {
+          await deleteFromCloudinary(extracted.publicId, extracted.resourceType)
+          console.log('Deleted old profile picture from Cloudinary:', extracted.publicId)
+        }
+      } catch (error) {
+        console.error('Failed to delete old profile picture from Cloudinary:', error)
+        // Continue with update even if deletion fails
+      }
+    }
 
     // === CORE FIELDS ===
     await db

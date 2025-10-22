@@ -1,13 +1,30 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { db } from "@/db"
-import { mentors, users, mentorSkills, mentorReviews, mentorSkillCategories, skillCategories } from "@/db/schema"
+import { mentors, users, mentorSkills, mentorReviews, mentorSkillCategories, skillCategories, learners } from "@/db/schema"
 import { eq, and, inArray, sql, or, ilike } from "drizzle-orm"
+import { getSession } from "@/lib/auth/getSession"
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const categories = searchParams.get("categories")?.split(",").filter(Boolean) || []
     const search = searchParams.get("search")?.trim() || ""
+
+    // Check if user is authenticated learner for personalization
+    const session = await getSession()
+    let learnerGoals: string | null = null
+
+    if (session && session.role === "learner") {
+      const learnerProfile = await db
+        .select({ learningGoals: learners.learningGoals })
+        .from(learners)
+        .where(eq(learners.userId, session.id))
+        .limit(1)
+
+      if (learnerProfile.length > 0) {
+        learnerGoals = (learnerProfile[0].learningGoals || "").toLowerCase()
+      }
+    }
 
     // Build WHERE conditions array
     const whereConditions: any[] = []
@@ -182,25 +199,75 @@ export async function GET(request: NextRequest) {
         // .having(sql`COUNT(${mentorSkills.id}) > 0`)
     }
 
-    // Apply search-based sorting if search is active
-    if (search && mentorsData.length > 0) {
-      mentorsData = mentorsData.sort((a, b) => {
-        const scoreA = a.searchScore || 0
-        const scoreB = b.searchScore || 0
-        
-        if (scoreB !== scoreA) {
-          return scoreB - scoreA // Higher score first
+    // Calculate personalization scores if learner has goals
+    if (learnerGoals && learnerGoals.trim().length > 0) {
+      mentorsData = mentorsData.map((mentor) => {
+        let personalizedScore = 0
+        const skills = mentor.skills?.filter(Boolean) || []
+        const bioText = (mentor.bio || "").toLowerCase()
+        const titleText = (mentor.title || "").toLowerCase()
+
+        // Check skill matches in learning goals
+        skills.forEach(skill => {
+          if (learnerGoals.includes(skill.toLowerCase())) {
+            personalizedScore += 20 // Higher weight for skill match
+          }
+        })
+
+        // Check bio matches
+        const bioWords = learnerGoals.split(/\s+/).filter(word => word.length > 3)
+        bioWords.forEach(word => {
+          if (bioText.includes(word)) {
+            personalizedScore += 5
+          }
+          if (titleText.includes(word)) {
+            personalizedScore += 8
+          }
+        })
+
+        return {
+          ...mentor,
+          personalizedScore: Math.min(personalizedScore, 100) // Cap at 100
         }
-        
-        // Secondary sort by rating if search scores are equal
+      })
+
+      console.log('[FIND_MENTOR] Personalization scoring results:',
+        mentorsData.slice(0, 5).map(m => ({ name: m.name, personalizedScore: m.personalizedScore || 0 }))
+      )
+    }
+
+    // Apply sorting based on available scores
+    if (mentorsData.length > 0) {
+      mentorsData = mentorsData.sort((a, b) => {
+        // If we have personalization scores and no search, prioritize personalized
+        if (!search && (a.personalizedScore || b.personalizedScore)) {
+          const personalizedA = a.personalizedScore || 0
+          const personalizedB = b.personalizedScore || 0
+          if (personalizedB !== personalizedA) {
+            return personalizedB - personalizedA
+          }
+        }
+
+        // If we have search scores, prioritize those
+        if (search) {
+          const searchScoreA = a.searchScore || 0
+          const searchScoreB = b.searchScore || 0
+          if (searchScoreB !== searchScoreA) {
+            return searchScoreB - searchScoreA
+          }
+        }
+
+        // Fallback to rating
         const ratingA = Number(a.rating) || 0
         const ratingB = Number(b.rating) || 0
         return ratingB - ratingA
       })
 
-      console.log('[FIND_MENTOR] Search scoring results:',
-        mentorsData.map(m => ({ name: m.name, score: m.searchScore }))
-      )
+      if (search) {
+        console.log('[FIND_MENTOR] Search scoring results:',
+          mentorsData.slice(0, 5).map(m => ({ name: m.name, searchScore: m.searchScore }))
+        )
+      }
     }
 
     // Transform the results
@@ -241,10 +308,12 @@ export async function GET(request: NextRequest) {
         reviewCount: Number(mentor.reviewCount) || 0,
         skills: mentor.skills?.filter(Boolean) || [],
         hourlyRate: Number(mentor.hourlyRate) || 0,
-        isAvailable: true, 
+        isAvailable: true,
         credits: Number(mentor.hourlyRate) || 0,
         // Include search score for debugging if search is active
-        ...(search && { searchScore: mentor.searchScore || 0 })
+        ...(search && { searchScore: mentor.searchScore || 0 }),
+        // Include personalized score if personalization is active
+        ...(learnerGoals && { personalizedScore: mentor.personalizedScore || 0 })
       }
 
       return result

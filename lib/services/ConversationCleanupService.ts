@@ -1,7 +1,8 @@
 import { db } from '@/db/index'
-import { conversations, messages, messageUserDeletions, conversationUserDeletions } from '@/db/schema'
-import { eq, lt, and, or, desc, count, sql } from 'drizzle-orm'
+import { conversations, messages, messageAttachments, messageUserDeletions, conversationUserDeletions } from '@/db/schema'
+import { eq, lt, and, or, desc, count, sql, inArray } from 'drizzle-orm'
 import { Metrics } from '@/lib/monitoring/metrics'
+import { deleteFromCloudinary, extractPublicIdFromUrl } from '@/lib/cloudinary'
 
 interface CleanupConfig {
   maxConversationAge: number      // Maximum age for inactive conversations (days)
@@ -202,9 +203,22 @@ export class ConversationCleanupService {
 
       const messageIds = oldMessages.map(m => m.id)
 
+      // Get attachments to delete from storage
+      const attachments = await db
+        .select()
+        .from(messageAttachments)
+        .where(inArray(messageAttachments.messageId, messageIds))
+
       // Delete messages and their deletion records
       await db.transaction(async (tx) => {
-        // Delete user deletion records first (foreign key constraint)
+        // Delete attachments first (foreign key constraint)
+        if (attachments.length > 0) {
+          await tx
+            .delete(messageAttachments)
+            .where(inArray(messageAttachments.messageId, messageIds))
+        }
+
+        // Delete user deletion records
         await tx
           .delete(messageUserDeletions)
           .where(sql`${messageUserDeletions.messageId} = ANY(${messageIds})`)
@@ -214,6 +228,34 @@ export class ConversationCleanupService {
           .delete(messages)
           .where(sql`${messages.id} = ANY(${messageIds})`)
       })
+
+      // Delete files from storage (Vercel Blob or Cloudinary) after DB transaction succeeds
+      if (attachments.length > 0) {
+        console.log(`[CLEANUP] Deleting ${attachments.length} files from storage`)
+        const { deleteFromVercelBlob, isVercelBlobUrl } = await import('@/lib/vercel-blob')
+
+        for (const attachment of attachments) {
+          try {
+            const fileUrl = attachment.fileUrl
+
+            // Check if it's a Vercel Blob URL or Cloudinary URL
+            if (isVercelBlobUrl(fileUrl)) {
+              await deleteFromVercelBlob(fileUrl)
+              console.log(`[CLEANUP] Deleted file from Vercel Blob: ${fileUrl}`)
+            } else {
+              // Fallback to Cloudinary for old files
+              const extracted = extractPublicIdFromUrl(fileUrl)
+              if (extracted) {
+                await deleteFromCloudinary(extracted.publicId, extracted.resourceType)
+                console.log(`[CLEANUP] Deleted file from Cloudinary: ${extracted.publicId}`)
+              }
+            }
+          } catch (error) {
+            console.error(`[CLEANUP] Failed to delete file from storage: ${attachment.fileUrl}`, error)
+            // Continue with other deletions even if one fails
+          }
+        }
+      }
 
       console.log(`[CLEANUP] Deleted ${oldMessages.length} old messages from conversation ${conversationId}`)
       return oldMessages.length

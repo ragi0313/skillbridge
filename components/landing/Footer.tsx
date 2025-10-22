@@ -14,8 +14,8 @@ export function Footer() {
             <h4 className="font-semibold mb-4">For Learners</h4>
             <ul className="space-y-2 text-gray-400">
               <li>
-                <a href="#" className="hover:text-white transition-colors">
-                  How It Works
+                <a href="/learner" className="hover:text-white transition-colors">
+                  Learner Dashboard
                 </a>
               </li>
               <li>
@@ -35,8 +35,8 @@ export function Footer() {
             <h4 className="font-semibold mb-4">For Mentors</h4>
             <ul className="space-y-2 text-gray-400">
               <li>
-                <a href="#" className="hover:text-white transition-colors">
-                  About Us
+                <a href="/mentor" className="hover:text-white transition-colors">
+                  Mentor Dashboard
                 </a>
               </li>
               <li>
@@ -82,18 +82,13 @@ export function Footer() {
                 </a>
               </li>
               <li>
-                <a href="/support#faq" className="hover:text-white transition-colors">
+                <a href="/faqs" className="hover:text-white transition-colors">
                   FAQs
                 </a>
               </li>
               <li>
-                <a href="/support#contact" className="hover:text-white transition-colors">
-                  Contact Us
-                </a>
-              </li>
-              <li>
                 <a href="/contact" className="hover:text-white transition-colors">
-                  Get in Touch
+                  Contact Us
                 </a>
               </li>
             </ul>

@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server"
 import { getSession } from "@/lib/auth/getSession"
 import { db } from "@/db"
-import { mentors, bookingSessions, mentorSkills, users, mentorReviews } from "@/db/schema"
-import { eq, count, sum, avg, desc, gte, and } from "drizzle-orm"
+import { mentors, bookingSessions, mentorSkills, users, mentorReviews, learners, sessionFeedback } from "@/db/schema"
+import { eq, count, sum, avg, desc, gte, and, inArray } from "drizzle-orm"
 
 export async function GET() {
   try {
@@ -45,6 +45,7 @@ export async function GET() {
       completionRate: 0,
       profileCompleteness: 0,
       recentSessions: [],
+      recentReviews: [],
       skills: [],
       mentor: {
         name: `${user.firstName} ${user.lastName}`,
@@ -97,11 +98,68 @@ export async function GET() {
         ? Math.round((completedSessions.length / allSessions.length) * 100) 
         : 0
 
-      // Get recent sessions for display (limit to 5)
-      stats.recentSessions = allSessions.slice(0, 5).map((session) => ({
-        ...session,
-        earnedCredits: Math.floor(Number(session.totalCostCredits || 0) * 0.8),
-      }))
+      // Get recent sessions for display with learner details (limit to 5)
+      const recentSessionIds = allSessions.slice(0, 5).map(s => s.id)
+
+      if (recentSessionIds.length > 0) {
+        const sessionsWithDetails = await db
+          .select({
+            id: bookingSessions.id,
+            status: bookingSessions.status,
+            scheduledDate: bookingSessions.scheduledDate,
+            totalCostCredits: bookingSessions.totalCostCredits,
+            sessionNotes: bookingSessions.sessionNotes,
+            createdAt: bookingSessions.createdAt,
+            learnerUserId: learners.userId,
+            learnerProfilePicture: learners.profilePictureUrl,
+            learnerExperienceLevel: learners.experienceLevel,
+            learnerFirstName: users.firstName,
+            learnerLastName: users.lastName,
+            skillName: mentorSkills.skillName,
+            // Session feedback from learner
+            feedbackRating: sessionFeedback.overallRating,
+            feedbackText: sessionFeedback.feedbackText,
+            feedbackCreatedAt: sessionFeedback.createdAt,
+          })
+          .from(bookingSessions)
+          .innerJoin(learners, eq(bookingSessions.learnerId, learners.id))
+          .innerJoin(users, eq(learners.userId, users.id))
+          .leftJoin(mentorSkills, eq(bookingSessions.mentorSkillId, mentorSkills.id))
+          .leftJoin(
+            sessionFeedback,
+            and(
+              eq(sessionFeedback.sessionId, bookingSessions.id),
+              eq(sessionFeedback.reviewerRole, 'learner')
+            )
+          )
+          .where(
+            and(
+              eq(bookingSessions.mentorId, mentor.id),
+              inArray(bookingSessions.id, recentSessionIds)
+            )
+          )
+          .orderBy(desc(bookingSessions.createdAt))
+
+        stats.recentSessions = sessionsWithDetails.map((session) => ({
+          id: session.id,
+          status: session.status,
+          scheduledDate: session.scheduledDate,
+          totalCostCredits: session.totalCostCredits,
+          createdAt: session.createdAt,
+          earnedCredits: Math.floor(Number(session.totalCostCredits || 0) * 0.8),
+          learnerName: `${session.learnerFirstName} ${session.learnerLastName}`,
+          learnerProfilePicture: session.learnerProfilePicture,
+          learnerExperienceLevel: session.learnerExperienceLevel,
+          skillName: session.skillName || 'General Mentoring',
+          sessionNotes: session.sessionNotes,
+          // Learner feedback
+          feedbackRating: session.feedbackRating,
+          feedbackText: session.feedbackText,
+          feedbackCreatedAt: session.feedbackCreatedAt,
+        }))
+      } else {
+        stats.recentSessions = []
+      }
 
       } catch (sessionError) {
       console.error("Dashboard stats: Error fetching session data:", sessionError)
@@ -130,7 +188,7 @@ export async function GET() {
     }
 
     try {
-      // Get average rating
+      // Get average rating and recent reviews
       const ratingResult = await db
         .select({
           avgRating: avg(mentorReviews.rating),
@@ -139,6 +197,38 @@ export async function GET() {
         .where(eq(mentorReviews.mentorId, mentor.id))
 
       stats.averageRating = Math.round((Number(ratingResult[0]?.avgRating) || 0) * 10) / 10
+
+      // Get recent reviews with learner info (limit to 10)
+      const reviewsData = await db.query.mentorReviews.findMany({
+        where: eq(mentorReviews.mentorId, mentor.id),
+        orderBy: [desc(mentorReviews.createdAt)],
+        limit: 10,
+        with: {
+          learner: {
+            columns: {
+              userId: true,
+              profilePictureUrl: true,
+            },
+            with: {
+              user: {
+                columns: {
+                  firstName: true,
+                  lastName: true,
+                }
+              }
+            }
+          }
+        }
+      })
+
+      stats.recentReviews = reviewsData.map(review => ({
+        id: review.id,
+        rating: review.rating,
+        reviewText: review.reviewText,
+        createdAt: review.createdAt,
+        learnerName: `${review.learner.user.firstName} ${review.learner.user.lastName}`,
+        learnerProfilePicture: review.learner.profilePictureUrl,
+      }))
       } catch (ratingError) {
       console.error("Dashboard stats: Error fetching ratings:", ratingError)
       // Continue with default rating

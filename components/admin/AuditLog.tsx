@@ -127,85 +127,81 @@ export default function AuditLog() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-2">
-          <FileText className="w-6 h-6 text-gray-600" />
-          <h1 className="text-2xl font-bold text-gray-900">Audit Log</h1>
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Audit Log</h1>
+          <p className="text-gray-600 mt-1">Track all administrative actions and system changes</p>
         </div>
-        <Button onClick={exportLogs} variant="outline" className="flex items-center space-x-2">
+        <Button onClick={exportLogs} className="bg-green-600 hover:bg-green-700 flex items-center space-x-2">
           <Download className="w-4 h-4" />
           <span>Export CSV</span>
         </Button>
       </div>
 
       {/* Filters */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center space-x-2">
-            <Filter className="w-5 h-5" />
-            <span>Filters</span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-            <div className="md:col-span-2">
-              <Input
-                placeholder="Search descriptions, admin names..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                onKeyPress={(e) => e.key === "Enter" && handleSearch()}
-              />
-            </div>
-            <Select value={actionFilter} onValueChange={setActionFilter}>
-              <SelectTrigger>
-                <SelectValue placeholder="All Actions" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Actions</SelectItem>
-                <SelectItem value="approve_mentor">Approve Mentor</SelectItem>
-                <SelectItem value="suspend_user">Suspend User</SelectItem>
-                <SelectItem value="review_report">Review Report</SelectItem>
-                <SelectItem value="force_end_session">Force End Session</SelectItem>
-                <SelectItem value="update_platform_settings">Update Settings</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={severityFilter} onValueChange={setSeverityFilter}>
-              <SelectTrigger>
-                <SelectValue placeholder="All Severities" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Severities</SelectItem>
-                <SelectItem value="info">Info</SelectItem>
-                <SelectItem value="warning">Warning</SelectItem>
-                <SelectItem value="critical">Critical</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={dateRange} onValueChange={setDateRange}>
-              <SelectTrigger>
-                <SelectValue placeholder="Time Range" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="1">Last 24 hours</SelectItem>
-                <SelectItem value="7">Last 7 days</SelectItem>
-                <SelectItem value="30">Last 30 days</SelectItem>
-                <SelectItem value="90">Last 90 days</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="mt-4">
-            <Button onClick={handleSearch} className="flex items-center space-x-2">
-              <Search className="w-4 h-4" />
-              <span>Search</span>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="flex flex-col md:flex-row items-start md:items-center gap-3 bg-gray-50 p-4 rounded-lg border border-gray-200">
+        <div className="flex items-center gap-2 text-gray-700 font-medium min-w-fit">
+          <Filter className="w-4 h-4" />
+          <span className="text-sm">Filters:</span>
+        </div>
 
-      {/* Audit Log Entries */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent Admin Actions</CardTitle>
-        </CardHeader>
-        <CardContent>
+        <div className="flex flex-wrap items-center gap-3 flex-1 w-full md:w-auto">
+          <div className="relative flex-1 min-w-[250px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Input
+              placeholder="Search descriptions, admin names..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              onKeyPress={(e) => e.key === "Enter" && handleSearch()}
+              className="pl-10 h-10"
+            />
+          </div>
+
+          <Select value={actionFilter} onValueChange={setActionFilter}>
+            <SelectTrigger className="w-[180px] h-10">
+              <SelectValue placeholder="All Actions" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Actions</SelectItem>
+              <SelectItem value="approve_mentor">Approve Mentor</SelectItem>
+              <SelectItem value="suspend_user">Suspend User</SelectItem>
+              <SelectItem value="review_report">Review Report</SelectItem>
+              <SelectItem value="force_end_session">Force End Session</SelectItem>
+              <SelectItem value="update_platform_settings">Update Settings</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={severityFilter} onValueChange={setSeverityFilter}>
+            <SelectTrigger className="w-[150px] h-10">
+              <SelectValue placeholder="All Severities" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Severities</SelectItem>
+              <SelectItem value="info">Info</SelectItem>
+              <SelectItem value="warning">Warning</SelectItem>
+              <SelectItem value="critical">Critical</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={dateRange} onValueChange={setDateRange}>
+            <SelectTrigger className="w-[150px] h-10">
+              <SelectValue placeholder="Time Range" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="1">Last 24 hours</SelectItem>
+              <SelectItem value="7">Last 7 days</SelectItem>
+              <SelectItem value="30">Last 30 days</SelectItem>
+              <SelectItem value="90">Last 90 days</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {/* Audit Log Entries - No Card Wrapper */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h2 className="text-lg font-semibold text-gray-900">Recent Admin Actions</h2>
+        </div>
+        <div className="p-6">
           {loading ? (
             <div className="space-y-4">
               {[...Array(5)].map((_, i) => (
@@ -271,7 +267,7 @@ export default function AuditLog() {
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-between mt-6">
+            <div className="flex items-center justify-between mt-6 pt-6 border-t border-gray-200">
               <Button
                 variant="outline"
                 onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
@@ -291,8 +287,8 @@ export default function AuditLog() {
               </Button>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   )
 }

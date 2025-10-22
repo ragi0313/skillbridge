@@ -98,20 +98,20 @@ export async function middleware(req: NextRequest) {
   const role = session.role as string
 
   if (pathname === "/") {
-    url.pathname = `/${role}/dashboard`
+    url.pathname = role === "admin" ? `/${role}/dashboard` : `/${role}`
     const response = NextResponse.redirect(url)
     return applySecurityHeaders(response, pathname)
   }
 
   if (isPublicPath) {
-    url.pathname = `/${role}/dashboard`
+    url.pathname = role === "admin" ? `/${role}/dashboard` : `/${role}`
     const response = NextResponse.redirect(url)
     return applySecurityHeaders(response, pathname)
   }
 
   // Prevent mentors from accessing find-mentors page
   if (pathname === "/find-mentors" && role === "mentor") {
-    url.pathname = "/mentor/dashboard"
+    url.pathname = "/mentor"
     const response = NextResponse.redirect(url)
     return applySecurityHeaders(response, pathname)
   }
@@ -121,7 +121,7 @@ export async function middleware(req: NextRequest) {
     (pathname.startsWith("/mentor") && role !== "mentor") ||
     (pathname.startsWith("/admin") && role !== "admin")
   ) {
-    url.pathname = `/${role}/dashboard`
+    url.pathname = role === "admin" ? `/${role}/dashboard` : `/${role}`
     const response = NextResponse.redirect(url)
     return applySecurityHeaders(response, pathname)
   }

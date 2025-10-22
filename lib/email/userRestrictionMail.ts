@@ -1,24 +1,12 @@
-// Create transporter for sending emails
-const createTransporter = async () => {
-  const nodemailer = (await import('nodemailer')).default
-  return nodemailer.createTransporter({
-    host: process.env.SMTP_HOST,
-    port: parseInt(process.env.SMTP_PORT || '587'),
-    secure: false,
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-  })
-}
+import { sendEmail } from "./email-service"
+import { logger } from "@/lib/monitoring/logger"
 
 export async function sendBlacklistNotificationEmail(
   userEmail: string,
   firstName: string,
   reason: string
 ) {
-  const transporter = await createTransporter()
-  const adminEmail = process.env.ADMIN_EMAIL || 'admin@bridgementor.com'
+  const adminEmail = process.env.ADMIN_EMAIL || 'contact@bridge-mentor.com'
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://bridgementor.com'
 
   const htmlContent = `
@@ -119,13 +107,23 @@ BridgeMentor Support Team
 Contact us: ${adminEmail}
   `
 
-  await transporter.sendMail({
-    from: `"BridgeMentor Support" <${process.env.SMTP_USER}>`,
+  const result = await sendEmail({
     to: userEmail,
-    subject: '🚨 Account Restriction Notice - Action Required',
+    subject: 'Account Restriction Notice - Action Required',
     text: textContent,
     html: htmlContent,
+  }, {
+    mode: 'queued',
+    metadata: {
+      action: 'blacklist_notification',
+    },
   })
+
+  if (result.success) {
+    logger.info("Blacklist notification email queued successfully", { to: userEmail, jobId: result.jobId })
+  } else {
+    logger.error("Failed to queue blacklist notification email", { error: result.error, to: userEmail })
+  }
 }
 
 export async function sendSuspensionNotificationEmail(
@@ -134,8 +132,7 @@ export async function sendSuspensionNotificationEmail(
   reason: string,
   suspensionEndsAt: Date
 ) {
-  const transporter = await createTransporter()
-  const adminEmail = process.env.ADMIN_EMAIL || 'admin@bridgementor.com'
+  const adminEmail = process.env.ADMIN_EMAIL || 'contact@bridge-mentor.com'
   
   const endDate = suspensionEndsAt.toLocaleDateString("en-US", {
     weekday: 'long',
@@ -250,11 +247,21 @@ BridgeMentor Support Team
 Contact us: ${adminEmail}
   `
 
-  await transporter.sendMail({
-    from: `"BridgeMentor Support" <${process.env.SMTP_USER}>`,
+  const result = await sendEmail({
     to: userEmail,
-    subject: '⏸️ Account Suspension Notice - Appeal Available',
+    subject: 'Account Suspension Notice - Appeal Available',
     text: textContent,
     html: htmlContent,
+  }, {
+    mode: 'queued',
+    metadata: {
+      action: 'suspension_notification',
+    },
   })
+
+  if (result.success) {
+    logger.info("Suspension notification email queued successfully", { to: userEmail, jobId: result.jobId })
+  } else {
+    logger.error("Failed to queue suspension notification email", { error: result.error, to: userEmail })
+  }
 }

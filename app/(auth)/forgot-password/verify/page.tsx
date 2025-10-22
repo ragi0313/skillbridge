@@ -17,12 +17,32 @@ export default function VerifyResetCodePage() {
   const [isLoading, setIsLoading] = useState(false)
   const [isResending, setIsResending] = useState(false)
   const [error, setError] = useState("")
-  const [timeLeft, setTimeLeft] = useState(300) 
   const [canResend, setCanResend] = useState(false)
   const router = useRouter()
   const searchParams = useSearchParams()
   const email = searchParams.get("email") || ""
   const inputRefs = useRef<(HTMLInputElement | null)[]>([])
+
+  // Initialize timer from sessionStorage or default to 60 seconds
+  const [timeLeft, setTimeLeft] = useState(() => {
+    if (typeof window === 'undefined') return 60
+    const storageKey = `reset-timer-${email}`
+    const stored = sessionStorage.getItem(storageKey)
+    if (stored) {
+      const { expiry } = JSON.parse(stored)
+      const remaining = Math.max(0, Math.floor((expiry - Date.now()) / 1000))
+      return remaining
+    }
+    return 60 // Default: 1 minute
+  })
+
+  // Save timer to sessionStorage when it changes
+  useEffect(() => {
+    if (!email || typeof window === 'undefined') return
+    const storageKey = `reset-timer-${email}`
+    const expiry = Date.now() + (timeLeft * 1000)
+    sessionStorage.setItem(storageKey, JSON.stringify({ expiry }))
+  }, [timeLeft, email])
 
   useEffect(() => {
     if (!email) {
@@ -34,6 +54,10 @@ export default function VerifyResetCodePage() {
       setTimeLeft((prev) => {
         if (prev <= 1) {
           setCanResend(true)
+          // Clear storage when timer expires
+          if (typeof window !== 'undefined') {
+            sessionStorage.removeItem(`reset-timer-${email}`)
+          }
           return 0
         }
         return prev - 1
@@ -139,9 +163,15 @@ export default function VerifyResetCodePage() {
 
       if (response.ok) {
         toast.success("New code sent! Check your email for the new verification code.")
-        setTimeLeft(900) // Reset timer
+        setTimeLeft(60) // Reset timer to 1 minute
         setCanResend(false)
         setCode(["", "", "", "", "", ""]) // Clear current code
+        // Update sessionStorage with new expiry time
+        if (typeof window !== 'undefined') {
+          const storageKey = `reset-timer-${email}`
+          const expiry = Date.now() + (60 * 1000)
+          sessionStorage.setItem(storageKey, JSON.stringify({ expiry }))
+        }
       } else {
         setError(data.error || "Failed to resend code")
       }

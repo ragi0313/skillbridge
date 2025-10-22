@@ -4,8 +4,6 @@
 
 import { useState, useEffect, useRef, useCallback } from "react"
 import { useRealTimeTimer } from "@/lib/hooks/useRealTimeTimer"
-import PusherJS from 'pusher-js'
-import { getPusherConfig } from '@/lib/pusher/config'
 
 import { Whiteboard } from "../whiteboard/Whiteboard"
 
@@ -108,10 +106,6 @@ export function VideoCallRoom({
   const [unreadCount, setUnreadCount] = useState(0)
   const [isChatInitialized, setIsChatInitialized] = useState(false)
 
-  // Pusher states for session chat
-  const [pusher, setPusher] = useState<PusherJS | null>(null)
-  const [chatConnected, setChatConnected] = useState(false)
-
   // File sharing states
   const [isUploading, setIsUploading] = useState(false)
 
@@ -134,10 +128,10 @@ export function VideoCallRoom({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const chatEndRef = useRef<HTMLDivElement>(null)
 
-  // Pusher refs for session chat
-  const pusherRef = useRef<PusherJS | null>(null)
-  const sessionChatChannelRef = useRef<any>(null)
+  // Chat refs for session chat (polling only - no Pusher to avoid conflicts)
   const chatInitializedRef = useRef<boolean>(false)
+  const chatPollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const lastMessageTimestampRef = useRef<number>(0)
 
   const sessionStart = new Date(sessionData.startTime)
   const sessionEnd = new Date(sessionData.endTime)
@@ -305,114 +299,128 @@ export function VideoCallRoom({
     [cleanupLocalTracks],
   )
 
-  // Initialize Pusher for session chat
+  // Fetch session messages from API (for catching up when joining)
+  const fetchSessionMessages = useCallback(async () => {
+    try {
+      console.log("[VIDEO_CALL] Fetching session chat history...")
+      const response = await fetch(`/api/sessions/${sessionId}/chat`)
+      if (response.ok) {
+        const data = await response.json()
+        if (data.messages && Array.isArray(data.messages)) {
+          console.log(`[VIDEO_CALL] Loaded ${data.messages.length} historical messages`)
+          setChatMessages(data.messages)
+          // Update last message timestamp
+          if (data.messages.length > 0) {
+            const latestTimestamp = Math.max(...data.messages.map((m: ChatMessage) => m.timestamp))
+            lastMessageTimestampRef.current = latestTimestamp
+          }
+        }
+      }
+    } catch (error) {
+      console.warn("[VIDEO_CALL] Failed to fetch session messages:", error)
+      // Not critical - user can still send/receive new messages
+    }
+  }, [sessionId])
+
+  // Polling for chat messages (no real-time connection to avoid conflicts)
+  const startChatPolling = useCallback(() => {
+    // Only start polling if not already polling
+    if (chatPollingIntervalRef.current) {
+      return
+    }
+
+    console.log("[VIDEO_CALL] Starting chat polling as fallback...")
+    chatPollingIntervalRef.current = setInterval(async () => {
+      if (isCleaningUpRef.current || isCallEnding) {
+        return
+      }
+
+      try {
+        const response = await fetch(`/api/sessions/${sessionId}/chat`)
+        if (response.ok) {
+          const data = await response.json()
+          if (data.messages && Array.isArray(data.messages)) {
+            // Only add new messages that we haven't seen yet
+            const newMessages = data.messages.filter((m: ChatMessage) =>
+              m.timestamp > lastMessageTimestampRef.current
+            )
+
+            if (newMessages.length > 0) {
+              console.log(`[VIDEO_CALL] Polling found ${newMessages.length} new messages`)
+              setChatMessages((prev: ChatMessage[]) => {
+                const combined = [...prev, ...newMessages]
+                // Remove duplicates by id
+                const unique = combined.filter((msg, index, self) =>
+                  index === self.findIndex((m) => m.id === msg.id)
+                )
+                return unique.sort((a, b) => a.timestamp - b.timestamp)
+              })
+
+              // Update last message timestamp
+              const latestTimestamp = Math.max(...newMessages.map((m: ChatMessage) => m.timestamp))
+              lastMessageTimestampRef.current = latestTimestamp
+
+              // Update unread count if sidebar is closed
+              if (!showSidebar) {
+                setUnreadCount((prev: number) => prev + newMessages.length)
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.warn("[VIDEO_CALL] Chat polling error:", error)
+      }
+    }, 3000) // Poll every 3 seconds
+  }, [sessionId, isCallEnding, showSidebar])
+
+  // Stop chat polling
+  const stopChatPolling = useCallback(() => {
+    if (chatPollingIntervalRef.current) {
+      console.log("[VIDEO_CALL] Stopping chat polling")
+      clearInterval(chatPollingIntervalRef.current)
+      chatPollingIntervalRef.current = null
+    }
+  }, [])
+
+  // Initialize session chat (polling only - no Pusher to avoid conflicts with ChatContext)
   const initializeSessionChat = useCallback(async () => {
     if (chatInitializedRef.current || isCleaningUpRef.current) {
+      console.log("[VIDEO_CALL] Chat already initialized or cleaning up, skipping...")
       return
     }
 
     try {
-      console.log("[VIDEO_CALL] Initializing Pusher session chat...")
+      console.log("[VIDEO_CALL] Initializing session chat with polling mode (Pusher-free)")
 
-      const config = getPusherConfig()
-      if (!config) {
-        console.warn("[VIDEO_CALL] Pusher config not available, chat will be disabled")
-        return
-      }
+      // Mark as initialized
+      setIsChatInitialized(true)
+      chatInitializedRef.current = true
 
-      // Clean up existing connection
-      if (pusherRef.current) {
-        pusherRef.current.disconnect()
-        pusherRef.current = null
-      }
+      // Fetch initial messages
+      await fetchSessionMessages()
 
-      const pusherClient = new PusherJS(config.key, {
-        cluster: config.cluster,
-        forceTLS: true,
-        enabledTransports: ['ws', 'wss'],
-        disabledTransports: ['xhr_polling', 'xhr_streaming'],
-      })
+      // Start polling for new messages
+      startChatPolling()
 
-      pusherClient.connection.bind('connected', () => {
-        console.log("[VIDEO_CALL] Pusher chat connected successfully")
-        setChatConnected(true)
-        setIsChatInitialized(true)
-        chatInitializedRef.current = true
-      })
-
-      pusherClient.connection.bind('disconnected', () => {
-        console.log("[VIDEO_CALL] Pusher chat disconnected")
-        setChatConnected(false)
-      })
-
-      pusherClient.connection.bind('error', (error: any) => {
-        console.error("[VIDEO_CALL] Pusher chat connection error:", error)
-        setChatConnected(false)
-      })
-
-      // Subscribe to session-specific chat channel
-      const channelName = `session-chat-${sessionId}`
-      const channel = pusherClient.subscribe(channelName)
-
-      channel.bind('session-message', (message: ChatMessage) => {
-        console.log("[VIDEO_CALL] Received session chat message:", message)
-
-        // Only add messages from other users to avoid duplicates
-        const currentUserId = `${userRole}-${currentUser.firstName} ${currentUser.lastName}`
-        if (message.senderId !== currentUserId) {
-          setChatMessages((prev: ChatMessage[]) => {
-            // Check if message already exists
-            if (prev.some(msg => msg.id === message.id)) {
-              return prev
-            }
-            return [...prev, message].sort((a, b) => a.timestamp - b.timestamp)
-          })
-
-          // Update unread count if sidebar is closed
-          if (!showSidebar) {
-            setUnreadCount((prev: number) => prev + 1)
-          }
-        }
-      })
-
-      channel.bind('pusher:subscription_succeeded', () => {
-        console.log(`[VIDEO_CALL] Successfully subscribed to ${channelName}`)
-      })
-
-      channel.bind('pusher:subscription_error', (error: any) => {
-        console.error(`[VIDEO_CALL] Failed to subscribe to ${channelName}:`, error)
-      })
-
-      pusherRef.current = pusherClient
-      sessionChatChannelRef.current = channel
-      setPusher(pusherClient)
-
-      console.log("[VIDEO_CALL] Pusher session chat initialized successfully")
+      console.log("[VIDEO_CALL] Session chat initialized successfully with polling")
     } catch (error) {
       console.error("[VIDEO_CALL] Failed to initialize session chat:", error)
+      // Still enable chat even if initial fetch fails
+      setIsChatInitialized(true)
+      chatInitializedRef.current = true
+      startChatPolling()
     }
-  }, [sessionId, userRole, currentUser, showSidebar])
+  }, [sessionId, fetchSessionMessages, startChatPolling])
 
   // Cleanup session chat
   const cleanupSessionChat = useCallback(() => {
     console.log("[VIDEO_CALL] Cleaning up session chat...")
 
     try {
-      // Unsubscribe from channel
-      if (sessionChatChannelRef.current) {
-        sessionChatChannelRef.current.unbind_all()
-        sessionChatChannelRef.current = null
-      }
-
-      // Disconnect Pusher
-      if (pusherRef.current) {
-        pusherRef.current.disconnect()
-        pusherRef.current = null
-      }
+      // Stop polling
+      stopChatPolling()
 
       // Reset state
-      setPusher(null)
-      setChatConnected(false)
       setIsChatInitialized(false)
       chatInitializedRef.current = false
 
@@ -424,7 +432,7 @@ export function VideoCallRoom({
     } catch (error) {
       console.error("[VIDEO_CALL] Error during session chat cleanup:", error)
     }
-  }, [])
+  }, [stopChatPolling])
 
   // Comprehensive cleanup function
   const performCleanup = useCallback(
@@ -1304,20 +1312,21 @@ export function VideoCallRoom({
     }
   }, [isScreenSharing, isVideoEnabled, isRetryingMedia])
 
-  // Pusher-based session chat messaging - real-time and ephemeral!
+  // Session chat messaging - polling-based (no Pusher to avoid conflicts)
   const sendMessage = useCallback(
     async (message: string, file?: File) => {
       if (!message.trim() && !file) return
-      if (!pusherRef.current || !sessionChatChannelRef.current) {
-        console.warn("[VIDEO_CALL] Chat not initialized, cannot send message")
-        setMediaError("Chat not available")
+
+      if (!isChatInitialized) {
+        console.warn("[VIDEO_CALL] Chat not initialized yet")
+        setMediaError("Chat is still initializing...")
         return
       }
 
       setIsUploading(!!file)
 
       try {
-        console.log("[VIDEO_CALL] Sending message via Pusher...")
+        console.log("[VIDEO_CALL] Sending message via API...")
 
         const currentUserName = `${currentUser.firstName} ${currentUser.lastName}`
 
@@ -1366,7 +1375,7 @@ export function VideoCallRoom({
           return [...prev, sessionMessage].sort((a, b) => a.timestamp - b.timestamp)
         })
 
-        // Send via the session chat API (which will broadcast via Pusher)
+        // Send via the session chat API (stored in-memory, other user will get it via polling)
         try {
           const response = await fetch(`/api/sessions/${sessionId}/chat`, {
             method: 'POST',
@@ -1387,9 +1396,15 @@ export function VideoCallRoom({
           }
 
           const result = await response.json()
-          console.log("[VIDEO_CALL] Message sent successfully via session chat API:", result)
+          console.log("[VIDEO_CALL] Message sent successfully and stored in-memory:", result)
+
+          // Update last message timestamp so polling doesn't duplicate this message
+          lastMessageTimestampRef.current = sessionMessage.timestamp
         } catch (apiError) {
           console.warn("[VIDEO_CALL] Session chat API failed, message only visible locally:", apiError)
+          // Remove the message from local state if API fails
+          setChatMessages((prev: ChatMessage[]) => prev.filter(msg => msg.id !== sessionMessage.id))
+          throw apiError
         }
 
         setNewMessage("")
@@ -1412,9 +1427,9 @@ export function VideoCallRoom({
 
   const handleFileUpload = useCallback(
     (file: File) => {
-      if (file.size > 10 * 1024 * 1024) {
-        // 10MB limit for Agora Chat
-        setMediaError("File size must be less than 10MB")
+      if (file.size > 5 * 1024 * 1024) {
+        // 5MB limit for session chat (stored in-memory, ephemeral)
+        setMediaError("File size must be less than 5MB")
         return
       }
       sendMessage("", file)
@@ -1747,8 +1762,8 @@ export function VideoCallRoom({
                     </svg>
                   </button>
                   <div className="flex items-center space-x-2">
-                    <div className={`w-2 h-2 rounded-full ${chatConnected ? "bg-green-400" : "bg-yellow-400"}`}></div>
-                    <span className="text-white/70 text-sm hidden sm:inline">{chatConnected ? "Chat Connected" : "Chat Connecting..."}</span>
+                    <div className="w-2 h-2 rounded-full bg-green-400"></div>
+                    <span className="text-white/70 text-sm hidden sm:inline">Chat Active</span>
                   </div>
                 </div>
               </div>
@@ -1780,36 +1795,59 @@ export function VideoCallRoom({
                       ) : (
                         <div className="space-y-2">
                           {message.attachment?.fileType?.startsWith("image/") ? (
-                            <img
-                              src={message.attachment.fileData || "/placeholder.svg"}
-                              alt={message.attachment.fileName}
-                              className="max-w-full h-auto rounded-lg"
-                            />
+                            <div>
+                              <img
+                                src={message.attachment.fileData || "/placeholder.svg"}
+                                alt={message.attachment.fileName}
+                                className="max-w-full h-auto rounded-lg mb-2"
+                              />
+                              {message.attachment && (
+                                <button
+                                  onClick={() => downloadFile(message.attachment!)}
+                                  className="text-xs text-white/80 hover:text-white underline"
+                                >
+                                  Download {message.attachment.fileName}
+                                </button>
+                              )}
+                            </div>
                           ) : (
-                            <div className="flex items-center space-x-2 p-2 bg-black/20 rounded-lg">
-                              <svg
-                                className="w-4 h-4 text-white/70"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth={2}
-                                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-                                />
-                              </svg>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-white truncate">
-                                  {message.attachment?.fileName}
-                                </p>
-                                <p className="text-xs text-white/60">
-                                  {message.attachment?.fileSize
-                                    ? `${(message.attachment.fileSize / 1024).toFixed(1)} KB`
-                                    : "Unknown size"}
-                                </p>
+                            <div className="space-y-2">
+                              <div className="flex items-center space-x-2 p-2 bg-black/20 rounded-lg">
+                                <svg
+                                  className="w-4 h-4 text-white/70"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                                  />
+                                </svg>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-white truncate">
+                                    {message.attachment?.fileName}
+                                  </p>
+                                  <p className="text-xs text-white/60">
+                                    {message.attachment?.fileSize
+                                      ? `${(message.attachment.fileSize / 1024).toFixed(1)} KB`
+                                      : "Unknown size"}
+                                  </p>
+                                </div>
                               </div>
+                              {message.attachment && (
+                                <button
+                                  onClick={() => downloadFile(message.attachment!)}
+                                  className="w-full text-xs text-white/80 hover:text-white bg-white/10 hover:bg-white/20 px-3 py-2 rounded-lg transition-colors flex items-center justify-center space-x-2"
+                                >
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                  </svg>
+                                  <span>Download File</span>
+                                </button>
+                              )}
                             </div>
                           )}
                         </div>

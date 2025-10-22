@@ -19,41 +19,50 @@ interface User {
 
 export function ClientProviders({ children }: ClientProvidersProps) {
   const [user, setUser] = useState<User | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const [isInitialLoading, setIsInitialLoading] = useState(true)
   const pathname = usePathname()
 
   // Pages where MiniChatBar should not be shown
   const hideMiniChatOnPaths = [
     '/learner/messages',
     '/mentor/messages',
-    '/sessions/'  // This will hide for all session pages including waiting room and video call
+    '/sessions/',  // This will hide for all session pages including waiting room and video call
+    '/admin'       // Hide on all admin pages
   ]
 
-  const shouldHideMiniChat = hideMiniChatOnPaths.some(path => pathname?.includes(path))
+  // Only show MiniChat for mentors and learners, not admins
+  const shouldHideMiniChat = hideMiniChatOnPaths.some(path => pathname?.includes(path)) || user?.role === 'admin'
 
   // Get current user from cookie/session
   useEffect(() => {
     const getCurrentUser = async () => {
       try {
         const response = await fetch('/api/auth/me', {
-          credentials: 'include'
+          credentials: 'include',
+          cache: 'no-store' // Prevent caching to ensure fresh data
         })
 
         if (response.ok) {
           const userData = await response.json()
           setUser(userData.user)
+        } else {
+          // If not authenticated, clear user
+          setUser(null)
         }
       } catch (error) {
         console.error('Failed to get current user:', error)
+        setUser(null)
       } finally {
-        setIsLoading(false)
+        // Only set initial loading to false on first load
+        setIsInitialLoading(false)
       }
     }
 
     getCurrentUser()
-  }, [])
+  }, [pathname]) // Re-fetch user when pathname changes
 
-  if (isLoading) {
+  // Only show loading spinner on initial page load, not on route changes
+  if (isInitialLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>

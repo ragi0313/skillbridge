@@ -19,9 +19,18 @@ export async function initializeServer() {
       } catch (error) {
       }
 
-    // Email worker will be initialized lazily on first use
-    // to avoid instrumentation hook limitations with BullMQ
-    console.log('[SERVER_INIT] Email worker will initialize on first use')
+    // Initialize email worker (if Redis is available)
+    try {
+      const { initEmailWorker } = await import("@/lib/queues/email-queue")
+      const worker = initEmailWorker()
+      if (worker) {
+        console.log('[SERVER_INIT] Email worker initialized successfully')
+      } else {
+        console.log('[SERVER_INIT] Email worker not initialized (Redis not available - emails will be sent synchronously)')
+      }
+    } catch (error) {
+      console.error('[SERVER_INIT] Failed to initialize email worker:', error)
+    }
 
     initialized = true
     } catch (error) {
@@ -48,13 +57,11 @@ export async function shutdownServer() {
 
     // Close email queue and worker
     try {
-      const { closeEmailQueue } = require("@/lib/email/emailQueue")
-      const { closeEmailTransporter } = require("@/lib/email/transporter")
+      const { closeEmailQueue } = require("@/lib/queues/email-queue")
       await closeEmailQueue()
-      await closeEmailTransporter()
-      console.log('[SERVER_INIT] Email services closed')
+      console.log('[SERVER_INIT] Email queue closed successfully')
     } catch (error) {
-      console.warn('[SERVER_INIT] Error closing email services:', error)
+      console.error('[SERVER_INIT] Error closing email queue:', error)
     }
 
     initialized = false

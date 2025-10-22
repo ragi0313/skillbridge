@@ -43,9 +43,9 @@ async function handleCheckout(req: NextRequest): Promise<NextResponse> {
         externalId: `credit_purchase_${user.id}_${Date.now()}`,
         amount: creditPack.price,
         payerEmail: 'customer@example.com', // Required field
-        description: `BridgeMentor Credit Purchase - ${creditPack.name}`,
+        description: `SkillBridge Credit Purchase - ${creditPack.name}`,
         invoiceDuration: 86400, // 24 hours
-        successRedirectUrl: `${process.env.NEXT_PUBLIC_BASE_URL}/learner/dashboard`,
+        successRedirectUrl: `${process.env.NEXT_PUBLIC_BASE_URL}/payment/success`,
         failureRedirectUrl: `${process.env.NEXT_PUBLIC_BASE_URL}/pricing`,
         currency: 'PHP',
         items: [{

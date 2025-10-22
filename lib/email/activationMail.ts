@@ -1,5 +1,4 @@
-import { sendEmailQueued, sendEmailDirect } from "./emailQueue"
-import { DEFAULT_SENDER } from "./transporter"
+import { sendEmail } from "./email-service"
 import { logger } from "@/lib/monitoring/logger"
 
 export async function sendVerificationEmail({
@@ -10,7 +9,7 @@ export async function sendVerificationEmail({
   to: string
   token: string
   id: string | number
-}): Promise<{ success: boolean; error?: any }> {
+}): Promise<{ success: boolean; jobId?: string; error?: any }> {
   const verifyUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/register/learner/activate/${id}/${token}`
 
   const emailData = {
@@ -49,30 +48,21 @@ export async function sendVerificationEmail({
             <p>– The BridgeMentor Team</p>
         </div>
     `,
-    from: DEFAULT_SENDER,
   }
 
-  try {
-    // Use queue for better reliability and performance
-    await sendEmailQueued(emailData)
-    logger.info("Verification email queued", { to, userId: id })
-    return { success: true }
-  } catch (queueError) {
-    // Fallback to direct send if queue fails
-    logger.warn("Email queue failed, falling back to direct send", { error: queueError })
-    try {
-      const result = await sendEmailDirect(emailData)
-      if (result.success) {
-        logger.info("Verification email sent directly", { to, userId: id })
-        return { success: true }
-      } else {
-        logger.error("Direct email send failed", { error: result.error, to, userId: id })
-        return { success: false, error: result.error }
-      }
-    } catch (directError) {
-      logger.error("Email sending completely failed", { error: directError, to, userId: id })
-      // Don't throw - allow registration to continue
-      return { success: false, error: directError }
-    }
+  const result = await sendEmail(emailData, {
+    mode: 'queued', // Use queued mode for non-blocking sends
+    metadata: {
+      userId: id.toString(),
+      action: 'account_verification',
+    },
+  })
+
+  if (result.success) {
+    logger.info("Verification email queued successfully", { to, userId: id, jobId: result.jobId })
+  } else {
+    logger.error("Failed to queue verification email", { error: result.error, to, userId: id })
   }
+
+  return result
 }

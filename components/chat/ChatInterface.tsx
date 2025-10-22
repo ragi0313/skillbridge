@@ -228,9 +228,9 @@ export function ChatInterface({ user, conversation, onBack, className }: ChatInt
     const files = Array.from(e.target.files || [])
 
     files.forEach(file => {
-      // Validate file size (10MB limit)
-      if (file.size > 10 * 1024 * 1024) {
-        toast.error(`${file.name} is too large. Maximum file size is 10MB.`)
+      // Validate file size (5MB limit - matching server-side validation)
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error(`${file.name} is too large. Maximum file size is 5MB.`)
         return
       }
 
@@ -421,7 +421,7 @@ export function ChatInterface({ user, conversation, onBack, className }: ChatInt
                     {message.attachments && message.attachments.length > 0 && (
                       <div className={message.content ? 'mb-2' : ''}>
                         {message.attachments.map((attachment, idx) => (
-                          <div key={idx}>
+                          <div key={`msg-${message.id}-att-${idx}-${attachment.originalFilename || attachment.fileUrl}`}>
                             {attachment.mimeType.startsWith('image/') ? (
                               <a
                                 href={attachment.fileUrl}
@@ -449,9 +449,7 @@ export function ChatInterface({ user, conversation, onBack, className }: ChatInt
                                     </p>
                                   </div>
                                   <a
-                                    href={attachment.fileUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
+                                    href={`/api/files/download?url=${encodeURIComponent(attachment.fileUrl)}&filename=${encodeURIComponent(attachment.originalFilename)}`}
                                     className="text-xs underline flex-shrink-0"
                                   >
                                     Download

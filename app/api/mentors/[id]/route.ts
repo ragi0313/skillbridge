@@ -5,6 +5,21 @@ import { users, mentors, mentorSkills, mentorReviews, learners } from "@/db/sche
 import { eq } from "drizzle-orm"
 import { NextResponse } from "next/server"
 
+// Helper function to ensure URL has proper protocol
+function ensureProtocol(url: string | null): string | null {
+  if (!url || url.trim() === '') return null
+
+  const trimmedUrl = url.trim()
+
+  // If URL already has a protocol, return as is
+  if (trimmedUrl.startsWith('http://') || trimmedUrl.startsWith('https://')) {
+    return trimmedUrl
+  }
+
+  // Add https:// protocol
+  return `https://${trimmedUrl}`
+}
+
 export async function GET(
   _: Request,
   contextPromise: Promise<{ params: Promise<{ id: string }> }>
@@ -83,6 +98,26 @@ export async function GET(
 
   const { users: userData, mentors: mentorData } = mentorRow
 
+  // Process social links to ensure proper URL protocols
+  let processedSocialLinks = mentorData.socialLinks ?? {}
+
+  // Parse if it's a JSON string
+  if (typeof processedSocialLinks === 'string') {
+    try {
+      processedSocialLinks = JSON.parse(processedSocialLinks)
+    } catch (e) {
+      processedSocialLinks = {}
+    }
+  }
+
+  // Ensure all social link URLs have proper protocols
+  if (Array.isArray(processedSocialLinks)) {
+    processedSocialLinks = processedSocialLinks.map((link: any) => ({
+      ...link,
+      url: ensureProtocol(link.url)
+    })).filter((link: any) => link.url !== null) // Remove invalid URLs
+  }
+
   return NextResponse.json({
     id: mentorId,
     userId: mentorData.userId,
@@ -94,8 +129,8 @@ export async function GET(
     professionalTitle: mentorData.professionalTitle,
     bio: mentorData.bio,
     yearsOfExperience: mentorData.yearsOfExperience,
-    linkedInUrl: mentorData.linkedInUrl,
-    socialLinks: mentorData.socialLinks ?? {},
+    linkedInUrl: ensureProtocol(mentorData.linkedInUrl),
+    socialLinks: processedSocialLinks,
     skills: skillNames,
     rates: skillRates,
     reviews: formattedReviews,

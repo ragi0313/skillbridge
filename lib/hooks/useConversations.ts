@@ -30,6 +30,7 @@ export interface ConversationWithParticipants {
     content: string
     messageType: string
     createdAt: string
+    senderId: number
     senderName: string
   }
   unreadCount?: number
@@ -156,6 +157,7 @@ export const useConversations = ({ userId, onError }: UseConversationsOptions = 
                 content: message.content,
                 messageType: message.messageType,
                 createdAt: message.createdAt,
+                senderId: message.senderId,
                 senderName: `${message.sender.firstName} ${message.sender.lastName}`.trim(),
               },
             }

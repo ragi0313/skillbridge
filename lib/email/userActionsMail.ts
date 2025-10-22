@@ -1,5 +1,4 @@
-import { sendEmailQueued, sendEmailDirect } from "./emailQueue"
-import { DEFAULT_SENDER } from "./transporter"
+import { sendEmail } from "./email-service"
 import { logger } from "@/lib/monitoring/logger"
 
 export async function sendSuspensionEmail({
@@ -25,7 +24,6 @@ export async function sendSuspensionEmail({
   })
 
   const emailData = {
-      from: DEFAULT_SENDER,
       to: email,
       subject: "Account Suspension Notice - BridgeMentor",
       html: `
@@ -160,7 +158,7 @@ export async function sendSuspensionEmail({
 
               <div class="contact-info">
                 <h4 style="margin-top: 0; color: #0369a1;">Need Help?</h4>
-                <p>If you believe this suspension was made in error or have questions about this decision, please contact our support team at <a href="mailto:support@bridgementor.com" style="color: #0369a1;">support@bridgementor.com</a></p>
+                <p>If you believe this suspension was made in error or have questions about this decision, please contact our support team at <a href="mailto:contact@bridge-mentor.com" style="color: #0369a1;">contact@bridge-mentor.com</a></p>
               </div>
 
               <p>We value our community and look forward to welcoming you back after the suspension period.</p>
@@ -178,25 +176,20 @@ export async function sendSuspensionEmail({
       `,
   }
 
-  try {
-    await sendEmailQueued(emailData)
-    logger.info("Suspension email queued", { to: email })
-    return { success: true }
-  } catch (queueError) {
-    logger.warn("Email queue failed for suspension email, falling back to direct send", { error: queueError })
-    try {
-      const result = await sendEmailDirect(emailData)
-      if (result.success) {
-        logger.info("Suspension email sent directly", { to: email })
-      } else {
-        logger.error("Direct email send failed for suspension", { error: result.error, to: email })
-      }
-      return result
-    } catch (directError) {
-      logger.error("Email sending completely failed for suspension", { error: directError, to: email })
-      return { success: false, error: directError }
-    }
+  const result = await sendEmail(emailData, {
+    mode: 'queued',
+    metadata: {
+      action: 'user_suspended',
+    },
+  })
+
+  if (result.success) {
+    logger.info("Suspension email queued successfully", { to: email, jobId: result.jobId })
+  } else {
+    logger.error("Failed to queue suspension email", { error: result.error, to: email })
   }
+
+  return result
 }
 
 export async function sendBlacklistEmail({
@@ -213,7 +206,6 @@ export async function sendBlacklistEmail({
   adminMessage: string
 }) {
   const emailData = {
-      from: DEFAULT_SENDER,
       to: email,
       subject: "Account Permanently Suspended - BridgeMentor",
       html: `
@@ -354,7 +346,7 @@ export async function sendBlacklistEmail({
 
               <div class="contact-info">
                 <h4 style="margin-top: 0; color: #0369a1;">Questions?</h4>
-                <p>If you have questions about this decision (though it cannot be reversed), you may contact our support team at <a href="mailto:support@bridgementor.com" style="color: #0369a1;">support@bridgementor.com</a></p>
+                <p>If you have questions about this decision (though it cannot be reversed), you may contact our support team at <a href="mailto:contact@bridge-mentor.com" style="color: #0369a1;">contact@bridge-mentor.com</a></p>
               </div>
 
               <p>We take the safety and well-being of our community seriously, and this action was necessary to protect our users.</p>
@@ -372,23 +364,168 @@ export async function sendBlacklistEmail({
       `,
   }
 
-  try {
-    await sendEmailQueued(emailData)
-    logger.info("Blacklist email queued", { to: email })
-    return { success: true }
-  } catch (queueError) {
-    logger.warn("Email queue failed for blacklist email, falling back to direct send", { error: queueError })
-    try {
-      const result = await sendEmailDirect(emailData)
-      if (result.success) {
-        logger.info("Blacklist email sent directly", { to: email })
-      } else {
-        logger.error("Direct email send failed for blacklist", { error: result.error, to: email })
-      }
-      return result
-    } catch (directError) {
-      logger.error("Email sending completely failed for blacklist", { error: directError, to: email })
-      return { success: false, error: directError }
-    }
+  const result = await sendEmail(emailData, {
+    mode: 'queued',
+    metadata: {
+      action: 'user_blacklisted',
+    },
+  })
+
+  if (result.success) {
+    logger.info("Blacklist email queued successfully", { to: email, jobId: result.jobId })
+  } else {
+    logger.error("Failed to queue blacklist email", { error: result.error, to: email })
   }
+
+  return result
+}
+
+export async function sendContactFormNotification({
+  name,
+  email,
+  subject,
+  message,
+}: {
+  name: string
+  email: string
+  subject: string
+  message: string
+}) {
+  const emailData = {
+      to: process.env.FROM_EMAIL || "contact@bridge-mentor.com",
+      replyTo: email,
+      subject: `Contact Form: ${subject}`,
+      html: `
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>New Contact Form Submission</title>
+          <style>
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+              line-height: 1.6;
+              color: #333;
+              max-width: 600px;
+              margin: 0 auto;
+              padding: 20px;
+              background-color: #f9fafb;
+            }
+            .container {
+              background: white;
+              border-radius: 12px;
+              padding: 30px;
+              box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            }
+            .header {
+              text-align: center;
+              padding-bottom: 20px;
+              border-bottom: 2px solid #f0f0f0;
+            }
+            .logo {
+              font-size: 28px;
+              font-weight: bold;
+              color: #2563eb;
+              margin-bottom: 10px;
+            }
+            .content {
+              padding: 30px 0;
+            }
+            .info-box {
+              background: #f0f9ff;
+              border: 1px solid #0ea5e9;
+              border-radius: 8px;
+              padding: 20px;
+              margin: 20px 0;
+            }
+            .message-box {
+              background: #f8fafc;
+              border: 1px solid #e2e8f0;
+              border-radius: 8px;
+              padding: 20px;
+              margin: 20px 0;
+            }
+            .footer {
+              text-align: center;
+              padding: 20px 0;
+              border-top: 1px solid #e5e7eb;
+              color: #6b7280;
+              font-size: 14px;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <div class="logo">BridgeMentor</div>
+              <h2 style="color: #2563eb; margin: 0;">New Contact Form Submission</h2>
+            </div>
+
+            <div class="content">
+              <p>You have received a new message from the contact form.</p>
+
+              <div class="info-box">
+                <h4 style="margin-top: 0; color: #0369a1;">Contact Information:</h4>
+                <p><strong>Name:</strong> ${name}</p>
+                <p><strong>Email:</strong> <a href="mailto:${email}" style="color: #0369a1;">${email}</a></p>
+                <p><strong>Subject:</strong> ${subject}</p>
+                <p><strong>Date:</strong> ${new Date().toLocaleDateString("en-US", {
+                  weekday: "long",
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}</p>
+              </div>
+
+              <div class="message-box">
+                <h4 style="margin-top: 0; color: #374151;">Message:</h4>
+                <p style="white-space: pre-wrap;">${message}</p>
+              </div>
+
+              <p style="color: #6b7280; font-size: 14px;">
+                <strong>Note:</strong> You can reply to this email directly to respond to the sender.
+              </p>
+            </div>
+
+            <div class="footer">
+              <p>This notification was sent from your contact form at ${process.env.NEXT_PUBLIC_BASE_URL || "https://bridge-mentor.com"}</p>
+              <p>© ${new Date().getFullYear()} BridgeMentor. All rights reserved.</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `,
+      text: `
+Contact Form Submission
+
+Name: ${name}
+Email: ${email}
+Subject: ${subject}
+Date: ${new Date().toLocaleString()}
+
+Message:
+${message}
+
+---
+You can reply to this email directly to respond to the sender.
+      `,
+  }
+
+  const result = await sendEmail(emailData, {
+    mode: 'queued',
+    metadata: {
+      action: 'contact_form',
+    },
+  })
+
+  if (result.success) {
+    logger.info("Contact form notification queued successfully", { to: process.env.FROM_EMAIL, jobId: result.jobId })
+  } else {
+    logger.error("Failed to queue contact form notification", { error: result.error })
+  }
+
+  return result
 }

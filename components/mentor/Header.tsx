@@ -13,8 +13,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { CreditCard, User, Settings, LogOut, Bell, Menu, X, MoreVertical, Check, Trash2, CheckCheck, Trash } from "lucide-react"
+import { User, Settings, LogOut, Bell, Menu, X, MoreVertical, Check, Trash2, CheckCheck, Trash } from "lucide-react"
 import Logo from "../ui/logo"
+import { CreditsIcon } from "@/components/ui/credits-icon"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { toast } from "sonner"
 import { formatDistanceToNow } from "date-fns"
@@ -278,9 +279,9 @@ export default function MentorHeader() {
             <Logo textColor={"text-white"} />
             <nav className="hidden md:flex items-center space-x-6">
               <Link
-                href="/mentor/dashboard"
+                href="/mentor"
                 className={`px-3 py-2 rounded-md text-md font-medium transition-colors ${
-                  pathname === "/mentor/dashboard"
+                  pathname === "/mentor"
                     ? "gradient-bg text-white"
                     : "text-gray-300 hover:text-white hover:bg-gray-800"
                 }`}
@@ -326,7 +327,7 @@ export default function MentorHeader() {
               variant="outline"
               className="hidden sm:flex cursor-pointer px-3 py-2 bg-yellow-600 border-yellow-500 text-white hover:bg-yellow-700"
             >
-              <CreditCard className="w-4 h-4 mr-2" />
+              <CreditsIcon className="w-4 h-4 mr-2" />
               {mentor.creditsBalance} credits
             </Badge>
 
@@ -499,7 +500,7 @@ export default function MentorHeader() {
                     className="text-gray-300 hover:bg-gray-700 hover:text-white cursor-pointer"
                   >
                     <div className="flex items-center px-2 py-2">
-                      <CreditCard className="mr-2 h-4 w-4" />
+                      <CreditsIcon className="mr-2 h-4 w-4" />
                       {mentor.creditsBalance} credits
                     </div>
                   </DropdownMenuItem>
@@ -515,15 +516,6 @@ export default function MentorHeader() {
                   <DropdownMenuSeparator className="bg-gray-700" />
                 </div>
                 
-                <DropdownMenuItem
-                  asChild
-                  className="text-gray-300 hover:bg-gray-700 hover:text-white cursor-pointer"
-                >
-                  <Link href="/mentor/profile">
-                    <User className="mr-2 h-4 w-4" />
-                    Profile
-                  </Link>
-                </DropdownMenuItem>
                 <DropdownMenuItem
                   asChild
                   className="text-gray-300 hover:bg-gray-700 hover:text-white cursor-pointer"
@@ -563,9 +555,9 @@ export default function MentorHeader() {
           <div className="md:hidden">
             <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3 border-t border-gray-700 mt-4">
               <Link
-                href="/mentor/dashboard"
+                href="/mentor"
                 className={`block px-3 py-2 rounded-md text-base font-medium ${
-                  pathname === "/mentor/dashboard"
+                  pathname === "/mentor"
                     ? "bg-blue-600 text-white"
                     : "text-gray-300 hover:text-white hover:bg-gray-800"
                 }`}

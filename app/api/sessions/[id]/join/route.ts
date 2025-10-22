@@ -106,8 +106,6 @@ export async function POST(
       // Prepare update data
       const updateData: any = {}
 
-      `)
-      
       // Check for no-show scenarios: session is 15+ minutes past start time and still in confirmed/upcoming status
       const fifteenMinutesAfterStart = new Date(sessionStart.getTime() + 15 * 60 * 1000)
       const shouldCheckNoShow = now > fifteenMinutesAfterStart && 
@@ -201,7 +199,8 @@ export async function POST(
                 metadata: { noShowType, detectedAt: 'join_api' },
               })
 
-              }
+              console.log('[SESSION_JOIN] Paid mentor', sessionRecord.totalCostCredits, 'credits for learner no-show')
+            }
           }
 
           // Send notifications

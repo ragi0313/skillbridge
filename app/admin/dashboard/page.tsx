@@ -6,7 +6,6 @@ import AdminTopbar from "@/components/admin/AdminTopbar"
 import AdminDashboard from "@/components/admin/AdminDashboard"
 import PendingMentorApproval from "@/components/admin/PendingMentorApproval"
 import SkillCategoriesManagementPage from "@/components/admin/skill-categories/SkillCategoriesManagement"
-import PlatformSettings from "@/components/admin/PlatformSettings"
 import UserManagementPage from "@/components/admin/user-management/UserManagement"
 import AuditLog from "@/components/admin/AuditLog"
 import SessionLogs from "@/components/admin/SessionLogs"
@@ -36,8 +35,7 @@ export default function AdminDashboardPage() {
         return <AuditLog />
       case "reports-feedback":
         return <ReportsFeedback onReportUpdate={() => sidebarRef.current?.refreshCounts()} />
-      case "settings":
-        return <PlatformSettings />
+      // Future features:
       // case "learner-insights":
       //   return <LearnerInsights />
       // case "mentor-directory":

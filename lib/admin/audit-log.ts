@@ -99,7 +99,6 @@ export async function logSimpleAction({
   try {
     await db.insert(auditLogs).values({
       userId,
-      adminId: userId,
       action,
       entityType: "system",
       details,

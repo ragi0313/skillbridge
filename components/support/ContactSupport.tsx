@@ -35,7 +35,7 @@ export default function ContactSupport() {
       icon: Mail,
       title: "Email Support",
       description: "Get detailed help via email",
-      contact: "bridgementor@gmail.com",
+      contact: "contact@bridge-mentor.com",
       responseTime: "Within 24 hours",
       color: "bg-blue-50 text-blue-600 border-blue-200"
     },

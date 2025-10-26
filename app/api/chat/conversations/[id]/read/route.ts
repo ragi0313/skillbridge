@@ -4,7 +4,7 @@ import { ChatService } from '@/lib/services/ChatService'
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
   try {
     const user = await getSession()
@@ -12,10 +12,14 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { id } = await params
-    const conversationId = parseInt(id)
+    const { id } = params
+    const conversationId = parseInt(id, 10)
+
     if (isNaN(conversationId)) {
-      return NextResponse.json({ error: 'Invalid conversation ID' }, { status: 400 })
+      return NextResponse.json(
+        { error: 'Invalid conversation ID' },
+        { status: 400 }
+      )
     }
 
     await ChatService.markConversationAsRead(conversationId, user.id)

@@ -50,15 +50,14 @@ async function handleLogin(req: NextRequest) {
         action: AUDIT_ACTIONS.USER_LOGIN_FAILED,
         entityType: ENTITY_TYPES.USER,
         description: `Failed login attempt for email: ${email}`,
-        metadata: { email, reason: "invalid_credentials" },
+        metadata: { email, reason: "email_not_found" },
         ipAddress,
         userAgent,
         severity: "warning",
       })
 
-      // SECURITY: Use generic message to prevent email enumeration
       return NextResponse.json(
-        { message: "Invalid credentials" },
+        { message: "No account exists with this email address" },
         { status: 401 }
       )
     }
@@ -77,15 +76,14 @@ async function handleLogin(req: NextRequest) {
         entityType: ENTITY_TYPES.USER,
         entityId: user.id,
         description: `Failed login attempt: Incorrect password for ${user.email}`,
-        metadata: { email: user.email, reason: "invalid_credentials" },
+        metadata: { email: user.email, reason: "incorrect_password" },
         ipAddress,
         userAgent,
         severity: "warning",
       })
 
-      // SECURITY: Use generic message to prevent email enumeration
       return NextResponse.json(
-        { message: "Invalid credentials" },
+        { message: "Incorrect password. Please try again." },
         { status: 401 }
       )
     }

@@ -275,10 +275,10 @@ export function LearnerHeader() {
           {/* Left: Logo and Desktop Nav */}
           <div className="flex items-center space-x-8">
             <Logo textColor={"text-white"} />
-            <nav className="hidden md:flex items-center space-x-6">
+            <nav className="hidden xl:flex items-center space-x-6">
               <Link
                 href="/learner/sessions"
-                className={`px-3 py-2 rounded-md text-md font-medium transition-colors ${
+                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
                   pathname === "/learner/sessions"
                     ? "bg-blue-600 text-white"
                     : "text-gray-300 hover:text-white hover:bg-gray-800"
@@ -288,7 +288,7 @@ export function LearnerHeader() {
               </Link>
               <Link
                 href="/find-mentors"
-                className={`px-3 py-2 rounded-md text-md font-medium transition-colors ${
+                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
                   pathname === "/find-mentors"
                     ? "bg-blue-600 text-white"
                     : "text-gray-300 hover:text-white hover:bg-gray-800"
@@ -298,7 +298,7 @@ export function LearnerHeader() {
               </Link>
               <Link
                 href="/learner/messages"
-                className={`px-3 py-2 rounded-md text-md font-medium transition-colors ${
+                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
                   pathname === "/learner/messages"
                     ? "bg-blue-600 text-white"
                     : "text-gray-300 hover:text-white hover:bg-gray-800"
@@ -308,7 +308,7 @@ export function LearnerHeader() {
               </Link>
               <Link
                 href="/pricing"
-                className={`px-3 py-2 rounded-md text-md font-medium transition-colors ${
+                className={`px-3 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
                   pathname === "/pricing"
                     ? "bg-blue-600 text-white"
                     : "text-gray-300 hover:text-white hover:bg-gray-800"
@@ -320,26 +320,27 @@ export function LearnerHeader() {
           </div>
 
           {/* Right: Credits, Notifications, Profile, Mobile Menu */}
-          <div className="flex items-center space-x-4">
-            {/* Credits - Hidden on mobile */}
+          <div className="flex items-center space-x-2 sm:space-x-4">
+            {/* Credits - Hidden on mobile, shown in menu instead */}
             <Badge
               variant="outline"
-              className="hidden sm:flex cursor-pointer px-3 py-2 bg-yellow-600 border-yellow-500 text-white hover:bg-yellow-700"
+              className="hidden sm:flex cursor-pointer px-2 sm:px-3 py-1.5 sm:py-2 bg-yellow-600 border-yellow-500 text-white hover:bg-yellow-700 text-xs sm:text-sm"
             >
-              <CreditsIcon className="w-4 h-4 mr-2" />
-              {learner.creditsBalance} credits
+              <CreditsIcon className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
+              <span className="hidden lg:inline">{learner.creditsBalance} credits</span>
+              <span className="lg:hidden">{learner.creditsBalance}</span>
             </Badge>
 
-            {/* Notifications - Hidden on mobile */}
+            {/* Notifications - Always visible */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
-                  className="hidden sm:flex relative h-10 w-10 rounded-full hover:bg-gray-800 cursor-pointer"
+                  className="relative h-9 w-9 sm:h-10 sm:w-10 rounded-full hover:bg-gray-800 cursor-pointer"
                 >
-                  <Bell className="h-5 w-5 text-gray-300" />
+                  <Bell className="h-4 w-4 sm:h-5 sm:w-5 text-gray-300" />
                   {unreadNotificationsCount > 0 && (
-                    <span className="absolute top-1 right-1 h-4 w-4 flex items-center justify-center rounded-full bg-red-500 text-white text-xs font-bold">
+                    <span className="absolute top-0 right-0 sm:top-1 sm:right-1 h-4 w-4 flex items-center justify-center rounded-full bg-red-500 text-white text-xs font-bold">
                       {unreadNotificationsCount}
                     </span>
                   )}
@@ -480,22 +481,6 @@ export function LearnerHeader() {
                   <p className="text-xs leading-none text-gray-400">{learner.email}</p>
                 </div>
                 <DropdownMenuSeparator className="bg-gray-700" />
-                {/* Mobile-only items */}
-                <div className="md:hidden">
-                  <DropdownMenuItem asChild className="text-gray-300 hover:bg-gray-700 hover:text-white cursor-pointer">
-                    <div className="flex items-center px-2 py-2">
-                      <CreditsIcon className="mr-2 h-4 w-4" />
-                      {learner.creditsBalance} credits
-                    </div>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild className="text-gray-300 hover:bg-gray-700 hover:text-white cursor-pointer">
-                    <div className="flex items-center px-2 py-2">
-                      <Bell className="mr-2 h-4 w-4" />
-                      Notifications {unreadNotificationsCount > 0 && `(${unreadNotificationsCount})`}
-                    </div>
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator className="bg-gray-700" />
-                </div>
                 <DropdownMenuItem asChild className="text-gray-300 hover:bg-gray-700 hover:text-white cursor-pointer">
                   <Link href="/learner/settings">
                     <Settings className="mr-2 h-4 w-4" />
@@ -514,7 +499,7 @@ export function LearnerHeader() {
             </DropdownMenu>
 
             {/* Mobile menu button */}
-            <div className="md:hidden">
+            <div className="xl:hidden">
               <Button
                 variant="ghost"
                 size="sm"
@@ -529,8 +514,21 @@ export function LearnerHeader() {
 
         {/* Mobile Navigation */}
         {isMenuOpen && (
-          <div className="md:hidden">
+          <div className="xl:hidden">
             <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3 border-t border-gray-700 mt-4">
+              {/* Credits Balance at Top of Mobile Menu */}
+              <div className="sm:hidden mb-3 px-3 py-2 bg-gray-800 rounded-md flex items-center justify-between">
+                <div className="flex items-center">
+                  <CreditsIcon className="w-4 h-4 mr-2 text-yellow-500" />
+                  <span className="text-sm font-medium text-white">{learner.creditsBalance} credits</span>
+                </div>
+                <Link href="/pricing" onClick={() => setIsMenuOpen(false)}>
+                  <Button size="sm" className="gradient-bg text-white text-xs h-7">
+                    Buy More
+                  </Button>
+                </Link>
+              </div>
+
               <Link
                 href="/learner/sessions"
                 className={`block px-3 py-2 rounded-md text-base font-medium ${
@@ -552,6 +550,17 @@ export function LearnerHeader() {
                 onClick={() => setIsMenuOpen(false)}
               >
                 Browse Mentors
+              </Link>
+              <Link
+                href="/learner/messages"
+                className={`block px-3 py-2 rounded-md text-base font-medium ${
+                  pathname === "/learner/messages"
+                    ? "bg-blue-600 text-white"
+                    : "text-gray-300 hover:text-white hover:bg-gray-800"
+                }`}
+                onClick={() => setIsMenuOpen(false)}
+              >
+                Messages
               </Link>
               <Link
                 href="/pricing"

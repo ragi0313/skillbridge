@@ -519,11 +519,23 @@ export class ChatService {
       })) : undefined,
     }
 
-    // Trigger real-time event
+    // Trigger real-time event for new message
     await triggerPusherEvent(
       getConversationChannel(conversationId),
       PUSHER_EVENTS.NEW_MESSAGE,
       chatMessage
+    )
+
+    // Also trigger conversation read event for the sender
+    // This ensures the sender's UI doesn't show their own message as unread
+    await triggerPusherEvent(
+      getConversationChannel(conversationId),
+      PUSHER_EVENTS.CONVERSATION_READ,
+      {
+        conversationId,
+        userId: senderId,
+        readAt: chatMessage.createdAt
+      }
     )
 
     return chatMessage

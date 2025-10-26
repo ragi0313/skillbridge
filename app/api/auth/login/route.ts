@@ -243,7 +243,7 @@ async function handleLogin(req: NextRequest) {
     cookieStore.set("session_token", token, {
       httpOnly: true, // Prevent JavaScript access (XSS protection)
       secure: process.env.NODE_ENV === "production", // HTTPS only in production
-      sameSite: "strict", // SECURITY: Strict CSRF protection - cookies only sent to same site
+      sameSite: "lax", // SECURITY: CSRF protection while allowing redirects from payment providers
       path: "/",
       maxAge: 60 * 60 * 24 * 7, // 7 days
     })

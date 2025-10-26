@@ -163,50 +163,115 @@ export async function POST(request: NextRequest) {
     const platformFee = phpAmount * (WITHDRAWAL_FEE_PERCENTAGE / 100)
     const netAmount = phpAmount - platformFee
 
-    // Create withdrawal record
-    const [withdrawal] = await db
-      .insert(creditWithdrawals)
-      .values({
-        mentorId: mentor.id,
-        creditsAmount,
-        usdAmount: phpAmount.toString(),
-        platformFee: platformFee.toString(),
-        netAmount: netAmount.toString(),
-        status: 'pending',
-        payoutMethod,
-        xenditChannelCode: bankCode,
-        bankDetails: {
-          bankCode,
-          accountHolderName,
-          accountNumber
-        }
-      })
-      .returning()
+    // Use database transaction to ensure atomicity
+    const result = await db.transaction(async (tx) => {
+      // Create withdrawal record
+      const [withdrawal] = await tx
+        .insert(creditWithdrawals)
+        .values({
+          mentorId: mentor.id,
+          creditsAmount,
+          usdAmount: phpAmount.toString(),
+          platformFee: platformFee.toString(),
+          netAmount: netAmount.toString(),
+          status: 'pending',
+          payoutMethod,
+          xenditChannelCode: bankCode,
+          bankDetails: {
+            bankCode,
+            accountHolderName,
+            accountNumber
+          }
+        })
+        .returning()
+
+      // IMMEDIATELY deduct credits from mentor's balance
+      // This prevents double-spending (mentor can't request multiple withdrawals with same credits)
+      const [updatedMentor] = await tx
+        .update(mentors)
+        .set({ creditsBalance: mentor.creditsBalance - creditsAmount })
+        .where(eq(mentors.id, mentor.id))
+        .returning({ newBalance: mentors.creditsBalance })
+
+      // Record credit transaction
+      await tx
+        .insert(creditTransactions)
+        .values({
+          userId: mentor.userId,
+          type: 'withdrawal',
+          direction: 'debit',
+          amount: creditsAmount,
+          balanceBefore: mentor.creditsBalance,
+          balanceAfter: updatedMentor.newBalance,
+          description: `Withdrawal request - Converting ${creditsAmount} credits to ₱${phpAmount.toFixed(2)}`,
+          metadata: {
+            withdrawalId: withdrawal.id,
+            phpAmount,
+            platformFee,
+            netAmount,
+            bankCode,
+            payoutMethod,
+          },
+        })
+
+      return { withdrawal, newBalance: updatedMentor.newBalance }
+    })
+
+    const withdrawal = result.withdrawal
 
     // Process withdrawal immediately via Xendit
     if (payoutMethod === 'xendit_transfer') {
       try {
         await processXenditWithdrawal(
-          withdrawal.id, 
-          netAmount, 
-          bankCode, 
-          accountHolderName, 
+          withdrawal.id,
+          mentor.id,
+          netAmount,
+          bankCode,
+          accountHolderName,
           accountNumber
         )
       } catch (xenditError) {
         console.error("[XENDIT_WITHDRAWAL] Processing failed:", xenditError)
-        // Update withdrawal status to failed
-        await db
-          .update(creditWithdrawals)
-          .set({ 
-            status: 'failed',
-            failureReason: `Xendit error: ${xenditError instanceof Error ? xenditError.message : 'Unknown error'}`,
-            processedAt: new Date(),
-          })
-          .where(eq(creditWithdrawals.id, withdrawal.id))
 
-        return NextResponse.json({ 
-          error: "Withdrawal processing failed. Please try again later." 
+        // Refund credits back to mentor since Xendit failed
+        await db.transaction(async (tx) => {
+          // Update withdrawal status to failed
+          await tx
+            .update(creditWithdrawals)
+            .set({
+              status: 'failed',
+              failureReason: `Xendit error: ${xenditError instanceof Error ? xenditError.message : 'Unknown error'}`,
+              processedAt: new Date(),
+            })
+            .where(eq(creditWithdrawals.id, withdrawal.id))
+
+          // Refund credits back to mentor
+          const [refundedMentor] = await tx
+            .update(mentors)
+            .set({ creditsBalance: result.newBalance + creditsAmount })
+            .where(eq(mentors.id, mentor.id))
+            .returning({ refundedBalance: mentors.creditsBalance })
+
+          // Record refund transaction
+          await tx
+            .insert(creditTransactions)
+            .values({
+              userId: mentor.userId,
+              type: 'refund',
+              direction: 'credit',
+              amount: creditsAmount,
+              balanceBefore: result.newBalance,
+              balanceAfter: refundedMentor.refundedBalance,
+              description: `Withdrawal failed - Credits refunded (Withdrawal ID: ${withdrawal.id})`,
+              metadata: {
+                withdrawalId: withdrawal.id,
+                failureReason: xenditError instanceof Error ? xenditError.message : 'Unknown error',
+              },
+            })
+        })
+
+        return NextResponse.json({
+          error: "Withdrawal processing failed. Credits have been refunded to your account."
         }, { status: 500 })
       }
     }
@@ -220,6 +285,7 @@ export async function POST(request: NextRequest) {
         platformFee,
         netAmount,
         status: withdrawal.status,
+        newCreditBalance: result.newBalance,
         estimatedProcessingTime: payoutMethod === 'xendit_transfer' ? 'Processing...' : '1-3 business days',
       }
     })
@@ -231,9 +297,11 @@ export async function POST(request: NextRequest) {
 }
 
 // Process Xendit withdrawal via disbursement
+// NOTE: Credits are already deducted before calling this function
 async function processXenditWithdrawal(
-  withdrawalId: number, 
-  netAmount: number, 
+  withdrawalId: number,
+  mentorId: number,
+  netAmount: number,
   bankCode: string,
   accountHolderName: string,
   accountNumber: string
@@ -242,7 +310,7 @@ async function processXenditWithdrawal(
     // Update status to processing
     await db
       .update(creditWithdrawals)
-      .set({ 
+      .set({
         status: 'processing',
         processedAt: new Date(),
       })
@@ -269,14 +337,14 @@ async function processXenditWithdrawal(
       }
     })
 
-    // Update withdrawal with Xendit payout ID
+    // Update withdrawal with Xendit payout ID and mark as completed
     await db
       .update(creditWithdrawals)
-      .set({ 
+      .set({
         status: 'completed', // Xendit payouts are typically completed immediately
         xenditDisbursementId: payout.id,
         completedAt: new Date(),
-        metadata: { 
+        metadata: {
           xenditPayout: payout,
           bankCode,
           accountHolderName: accountHolderName.replace(/./g, '*') // Mask account holder name
@@ -284,65 +352,20 @@ async function processXenditWithdrawal(
       })
       .where(eq(creditWithdrawals.id, withdrawalId))
 
-    // Get withdrawal details for transaction record
-    const [withdrawal] = await db
-      .select()
-      .from(creditWithdrawals)
-      .where(eq(creditWithdrawals.id, withdrawalId))
-      .limit(1)
+    console.log(`[XENDIT_WITHDRAWAL] Successfully processed withdrawal ${withdrawalId}, Xendit Payout ID: ${payout.id}`)
 
-    if (withdrawal) {
-      // Get mentor's current balance
-      const [mentor] = await db
-        .select({ creditsBalance: mentors.creditsBalance })
-        .from(mentors)
-        .where(eq(mentors.id, withdrawal.mentorId))
-        .limit(1)
-
-      if (mentor) {
-        // Deduct credits from mentor's balance
-        const newBalance = mentor.creditsBalance - withdrawal.creditsAmount
-        
-        await db
-          .update(mentors)
-          .set({ creditsBalance: newBalance })
-          .where(eq(mentors.id, withdrawal.mentorId))
-
-        // Record the transaction
-        await db
-          .insert(creditTransactions)
-          .values({
-            userId: withdrawal.mentorId, // Note: This should ideally be the user ID, but using mentor ID for now
-            type: 'credit_withdrawal',
-            direction: 'debit',
-            amount: withdrawal.creditsAmount,
-            balanceBefore: mentor.creditsBalance,
-            balanceAfter: newBalance,
-            description: `Credit withdrawal - ₱${withdrawal.netAmount} transferred via Xendit`,
-            metadata: {
-              withdrawalId: withdrawal.id,
-              xenditPayoutId: payout.id,
-              usdAmount: withdrawal.usdAmount,
-              platformFee: withdrawal.platformFee,
-              netAmount: withdrawal.netAmount,
-              bankCode,
-            },
-          })
-      }
-    }
-
-    } catch (error) {
+  } catch (error) {
     console.error(`[XENDIT_WITHDRAWAL] Processing failed for withdrawal ${withdrawalId}:`, error)
-    
+
     // Update withdrawal status to failed
     await db
       .update(creditWithdrawals)
-      .set({ 
+      .set({
         status: 'failed',
         failureReason: `Xendit error: ${error instanceof Error ? error.message : 'Unknown error'}`,
       })
       .where(eq(creditWithdrawals.id, withdrawalId))
-    
+
     throw error
   }
 }

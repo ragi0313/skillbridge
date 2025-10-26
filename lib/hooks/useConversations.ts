@@ -149,7 +149,11 @@ export const useConversations = ({ userId, onError }: UseConversationsOptions = 
         // Update existing conversation
         return prev.map(conv => {
           if (conv.id === message.conversationId) {
-            return {
+            // Determine if the message was sent by the current user
+            const isCurrentUserSender = userId && message.senderId === userId
+
+            // Build updated conversation
+            const updatedConv = {
               ...conv,
               lastMessageAt: message.createdAt,
               lastMessage: {
@@ -161,6 +165,18 @@ export const useConversations = ({ userId, onError }: UseConversationsOptions = 
                 senderName: `${message.sender.firstName} ${message.sender.lastName}`.trim(),
               },
             }
+
+            // If current user sent the message, update their lastReadAt timestamp
+            // to prevent showing their own messages as unread
+            if (isCurrentUserSender) {
+              if (conv.mentor.userId === userId) {
+                updatedConv.mentorLastReadAt = message.createdAt
+              } else if (conv.learner.userId === userId) {
+                updatedConv.learnerLastReadAt = message.createdAt
+              }
+            }
+
+            return updatedConv
           }
           return conv
         })
@@ -170,7 +186,7 @@ export const useConversations = ({ userId, onError }: UseConversationsOptions = 
         return prev
       }
     })
-  }, [fetchConversations])
+  }, [fetchConversations, userId])
 
   // Update conversation read status
   const updateReadStatus = useCallback((conversationId: number, userId: number, readAt: string) => {

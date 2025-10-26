@@ -87,7 +87,7 @@ export async function sendPasswordResetEmail(email: string, firstName: string, r
             
             <div class="code-container">
               <div class="reset-code">${resetCode}</div>
-              <p style="margin: 10px 0 0 0; color: #6b7280; font-size: 14px;">This code will expire in 15 minutes</p>
+              <p style="margin: 10px 0 0 0; color: #6b7280; font-size: 14px;">This code will expire in 5 minutes</p>
             </div>
             
             <div class="warning">

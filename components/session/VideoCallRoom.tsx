@@ -4,6 +4,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react"
 import { useRealTimeTimer } from "@/lib/hooks/useRealTimeTimer"
+import { getPusherConfig, getSessionChannel, PUSHER_EVENTS } from "@/lib/pusher/config"
 
 import { Whiteboard } from "../whiteboard/Whiteboard"
 
@@ -128,10 +129,12 @@ export function VideoCallRoom({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const chatEndRef = useRef<HTMLDivElement>(null)
 
-  // Chat refs for session chat (polling only - no Pusher to avoid conflicts)
+  // Chat refs for session chat (now using Pusher with separate session channels)
   const chatInitializedRef = useRef<boolean>(false)
   const chatPollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const lastMessageTimestampRef = useRef<number>(0)
+  const pusherClientRef = useRef<any>(null)
+  const sessionChannelRef = useRef<any>(null)
 
   const sessionStart = new Date(sessionData.startTime)
   const sessionEnd = new Date(sessionData.endTime)
@@ -322,14 +325,14 @@ export function VideoCallRoom({
     }
   }, [sessionId])
 
-  // Polling for chat messages (no real-time connection to avoid conflicts)
+  // Polling for chat messages (fallback if Pusher fails)
   const startChatPolling = useCallback(() => {
     // Only start polling if not already polling
     if (chatPollingIntervalRef.current) {
       return
     }
 
-    console.log("[VIDEO_CALL] Starting chat polling as fallback...")
+    console.log("[VIDEO_CALL] Starting chat polling as fallback (Pusher not available)...")
     chatPollingIntervalRef.current = setInterval(async () => {
       if (isCleaningUpRef.current || isCallEnding) {
         return
@@ -382,7 +385,7 @@ export function VideoCallRoom({
     }
   }, [])
 
-  // Initialize session chat (polling only - no Pusher to avoid conflicts with ChatContext)
+  // Initialize session chat (using Pusher with separate session channels)
   const initializeSessionChat = useCallback(async () => {
     if (chatInitializedRef.current || isCleaningUpRef.current) {
       console.log("[VIDEO_CALL] Chat already initialized or cleaning up, skipping...")
@@ -390,7 +393,7 @@ export function VideoCallRoom({
     }
 
     try {
-      console.log("[VIDEO_CALL] Initializing session chat with polling mode (Pusher-free)")
+      console.log("[VIDEO_CALL] Initializing session chat with Pusher real-time messaging")
 
       // Mark as initialized
       setIsChatInitialized(true)
@@ -399,25 +402,100 @@ export function VideoCallRoom({
       // Fetch initial messages
       await fetchSessionMessages()
 
-      // Start polling for new messages
-      startChatPolling()
+      // Initialize Pusher for real-time messages
+      const pusherConfig = getPusherConfig()
+      if (pusherConfig && typeof window !== 'undefined') {
+        try {
+          // Dynamically import Pusher JS
+          const PusherJS = (await import('pusher-js')).default
 
-      console.log("[VIDEO_CALL] Session chat initialized successfully with polling")
+          // Create Pusher client if not already created
+          if (!pusherClientRef.current) {
+            pusherClientRef.current = new PusherJS(pusherConfig.key, {
+              cluster: pusherConfig.cluster,
+              encrypted: true,
+            })
+            console.log("[VIDEO_CALL] Pusher client initialized for session chat")
+          }
+
+          // Subscribe to session channel
+          const channelName = getSessionChannel(sessionId)
+          sessionChannelRef.current = pusherClientRef.current.subscribe(channelName)
+
+          // Listen for new messages
+          sessionChannelRef.current.bind(PUSHER_EVENTS.SESSION_CHAT_MESSAGE, (message: ChatMessage) => {
+            console.log("[VIDEO_CALL] Received real-time session chat message:", message.id)
+
+            // Only add if we haven't seen this message yet
+            if (message.timestamp > lastMessageTimestampRef.current) {
+              setChatMessages((prev: ChatMessage[]) => {
+                // Check if message already exists
+                const exists = prev.some(m => m.id === message.id)
+                if (exists) return prev
+
+                const updated = [...prev, message]
+                return updated.sort((a, b) => a.timestamp - b.timestamp)
+              })
+
+              lastMessageTimestampRef.current = message.timestamp
+
+              // Update unread count if sidebar is closed
+              if (!showSidebar) {
+                setUnreadCount((prev: number) => prev + 1)
+              }
+            }
+          })
+
+          console.log("[VIDEO_CALL] Session chat initialized successfully with Pusher on channel:", channelName)
+        } catch (pusherError) {
+          console.error("[VIDEO_CALL] Failed to initialize Pusher, falling back to polling:", pusherError)
+          // Fallback to polling if Pusher fails
+          startChatPolling()
+        }
+      } else {
+        console.warn("[VIDEO_CALL] Pusher config not available, falling back to polling")
+        // Fallback to polling if Pusher not configured
+        startChatPolling()
+      }
     } catch (error) {
       console.error("[VIDEO_CALL] Failed to initialize session chat:", error)
       // Still enable chat even if initial fetch fails
       setIsChatInitialized(true)
       chatInitializedRef.current = true
+      // Fallback to polling
       startChatPolling()
     }
-  }, [sessionId, fetchSessionMessages, startChatPolling])
+  }, [sessionId, fetchSessionMessages, startChatPolling, showSidebar])
 
   // Cleanup session chat
   const cleanupSessionChat = useCallback(() => {
     console.log("[VIDEO_CALL] Cleaning up session chat...")
 
     try {
-      // Stop polling
+      // Unsubscribe from Pusher channel
+      if (sessionChannelRef.current) {
+        try {
+          sessionChannelRef.current.unbind_all()
+          pusherClientRef.current?.unsubscribe(getSessionChannel(sessionId))
+          console.log("[VIDEO_CALL] Unsubscribed from Pusher session channel")
+        } catch (error) {
+          console.error("[VIDEO_CALL] Error unsubscribing from Pusher:", error)
+        }
+        sessionChannelRef.current = null
+      }
+
+      // Disconnect Pusher client
+      if (pusherClientRef.current) {
+        try {
+          pusherClientRef.current.disconnect()
+          console.log("[VIDEO_CALL] Disconnected Pusher client")
+        } catch (error) {
+          console.error("[VIDEO_CALL] Error disconnecting Pusher:", error)
+        }
+        pusherClientRef.current = null
+      }
+
+      // Stop polling (fallback cleanup)
       stopChatPolling()
 
       // Reset state
@@ -432,7 +510,7 @@ export function VideoCallRoom({
     } catch (error) {
       console.error("[VIDEO_CALL] Error during session chat cleanup:", error)
     }
-  }, [stopChatPolling])
+  }, [stopChatPolling, sessionId])
 
   // Comprehensive cleanup function
   const performCleanup = useCallback(
@@ -1312,7 +1390,7 @@ export function VideoCallRoom({
     }
   }, [isScreenSharing, isVideoEnabled, isRetryingMedia])
 
-  // Session chat messaging - polling-based (no Pusher to avoid conflicts)
+  // Session chat messaging - Pusher-based with polling fallback
   const sendMessage = useCallback(
     async (message: string, file?: File) => {
       if (!message.trim() && !file) return
@@ -1375,7 +1453,7 @@ export function VideoCallRoom({
           return [...prev, sessionMessage].sort((a, b) => a.timestamp - b.timestamp)
         })
 
-        // Send via the session chat API (stored in-memory, other user will get it via polling)
+        // Send via the session chat API (stored in-memory, broadcasted via Pusher)
         try {
           const response = await fetch(`/api/sessions/${sessionId}/chat`, {
             method: 'POST',
@@ -1396,9 +1474,9 @@ export function VideoCallRoom({
           }
 
           const result = await response.json()
-          console.log("[VIDEO_CALL] Message sent successfully and stored in-memory:", result)
+          console.log("[VIDEO_CALL] Message sent successfully, stored in-memory and broadcasted via Pusher:", result)
 
-          // Update last message timestamp so polling doesn't duplicate this message
+          // Update last message timestamp to prevent duplicates from Pusher or polling
           lastMessageTimestampRef.current = sessionMessage.timestamp
         } catch (apiError) {
           console.warn("[VIDEO_CALL] Session chat API failed, message only visible locally:", apiError)

@@ -503,6 +503,18 @@ export const sessionFeedback = pgTable("session_feedback", {
   sessionReviewerIdx: index("session_feedback_session_reviewer_idx").on(table.sessionId, table.reviewerRole),
 }))
 
+// Session chat messages (ephemeral chat during video sessions)
+export const sessionMessages = pgTable("session_messages", {
+  id: serial("id").primaryKey(),
+  sessionId: integer("session_id").notNull().references(() => bookingSessions.id, { onDelete: "cascade" }),
+  senderId: integer("sender_id").notNull().references(() => users.id),
+  senderRole: varchar("sender_role", { length: 20 }).notNull(), // 'learner' or 'mentor'
+  message: text("message").notNull(),
+  timestamp: timestamp("timestamp", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  sessionIdx: index("session_messages_session_idx").on(table.sessionId),
+  sessionTimestampIdx: index("session_messages_session_timestamp_idx").on(table.sessionId, table.timestamp),
+}))
 
 export const conversations = pgTable("conversations", {
   id: serial("id").primaryKey(),
@@ -619,6 +631,65 @@ export const learnersRelations = relations(learners, ({ one, many }) => ({
     references: [users.id],
   }),
   conversations: many(conversations),
+}))
+
+// Session activity logs for audit trail and debugging
+export const sessionLogs = pgTable("session_logs", {
+  id: serial("id").primaryKey(),
+  sessionId: integer("session_id").notNull().references(() => bookingSessions.id, { onDelete: "cascade" }),
+  eventType: varchar("event_type", { length: 50 }).notNull(), // 'status_changed', 'user_joined', 'user_left', 'payment_processed', 'refund_processed', 'admin_action', etc.
+  actorType: varchar("actor_type", { length: 20 }).notNull(), // 'system', 'learner', 'mentor', 'admin'
+  actorId: integer("actor_id").references(() => users.id),
+  oldStatus: varchar("old_status", { length: 20 }),
+  newStatus: varchar("new_status", { length: 20 }),
+  description: text("description").notNull(),
+  metadata: json("metadata"), // Additional context like IP, user agent, error details, etc.
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  sessionIdIdx: index("session_logs_session_id_idx").on(table.sessionId),
+  eventTypeIdx: index("session_logs_event_type_idx").on(table.eventType),
+  actorTypeIdx: index("session_logs_actor_type_idx").on(table.actorType),
+  createdAtIdx: index("session_logs_created_at_idx").on(table.createdAt),
+}))
+
+// Session join/leave tracking to handle rapid join/leave cycles
+export const sessionConnectionLogs = pgTable("session_connection_logs", {
+  id: serial("id").primaryKey(),
+  sessionId: integer("session_id").notNull().references(() => bookingSessions.id, { onDelete: "cascade" }),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  userRole: varchar("user_role", { length: 20 }).notNull(), // 'learner' or 'mentor'
+  action: varchar("action", { length: 10 }).notNull(), // 'joined' or 'left'
+  connectionDurationMs: integer("connection_duration_ms"), // How long they were connected (calculated on 'left')
+  metadata: json("metadata"), // Browser info, connection quality, etc.
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  sessionUserIdx: index("session_connection_logs_session_user_idx").on(table.sessionId, table.userId),
+  sessionIdx: index("session_connection_logs_session_idx").on(table.sessionId),
+  createdAtIdx: index("session_connection_logs_created_at_idx").on(table.createdAt),
+}))
+
+// Refund requests from learners for disputed sessions
+export const refundRequests = pgTable("refund_requests", {
+  id: serial("id").primaryKey(),
+  sessionId: integer("session_id").notNull().references(() => bookingSessions.id, { onDelete: "cascade" }),
+  requestedBy: integer("requested_by").notNull().references(() => users.id, { onDelete: "cascade" }),
+  requestReason: varchar("request_reason", { length: 50 }).notNull(), // 'technical_issues', 'mentor_no_show', 'quality_issues', 'other'
+  detailedReason: text("detailed_reason").notNull(),
+  evidenceUrls: json("evidence_urls"), // Screenshots, recordings, chat logs
+  requestedAmount: integer("requested_amount").notNull(), // Credits requested
+  status: varchar("status", { length: 20 }).default("pending"), // 'pending', 'approved', 'rejected', 'escalated'
+  reviewedBy: integer("reviewed_by").references(() => users.id), // Admin who reviewed
+  reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  adminNotes: text("admin_notes"),
+  responseMessage: text("response_message"), // Message to user explaining decision
+  refundedAmount: integer("refunded_amount"), // Actual amount refunded (may differ from requested)
+  refundProcessedAt: timestamp("refund_processed_at", { withTimezone: true }),
+  ...timestamps,
+}, (table) => ({
+  sessionIdIdx: index("refund_requests_session_id_idx").on(table.sessionId),
+  requestedByIdx: index("refund_requests_requested_by_idx").on(table.requestedBy),
+  statusIdx: index("refund_requests_status_idx").on(table.status),
+  createdAtIdx: index("refund_requests_created_at_idx").on(table.createdAt),
 }))
 
 

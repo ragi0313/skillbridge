@@ -23,9 +23,9 @@ export default function VerifyResetCodePage() {
   const email = searchParams.get("email") || ""
   const inputRefs = useRef<(HTMLInputElement | null)[]>([])
 
-  // Initialize timer from sessionStorage or default to 60 seconds
+  // Initialize timer from sessionStorage or default to 5 minutes (300 seconds)
   const [timeLeft, setTimeLeft] = useState(() => {
-    if (typeof window === 'undefined') return 60
+    if (typeof window === 'undefined') return 300
     const storageKey = `reset-timer-${email}`
     const stored = sessionStorage.getItem(storageKey)
     if (stored) {
@@ -33,7 +33,7 @@ export default function VerifyResetCodePage() {
       const remaining = Math.max(0, Math.floor((expiry - Date.now()) / 1000))
       return remaining
     }
-    return 60 // Default: 1 minute
+    return 300 // Default: 5 minutes
   })
 
   // Save timer to sessionStorage when it changes
@@ -163,13 +163,13 @@ export default function VerifyResetCodePage() {
 
       if (response.ok) {
         toast.success("New code sent! Check your email for the new verification code.")
-        setTimeLeft(60) // Reset timer to 1 minute
+        setTimeLeft(300) // Reset timer to 5 minutes
         setCanResend(false)
         setCode(["", "", "", "", "", ""]) // Clear current code
         // Update sessionStorage with new expiry time
         if (typeof window !== 'undefined') {
           const storageKey = `reset-timer-${email}`
-          const expiry = Date.now() + (60 * 1000)
+          const expiry = Date.now() + (300 * 1000)
           sessionStorage.setItem(storageKey, JSON.stringify({ expiry }))
         }
       } else {

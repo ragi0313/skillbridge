@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth/getSession'
 import { db } from '@/db'
 import { bookingSessions, learners, mentors } from '@/db/schema'
 import { eq, desc, and } from 'drizzle-orm'
+import { sessionLogService } from '@/lib/services/SessionLogService'
 
 export async function POST(
   request: NextRequest,
@@ -167,9 +168,33 @@ export async function POST(
           .update(bookingSessions)
           .set(updateData)
           .where(eq(bookingSessions.id, sessionId))
-        
-        } else {
-        }
+      }
+
+      // Log the connection event
+      if (!entryResult.wasAlreadyInVideo) {
+        await sessionLogService.logConnection({
+          sessionId,
+          userId,
+          userRole: isLearner ? 'learner' : 'mentor',
+          action: 'joined',
+          metadata: {
+            isRejoining: entryResult.isRejoining,
+            timestamp: now.toISOString()
+          }
+        })
+
+        // Also log as session event
+        await sessionLogService.logEvent({
+          sessionId,
+          eventType: 'user_joined',
+          actorType: isLearner ? 'learner' : 'mentor',
+          actorId: userId,
+          oldStatus: sessionRecord.status,
+          newStatus: updateData.status || sessionRecord.status,
+          description: `${isLearner ? 'Learner' : 'Mentor'} ${entryResult.isRejoining ? 're-entered' : 'entered'} video call`,
+          metadata: { isRejoining: entryResult.isRejoining }
+        })
+      }
     })
 
     const responseMessage = entryResult.wasAlreadyInVideo 

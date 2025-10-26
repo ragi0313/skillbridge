@@ -4,8 +4,8 @@ import Logo from "../ui/logo";
 
 export default function SignupLayout({ currentStep, children }: { currentStep: number; children: ReactNode }) {
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col lg:flex-row">
-      <div className="hidden lg:block lg:w-1/2 relative">
+    <div className="min-h-screen-stable bg-gray-50 flex flex-col lg:flex-row">
+      <div className="hidden lg:block lg:w-1/2 lg:fixed lg:left-0 lg:top-0 lg:bottom-0 relative">
           <div className="absolute top-6 left-8 z-10">
            <Logo imageWidth={40} imageHeight={40} fontSize="text-2xl" />
           </div>
@@ -18,7 +18,7 @@ export default function SignupLayout({ currentStep, children }: { currentStep: n
         />
         <div className="absolute inset-0 bg-gradient-to-br from-blue-900/20 to-purple-900/20"></div>
       </div>
-      <div className="w-full lg:w-1/2 flex flex-col">
+      <div className="w-full lg:w-1/2 lg:ml-auto flex flex-col min-h-screen-stable">
         {children}
       </div>
     </div>

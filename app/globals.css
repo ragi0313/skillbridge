@@ -142,6 +142,76 @@
   body {
     @apply bg-background text-foreground;
   }
+
+  /* Prevent layout shift when mobile keyboard appears */
+  @supports (-webkit-touch-callout: none) {
+    body {
+      /* iOS Safari */
+      min-height: -webkit-fill-available;
+    }
+  }
+}
+
+/* Container utility for responsive max-width */
+@layer components {
+  .container {
+    width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  @media (min-width: 640px) {
+    .container {
+      max-width: 640px;
+      padding-left: 1.5rem;
+      padding-right: 1.5rem;
+    }
+  }
+
+  @media (min-width: 768px) {
+    .container {
+      max-width: 768px;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .container {
+      max-width: 1024px;
+      padding-left: 2rem;
+      padding-right: 2rem;
+    }
+  }
+
+  @media (min-width: 1280px) {
+    .container {
+      max-width: 1200px;
+    }
+  }
+
+  @media (min-width: 1536px) {
+    .container {
+      max-width: 1400px;
+    }
+  }
+
+  /* Also ensure max-w-7xl doesn't get too wide */
+  .max-w-7xl {
+    max-width: 1400px !important;
+  }
+
+  /* Fix for viewport height on mobile devices to prevent image movement when keyboard appears */
+  .min-h-screen-stable {
+    min-height: 100vh;
+    min-height: -webkit-fill-available;
+  }
+
+  @supports (height: 100dvh) {
+    .min-h-screen-stable {
+      min-height: 100dvh;
+    }
+  }
 }
 
 @layer utilities {

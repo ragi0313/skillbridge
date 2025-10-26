@@ -33,11 +33,21 @@ export async function sendEmail(emailData: EmailData) {
     // Use configured FROM_EMAIL if not provided
     const from = emailData.from || process.env.FROM_EMAIL
 
+    // Email override for development/testing
+    let finalTo = emailData.to
+    let finalSubject = emailData.subject
+
+    if (process.env.NODE_ENV === 'development' && process.env.EMAIL_OVERRIDE_ADDRESS) {
+      logger.info(`[EMAIL_OVERRIDE] Redirecting email from ${emailData.to} to ${process.env.EMAIL_OVERRIDE_ADDRESS}`)
+      finalTo = process.env.EMAIL_OVERRIDE_ADDRESS
+      finalSubject = `[DEV - Originally for: ${emailData.to}] ${emailData.subject}`
+    }
+
     const data = await resend.emails.send({
       from,
-      to: emailData.to,
+      to: finalTo,
       replyTo: emailData.replyTo,
-      subject: emailData.subject,
+      subject: finalSubject,
       html: emailData.html,
       text: emailData.text,
     })

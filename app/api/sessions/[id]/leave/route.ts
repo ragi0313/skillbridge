@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth/getSession'
 import { db } from '@/db'
 import { bookingSessions, learners, mentors } from '@/db/schema'
 import { eq, and, isNull } from 'drizzle-orm'
+import { sessionLogService } from '@/lib/services/SessionLogService'
 
 export async function POST(
   request: NextRequest,
@@ -153,6 +154,35 @@ export async function POST(
           .update(bookingSessions)
           .set(updateData)
           .where(eq(bookingSessions.id, sessionId))
+      }
+
+      // Log the connection event (left)
+      if (leaveResult.wasInSession && !leaveResult.wasAlreadyLeft) {
+        await sessionLogService.logConnection({
+          sessionId,
+          userId,
+          userRole: isLearner ? 'learner' : 'mentor',
+          action: 'left',
+          connectionDurationMs: Math.floor(leaveResult.connectionDurationSeconds * 1000),
+          metadata: {
+            reason,
+            timestamp: now.toISOString()
+          }
+        })
+
+        // Also log as session event
+        await sessionLogService.logEvent({
+          sessionId,
+          eventType: 'user_left',
+          actorType: isLearner ? 'learner' : 'mentor',
+          actorId: userId,
+          description: `${isLearner ? 'Learner' : 'Mentor'} left video call (${reason})`,
+          metadata: {
+            reason,
+            connectionDurationSeconds: leaveResult.connectionDurationSeconds,
+            bothUsersNowLeft: leaveResult.bothUsersNowLeft
+          }
+        })
       }
     })
 

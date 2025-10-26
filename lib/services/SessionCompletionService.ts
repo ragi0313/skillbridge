@@ -2,6 +2,9 @@ import { db } from '@/db'
 import { bookingSessions, learners, mentors, creditTransactions, mentorPayouts, notifications, creditPurchases } from '@/db/schema'
 import { eq } from 'drizzle-orm'
 import { Xendit } from 'xendit-node'
+import { sessionLogService } from './SessionLogService'
+import { validateTransitionOrThrow, TERMINAL_STATES } from './SessionStateValidator'
+import { sessionChatService } from './SessionChatService'
 
 const xendit = new Xendit({ 
   secretKey: process.env.XENDIT_SECRET_KEY! 
@@ -72,9 +75,18 @@ class SessionCompletionService {
         mentor_credits: mentor[0].creditsBalance
       }
 
-      // Check if session is already completed
-      const terminalStatuses = ['completed', 'cancelled', 'both_no_show', 'mentor_no_show', 'learner_no_show', 'technical_issues']
-      if (sessionRecord.status !== null && terminalStatuses.includes(sessionRecord.status)) {
+      // Check if session is already completed (IDEMPOTENCY)
+      if (sessionRecord.status !== null && TERMINAL_STATES.includes(sessionRecord.status as any)) {
+        // Log this duplicate completion attempt
+        await sessionLogService.logEvent({
+          sessionId,
+          eventType: 'admin_action',
+          actorType: completedBy === 'admin' ? 'admin' : 'system',
+          actorId: options.userId,
+          description: `Duplicate completion attempt blocked - session already ${sessionRecord.status}`,
+          metadata: { reason, completedBy, attemptedStatus: reason }
+        })
+
         return {
           success: true,
           status: sessionRecord.status,
@@ -104,8 +116,11 @@ class SessionCompletionService {
       )
 
       // Determine final status and payment logic
-      const { finalStatus, shouldProcessPayment, shouldRefundLearner, refundReason } = 
+      const { finalStatus, shouldProcessPayment, shouldRefundLearner, refundReason } =
         this.determineCompletionOutcome(reason, learnerDuration, mentorDuration)
+
+      // SECURITY: Validate state transition
+      validateTransitionOrThrow(sessionRecord.status, finalStatus)
 
       // Update session status and metadata
       const updateData = {
@@ -119,6 +134,25 @@ class SessionCompletionService {
         .update(bookingSessions)
         .set(updateData)
         .where(eq(bookingSessions.id, sessionId))
+
+      // Log the status change
+      await sessionLogService.logEvent({
+        sessionId,
+        eventType: 'status_changed',
+        actorType: completedBy === 'admin' ? 'admin' : (completedBy === 'user' ? 'learner' : 'system'),
+        actorId: options.userId,
+        oldStatus: sessionRecord.status || 'ongoing',
+        newStatus: finalStatus,
+        description: `Session completed via ${completedBy} - ${reason}`,
+        metadata: {
+          reason,
+          completedBy,
+          learnerDurationMs: learnerDuration,
+          mentorDurationMs: mentorDuration,
+          shouldProcessPayment,
+          shouldRefundLearner
+        }
+      })
 
       let mentorEarnings = 0
       let platformFeePhp = 0
@@ -246,6 +280,21 @@ class SessionCompletionService {
           relatedEntityType: 'session',
           relatedEntityId: sessionId,
         })
+
+        // Log payment processing
+        await sessionLogService.logEvent({
+          sessionId,
+          eventType: 'payment_processed',
+          actorType: 'system',
+          description: `Mentor paid ${mentorEarnings} credits, platform fee ${platformFeeCredits} credits (₱${platformFeePhp})`,
+          metadata: {
+            mentorEarnings,
+            platformFeeCredits,
+            platformFeePhp,
+            xenditPayoutId: platformFeeChargeId,
+            totalAmount: sessionRecord.totalCostCredits
+          }
+        })
       }
 
       // Process refund (unchanged)
@@ -290,6 +339,19 @@ class SessionCompletionService {
           relatedEntityType: 'session',
           relatedEntityId: sessionId,
         })
+
+        // Log refund processing
+        await sessionLogService.logEvent({
+          sessionId,
+          eventType: 'refund_processed',
+          actorType: 'system',
+          description: `Learner refunded ${sessionRecord.escrowCredits} credits - ${refundReason}`,
+          metadata: {
+            refundAmount: sessionRecord.escrowCredits,
+            refundReason,
+            finalStatus
+          }
+        })
       }
 
       // Add completion notifications for both users
@@ -307,6 +369,17 @@ class SessionCompletionService {
       // Insert all notifications
       if (notificationData.length > 0) {
         await tx.insert(notifications).values(notificationData)
+      }
+
+      // Archive chat messages to database (only for successfully completed sessions)
+      // This runs INSIDE the transaction to ensure consistency
+      if (finalStatus === 'completed' && shouldProcessPayment) {
+        try {
+          await sessionChatService.archiveSession(sessionId)
+        } catch (archiveError) {
+          console.error(`[SESSION_COMPLETION] Failed to archive chat for session ${sessionId}:`, archiveError)
+          // Don't fail the transaction - archival is best-effort
+        }
       }
 
       return {

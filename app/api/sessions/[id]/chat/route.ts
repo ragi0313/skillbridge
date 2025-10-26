@@ -4,24 +4,8 @@ import { withRateLimit } from "@/lib/middleware/rate-limit"
 import { db } from "@/db"
 import { users } from "@/db/schema"
 import { eq } from "drizzle-orm"
-
-const sessionMessages: Record<string, any[]> = {}
-
-// Clean up session messages after 2 hours of inactivity
-const sessionCleanupIntervals: Record<string, NodeJS.Timeout> = {}
-
-function scheduleSessionCleanup(sessionId: string) {
-  // Clear existing cleanup timer if it exists
-  if (sessionCleanupIntervals[sessionId]) {
-    clearTimeout(sessionCleanupIntervals[sessionId])
-  }
-
-  // Schedule cleanup after 2 hours of inactivity
-  sessionCleanupIntervals[sessionId] = setTimeout(() => {
-    delete sessionMessages[sessionId]
-    delete sessionCleanupIntervals[sessionId]
-    }, 2 * 60 * 60 * 1000) // 2 hours
-}
+import { triggerPusherEvent, getSessionChannel, PUSHER_EVENTS } from "@/lib/pusher/config"
+import { sessionChatService } from "@/lib/services/SessionChatService"
 
 async function handleGetChatMessages(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -31,12 +15,14 @@ async function handleGetChatMessages(request: NextRequest, { params }: { params:
     }
 
     const { id } = await params
-    const messages = sessionMessages[id] || []
+    const sessionId = parseInt(id)
 
-    // Reset cleanup timer when messages are accessed
-    if (messages.length > 0) {
-      scheduleSessionCleanup(id)
+    if (isNaN(sessionId)) {
+      return NextResponse.json({ error: "Invalid session ID" }, { status: 400 })
     }
+
+    // Use hybrid service (Redis first, DB fallback)
+    const messages = await sessionChatService.getMessages(sessionId)
 
     return NextResponse.json({ messages })
   } catch (error) {
@@ -122,32 +108,41 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ error: "Message sender does not match authenticated user" }, { status: 403 })
     }
 
+    const sessionIdInt = parseInt(sessionId)
+    if (isNaN(sessionIdInt)) {
+      return NextResponse.json({ error: "Invalid session ID" }, { status: 400 })
+    }
+
+    // Store message using hybrid service (Redis first, DB fallback)
+    const storedMessage = await sessionChatService.storeMessage(
+      sessionIdInt,
+      session.id,
+      senderRole || user.role,
+      message || ""
+    )
+
     const newMessage = {
-      id: Date.now().toString(),
-      message: message || "",
-      messageType: messageType || "text",
-      timestamp: Date.now(),
+      ...storedMessage,
       senderName: senderName || `${user.firstName} ${user.lastName}`,
-      senderRole: senderRole || user.role,
-      senderId: expectedSenderId,
-      // Keep attachment data for polling - it's ephemeral anyway (cleared after 2 hours)
+      // Note: Attachments not persisted - they're ephemeral for session only
       attachment: attachment || undefined
     }
 
-    // Store in memory for the session (ephemeral)
-    if (!sessionMessages[sessionId]) {
-      sessionMessages[sessionId] = []
+    console.log(`[SESSION_CHAT] Message stored for session ${sessionId}`)
+
+    // Broadcast message via Pusher for real-time delivery
+    // Using separate session channels to avoid conflicts with regular chat
+    try {
+      await triggerPusherEvent(
+        getSessionChannel(sessionId),
+        PUSHER_EVENTS.SESSION_CHAT_MESSAGE,
+        newMessage
+      )
+      console.log(`[SESSION_CHAT] Message broadcasted via Pusher for session ${sessionId}`)
+    } catch (error) {
+      console.error(`[SESSION_CHAT] Failed to broadcast message via Pusher:`, error)
+      // Continue - client can still poll as fallback
     }
-    sessionMessages[sessionId].push(newMessage)
-
-    // Schedule cleanup timer for this session
-    scheduleSessionCleanup(sessionId)
-
-    console.log(`[SESSION_CHAT] Message stored successfully for session ${sessionId}`)
-
-    // NOTE: Not using Pusher for session chat to avoid conflicts with global ChatContext
-    // Video call chat uses polling mode to fetch messages every 3 seconds
-    // This keeps session chat separate from the regular messaging system
 
     return NextResponse.json({
       message: newMessage,

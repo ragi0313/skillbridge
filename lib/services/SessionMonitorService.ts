@@ -3,6 +3,7 @@ import { bookingSessions, learners, mentors, creditTransactions, mentorPayouts, 
 import { eq, and, or, lt, isNull } from "drizzle-orm"
 import { broadcastSessionUpdate, broadcastForceDisconnect, broadcastBookingUpdate } from "@/app/api/sse/session-updates/route"
 import { sessionCompletionService } from './SessionCompletionService'
+import { sessionLogService } from './SessionLogService'
 
 export class SessionMonitorService {
   private static instance: SessionMonitorService
@@ -189,6 +190,20 @@ export class SessionMonitorService {
             })
             .where(eq(bookingSessions.id, booking.id))
 
+          // Log the expiration
+          await sessionLogService.logEvent({
+            sessionId: booking.id,
+            eventType: 'status_changed',
+            actorType: 'system',
+            oldStatus: 'pending',
+            newStatus: 'mentor_no_response',
+            description: `Booking expired - mentor did not respond within 24 hours`,
+            metadata: {
+              expiredReason: new Date() > booking.expiresAt ? '24-hour timeout' : 'session start time passed',
+              refundAmount: booking.escrowCredits
+            }
+          })
+
           // Refund learner
           if (booking.learner && booking.escrowCredits > 0) {
             await tx
@@ -279,7 +294,7 @@ export class SessionMonitorService {
     try {
       const now = new Date()
       const graceTime = new Date(now.getTime() - this.CONFIG.GRACE_PERIOD_MS)
-      
+
       const sessions = await db
         .select({
           id: bookingSessions.id,
@@ -316,16 +331,27 @@ export class SessionMonitorService {
         )
 
       for (const session of sessions) {
-        const learnerJoined = session.learnerJoinedAt !== null
-        const mentorJoined = session.mentorJoinedAt !== null
+        // Use connection logs to determine actual participation
+        // This handles rapid join/leave cycles correctly
+        const learnerTotalTime = session.learner
+          ? await sessionLogService.getTotalConnectionTime(session.id, session.learner.userId)
+          : 0
+        const mentorTotalTime = session.mentor
+          ? await sessionLogService.getTotalConnectionTime(session.id, session.mentor.userId)
+          : 0
+
+        // Consider someone as "joined" if they spent at least 2 minutes in the call
+        // This prevents gaming the system by joining and immediately leaving
+        const learnerActuallyJoined = learnerTotalTime >= this.CONFIG.MIN_CONNECTION_TIME_MS
+        const mentorActuallyJoined = mentorTotalTime >= this.CONFIG.MIN_CONNECTION_TIME_MS
 
         let noShowType: 'both_no_show' | 'mentor_no_show' | 'learner_no_show' | null = null
 
-        if (!learnerJoined && !mentorJoined) {
+        if (!learnerActuallyJoined && !mentorActuallyJoined) {
           noShowType = 'both_no_show'
-        } else if (learnerJoined && !mentorJoined) {
+        } else if (learnerActuallyJoined && !mentorActuallyJoined) {
           noShowType = 'mentor_no_show'
-        } else if (!learnerJoined && mentorJoined) {
+        } else if (!learnerActuallyJoined && mentorActuallyJoined) {
           noShowType = 'learner_no_show'
         }
 
@@ -333,6 +359,7 @@ export class SessionMonitorService {
           await this.processNoShow(session, noShowType)
           this.stats.noShowsDetected++
         } else {
+          // Both users participated sufficiently - mark as checked
           await db
             .update(bookingSessions)
             .set({ noShowCheckedAt: now })
@@ -381,6 +408,20 @@ export class SessionMonitorService {
             agoraCallEndedAt: now,
           })
           .where(eq(bookingSessions.id, session.id))
+
+        // Log the no-show detection
+        await sessionLogService.logEvent({
+          sessionId: session.id,
+          eventType: 'no_show_detected',
+          actorType: 'system',
+          oldStatus: 'upcoming',
+          newStatus: noShowType,
+          description: `No-show detected: ${noShowType.replace('_', ' ')}`,
+          metadata: {
+            noShowType,
+            gracePeriodMinutes: this.CONFIG.GRACE_PERIOD_MS / 60000
+          }
+        })
 
         // Handle financial processing based on no-show type
         if (noShowType === 'both_no_show' || noShowType === 'mentor_no_show') {

@@ -30,14 +30,16 @@ function applySecurityHeaders(response: NextResponse, pathname: string): NextRes
   }
 
   // Content Security Policy
+  // NOTE: 'unsafe-inline' for scripts should be replaced with nonce-based CSP in the future
+  // This requires generating unique nonces per request and passing them to inline scripts
   const cspDirectives = [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com",
+    "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com https://*.pusher.com",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com data:",
     "img-src 'self' data: https: blob:",
     "media-src 'self' https: blob:",
-    "connect-src 'self' https://api.agora.io https://*.agora.io https://api.xendit.co wss:",
+    "connect-src 'self' https://api.agora.io https://*.agora.io https://api.xendit.co https://*.pusher.com wss: ws:",
     "frame-src 'self' https://checkout.xendit.co",
     "object-src 'none'",
     "base-uri 'self'",

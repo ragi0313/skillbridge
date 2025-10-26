@@ -54,8 +54,8 @@ async function handleForgotPassword(request: NextRequest) {
     // Generate 6-digit verification code
     const resetCode = Math.floor(100000 + Math.random() * 900000).toString()
 
-    // Set expiration to 15 minutes from now
-    const expiresAt = new Date(Date.now() + 15 * 60 * 1000)
+    // Set expiration to 5 minutes from now
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000)
 
     // Save reset token to database
     await db.insert(passwordResetTokens).values({

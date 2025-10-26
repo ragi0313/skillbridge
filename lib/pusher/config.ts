@@ -7,9 +7,9 @@ if (typeof window === 'undefined' && typeof process !== 'undefined' && process.e
   // Only initialize if all required environment variables are present
   if (process.env.PUSHER_APP_ID && process.env.PUSHER_KEY && process.env.PUSHER_SECRET && process.env.PUSHER_CLUSTER) {
     try {
-      // Use eval to prevent bundlers from trying to resolve this at compile time
-      const requireFunc = eval('require')
-      const Pusher = requireFunc('pusher')
+      // Conditional require - safe because we already check for server-side execution
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const Pusher = require('pusher')
       pusherServer = new Pusher({
         appId: process.env.PUSHER_APP_ID,
         key: process.env.PUSHER_KEY,
@@ -88,6 +88,10 @@ export const getConversationChannel = (conversationId: number) =>
 export const getUserPresenceChannel = (userId: number) =>
   `presence-user-${userId}`
 
+// Channel naming for session chat (ephemeral, no database)
+export const getSessionChannel = (sessionId: string | number) =>
+  `session-${sessionId}`
+
 // Chat event types
 export const PUSHER_EVENTS = {
   NEW_MESSAGE: 'new-message',
@@ -98,6 +102,8 @@ export const PUSHER_EVENTS = {
   CONVERSATION_READ: 'conversation-read',
   USER_ONLINE: 'user-online',
   USER_OFFLINE: 'user-offline',
+  // Session chat events (ephemeral - no database)
+  SESSION_CHAT_MESSAGE: 'session-chat-message',
 } as const
 
 export type PusherEvent = typeof PUSHER_EVENTS[keyof typeof PUSHER_EVENTS]

@@ -303,8 +303,8 @@ export function FilterBar({
                   <div className="space-y-6">
                     <div className="px-3">
                       <Slider
-                        value={[experienceRange[1]]}
-                        onValueChange={(value) => setExperienceRange([0, value[0]])}
+                        value={[experienceRange[0]]}
+                        onValueChange={(value) => setExperienceRange([value[0], 20])}
                         max={20}
                         min={0}
                         step={1}
@@ -312,7 +312,7 @@ export function FilterBar({
                       />
                       <div className="flex justify-between text-sm text-gray-600 mt-3 font-medium">
                         <span>0 years</span>
-                        <span>{experienceRange[1]}+ years minimum</span>
+                        <span>{experienceRange[0]}+ years minimum</span>
                       </div>
                     </div>
                   </div>
@@ -326,8 +326,8 @@ export function FilterBar({
                   <div className="space-y-6">
                     <div className="px-3">
                       <Slider
-                        value={[ratingRange[1]]}
-                        onValueChange={(value) => setRatingRange([0, value[0]])}
+                        value={[ratingRange[0]]}
+                        onValueChange={(value) => setRatingRange([value[0], 5])}
                         max={5}
                         min={0}
                         step={0.1}
@@ -335,7 +335,7 @@ export function FilterBar({
                       />
                       <div className="flex justify-between text-sm text-gray-600 mt-3 font-medium">
                         <span>0.0⭐</span>
-                        <span>{ratingRange[1].toFixed(1)}⭐+ minimum</span>
+                        <span>{ratingRange[0].toFixed(1)}⭐+ minimum</span>
                       </div>
                     </div>
                   </div>
@@ -385,23 +385,23 @@ export function FilterBar({
             )}
 
             {/* Experience Range Filter */}
-            {experienceRange[1] > 0 && (
+            {experienceRange[0] > 0 && (
               <Badge className="bg-orange-100 text-orange-700 border-orange-200 px-3 py-1 rounded-lg text-xs font-medium">
-                Experience: {experienceRange[1]}+ years
+                Experience: {experienceRange[0]}+ years
                 <X
                   className="ml-2 h-3 w-3 cursor-pointer hover:text-orange-900 transition-colors"
-                  onClick={() => setExperienceRange([0, 0])}
+                  onClick={() => setExperienceRange([0, 20])}
                 />
               </Badge>
             )}
 
             {/* Rating Range Filter */}
-            {ratingRange[1] > 0 && (
+            {ratingRange[0] > 0 && (
               <Badge className="bg-yellow-100 text-yellow-700 border-yellow-200 px-3 py-1 rounded-lg text-xs font-medium">
-                Rating: {ratingRange[1].toFixed(1)}+ stars
+                Rating: {ratingRange[0].toFixed(1)}+ stars
                 <X
                   className="ml-2 h-3 w-3 cursor-pointer hover:text-yellow-900 transition-colors"
-                  onClick={() => setRatingRange([0, 0])}
+                  onClick={() => setRatingRange([0, 5])}
                 />
               </Badge>
             )}

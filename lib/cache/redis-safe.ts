@@ -73,8 +73,9 @@ class ServerRedisStore implements SafeCacheStore {
 
   private initializeRedis() {
     try {
-      // Dynamic require to avoid any bundling issues
-      const Redis = eval('require')('ioredis')
+      // Conditional require - safe because we already check isNodeRuntime
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const Redis = require('ioredis')
       const redisUrl = process.env.REDIS_URL || process.env.KV_URL
 
       if (!redisUrl) {
@@ -212,7 +213,9 @@ export function getRedisConnection(): any {
   }
 
   try {
-    const Redis = eval('require')('ioredis')
+    // Conditional require - safe because we already check isNodeRuntime
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const Redis = require('ioredis')
     const redisUrl = process.env.REDIS_URL || process.env.KV_URL
 
     if (!redisUrl) {

@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,6 +18,31 @@ const Login = () => {
   const [error, setError] = useState("")
   const router = useRouter()
   const { showPassword, togglePassword } = usePasswordVisibility()
+
+  // Check if user is already logged in (prevent back button issues)
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        const response = await fetch('/api/auth/check-session', {
+          method: 'GET',
+          credentials: 'include',
+        })
+
+        if (response.ok) {
+          const data = await response.json()
+          if (data.authenticated && data.role) {
+            // User is already logged in, redirect to their dashboard
+            const destination = data.role === 'admin' ? '/admin/dashboard' : `/${data.role}`
+            router.replace(destination)
+          }
+        }
+      } catch (error) {
+        // Not logged in or error checking - continue showing login page
+      }
+    }
+
+    checkAuth()
+  }, [router])
 
   const isFormValid = formData.email.trim() && formData.password.trim()
 
@@ -121,19 +146,19 @@ const Login = () => {
 
       // Small delay for better UX
       setTimeout(() => {
-        // Redirect based on role
+        // Use router.replace instead of router.push to prevent back button issues
         switch (data.role) {
           case "learner":
-            router.push("/learner")
+            router.replace("/learner")
             break
           case "mentor":
-            router.push("/mentor")
+            router.replace("/mentor")
             break
           case "admin":
-            router.push("/admin/dashboard")
+            router.replace("/admin/dashboard")
             break
           default:
-            router.push("/")
+            router.replace("/")
         }
       }, 500)
     } catch (err: any) {

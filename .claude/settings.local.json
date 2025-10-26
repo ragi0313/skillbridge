@@ -3,7 +3,9 @@
     "allow": [
       "Bash(npm run build)",
       "Bash(cat:*)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(npm install:*)",
+      "mcp__ide__getDiagnostics"
     ],
     "deny": [],
     "ask": []

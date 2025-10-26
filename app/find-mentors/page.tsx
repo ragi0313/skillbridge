@@ -218,11 +218,9 @@ export default function FindMentorsPage() {
     selectedCountries.length > 0 ||
     selectedCategories.length > 0 ||
     experienceRange[0] > 0 ||
-    experienceRange[1] < 20 ||
     rateRange[0] > 0 ||
     rateRange[1] < 1000 ||
-    ratingRange[0] > 0 ||
-    ratingRange[1] < 5
+    ratingRange[0] > 0
 
   const handleSkillToggle = (skill: string) => {
     setSelectedSkills(

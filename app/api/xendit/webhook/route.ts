@@ -68,35 +68,70 @@ export async function POST(req: Request) {
   if (event.event === "invoice.paid") {
     const invoice = event.data;
     const metadata = invoice.metadata;
-    const learnerId = metadata?.userId;
-    const credits = Number(metadata?.credits);
 
-    if (!learnerId || !credits) {
-      console.error("Missing metadata in invoice:", metadata);
-      return NextResponse.json({ received: true });
+    // SECURITY: Strict input validation
+    const learnerIdStr = metadata?.userId;
+    const creditsStr = metadata?.credits;
+
+    // Validate learnerId is a valid integer
+    const learnerId = parseInt(learnerIdStr);
+    if (!learnerIdStr || isNaN(learnerId) || learnerId <= 0) {
+      console.error("[SECURITY] Invalid learnerId in webhook:", { metadata, learnerId: learnerIdStr });
+      return NextResponse.json({ error: "Invalid user ID" }, { status: 400 });
+    }
+
+    // Validate credits is a valid positive number
+    const credits = Number(creditsStr);
+    if (!creditsStr || isNaN(credits) || credits <= 0 || !Number.isInteger(credits)) {
+      console.error("[SECURITY] Invalid credits amount in webhook:", { metadata, credits: creditsStr });
+      return NextResponse.json({ error: "Invalid credits amount" }, { status: 400 });
+    }
+
+    // Validate invoice ID exists for idempotency check
+    if (!invoice.id) {
+      console.error("[SECURITY] Missing invoice ID:", { invoice });
+      return NextResponse.json({ error: "Missing invoice ID" }, { status: 400 });
     }
 
     try {
       await db.transaction(async (tx) => {
-        // Calculate financial allocation in PHP
-        const totalAmountPhp = invoice.amount || invoice.paidAmount || invoice.totalAmount;
-        const platformFeePhp = totalAmountPhp * 0.2; // 20% platform fee
-        const mentorAvailablePhp = totalAmountPhp * 0.8; // 80% for mentor payouts
-        
-        // Get current learner balance for transaction tracking
-        const [currentLearner] = await tx
-          .select({ creditsBalance: learners.creditsBalance })
-          .from(learners)
-          .where(eq(learners.userId, parseInt(learnerId)))
+        // SECURITY: Idempotency check - prevent duplicate processing
+        const existingPurchase = await tx
+          .select()
+          .from(creditPurchases)
+          .where(eq(creditPurchases.xenditInvoiceId, invoice.id))
           .limit(1);
-        
+
+        if (existingPurchase.length > 0) {
+          console.log(`[WEBHOOK] Invoice ${invoice.id} already processed - idempotent response`);
+          return; // Exit transaction without error, return success
+        }
+
+        // SECURITY: Verify learner exists before processing payment
+        const [currentLearner] = await tx
+          .select({ userId: learners.userId, creditsBalance: learners.creditsBalance })
+          .from(learners)
+          .where(eq(learners.userId, learnerId))
+          .limit(1);
+
         if (!currentLearner) {
+          console.error(`[SECURITY] Learner not found for userId: ${learnerId}`);
           throw new Error(`Learner not found for userId: ${learnerId}`);
         }
+        // Calculate financial allocation in PHP
+        const totalAmountPhp = invoice.amount || invoice.paidAmount || invoice.totalAmount;
+
+        // Validate amount is positive
+        if (!totalAmountPhp || totalAmountPhp <= 0) {
+          throw new Error(`Invalid payment amount: ${totalAmountPhp}`);
+        }
+
+        const platformFeePhp = totalAmountPhp * 0.2; // 20% platform fee
+        const mentorAvailablePhp = totalAmountPhp * 0.8; // 80% for mentor payouts
 
         // 1. Record the credit purchase with financial tracking
         await tx.insert(creditPurchases).values({
-          userId: parseInt(learnerId),
+          userId: learnerId,
           amountCredits: credits,
           amountPaidUsd: totalAmountPhp.toString(), // Using PHP amount in USD field for now
           localAmount: totalAmountPhp.toString(),
@@ -118,11 +153,11 @@ export async function POST(req: Request) {
           .set({
             creditsBalance: sql`${learners.creditsBalance} + ${credits}`,
           })
-          .where(eq(learners.userId, parseInt(learnerId)));
+          .where(eq(learners.userId, learnerId));
 
         // 3. Record credit transaction for learner
         await tx.insert(creditTransactions).values({
-          userId: parseInt(learnerId),
+          userId: learnerId,
           type: 'purchase',
           direction: 'credit',
           amount: credits,
@@ -144,7 +179,7 @@ export async function POST(req: Request) {
 
         // Log the credit purchase
         await logUserAction({
-          userId: parseInt(learnerId),
+          userId: learnerId,
           action: AUDIT_ACTIONS.CREDITS_PURCHASE,
           entityType: ENTITY_TYPES.CREDITS,
           description: `User ${learnerId} purchased ${credits} credits for ${totalAmountPhp} ${invoice.currency || 'PHP'}`,

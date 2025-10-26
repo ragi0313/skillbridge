@@ -10,7 +10,7 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   // Webpack configuration to handle problematic dependencies
-  webpack: (config, { isServer }) => {
+  webpack: (config, { isServer, dev }) => {
     if (isServer) {
       // Ignore CSS file loading on server side
       config.resolve.fallback = {
@@ -18,7 +18,26 @@ const nextConfig: NextConfig = {
         fs: false,
       };
     }
+
+    // Remove console logs in production
+    if (!dev) {
+      config.optimization = {
+        ...config.optimization,
+        minimize: true,
+      };
+
+      // Use terser to remove console logs in production
+      config.optimization.minimizer = config.optimization.minimizer || [];
+    }
+
     return config;
+  },
+
+  // Compiler options to remove console logs in production
+  compiler: {
+    removeConsole: process.env.NODE_ENV === 'production' ? {
+      exclude: ['error', 'warn'], // Keep error and warn logs
+    } : false,
   },
   // Skip error page generation during build
   generateBuildId: async () => {

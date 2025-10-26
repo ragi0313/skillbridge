@@ -46,11 +46,14 @@ export function ClientProviders({ children }: ClientProvidersProps) {
           const userData = await response.json()
           setUser(userData.user)
         } else {
-          // If not authenticated, clear user
+          // If not authenticated, clear user (401 is expected for non-logged in users)
           setUser(null)
         }
       } catch (error) {
-        console.error('Failed to get current user:', error)
+        // Only log errors in development (network errors, not 401 auth checks)
+        if (process.env.NODE_ENV === 'development') {
+          console.error('Failed to get current user:', error)
+        }
         setUser(null)
       } finally {
         // Only set initial loading to false on first load

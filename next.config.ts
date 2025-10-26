@@ -9,6 +9,17 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  // Webpack configuration to handle problematic dependencies
+  webpack: (config, { isServer }) => {
+    if (isServer) {
+      // Ignore CSS file loading on server side
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        fs: false,
+      };
+    }
+    return config;
+  },
   // Skip error page generation during build
   generateBuildId: async () => {
     return 'build-' + Date.now()
@@ -33,7 +44,7 @@ const nextConfig: NextConfig = {
   experimental: {
     optimizePackageImports: ['agora-rtc-sdk-ng']
   },
-  serverExternalPackages: ['jsonwebtoken', 'ioredis', 'bullmq'],
+  serverExternalPackages: ['jsonwebtoken', 'ioredis', 'bullmq', 'jsdom', 'dompurify', 'isomorphic-dompurify'],
 
   // Security: Configure request body size limits
   async headers() {

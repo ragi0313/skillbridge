@@ -70,8 +70,8 @@ export async function shutdownServer() {
   }
 }
 
-// Handle process termination
-if (typeof process !== 'undefined') {
+// Handle process termination - only in runtime, not during build
+if (typeof process !== 'undefined' && process.env.NODE_ENV && typeof window === 'undefined') {
   process.on('SIGINT', shutdownServer)
   process.on('SIGTERM', shutdownServer)
 }

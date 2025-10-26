@@ -158,79 +158,97 @@ class MetricsCollector {
   }
 }
 
-// Singleton instance
-export const metrics = new MetricsCollector()
+// Singleton instance - lazy initialization to avoid build-time side effects
+let metricsInstance: MetricsCollector | null = null
+
+function getMetrics(): MetricsCollector {
+  if (!metricsInstance) {
+    metricsInstance = new MetricsCollector()
+  }
+  return metricsInstance
+}
+
+// Export metrics instance for direct access when needed
+export const metrics = {
+  getMetric: (name: string, date?: string, tags?: Record<string, string | number>) => getMetrics().getMetric(name, date, tags),
+  getAllMetrics: (date?: string) => getMetrics().getAllMetrics(date),
+  increment: (name: string, value: number = 1, tags?: Record<string, string | number>) => getMetrics().increment(name, value, tags),
+  record: (name: string, value: number, tags?: Record<string, string | number>) => getMetrics().record(name, value, tags),
+  stop: () => {
+    if (metricsInstance) metricsInstance.stop()
+  }
+}
 
 // Convenience functions for common metrics
 export const Metrics = {
   // Direct access to core metrics methods
   increment: (name: string, value: number = 1, tags?: Record<string, string | number>) => {
-    metrics.increment(name, value, tags)
+    getMetrics().increment(name, value, tags)
   },
 
   record: (name: string, value: number, tags?: Record<string, string | number>) => {
-    metrics.record(name, value, tags)
+    getMetrics().record(name, value, tags)
   },
   // API metrics
   apiRequest: (method: string, path: string, statusCode: number, duration: number) => {
-    metrics.record('api.request.duration', duration, { method, path, status: statusCode })
-    metrics.increment('api.request.count', 1, { method, path, status: statusCode })
+    getMetrics().record('api.request.duration', duration, { method, path, status: statusCode })
+    getMetrics().increment('api.request.count', 1, { method, path, status: statusCode })
   },
 
   // Chat metrics
   messagesSent: (conversationId: number, messageType: string = 'text') => {
-    metrics.increment('chat.messages.sent', 1, { type: messageType })
-    metrics.increment('chat.conversation.activity', 1, { conversationId: conversationId.toString() })
+    getMetrics().increment('chat.messages.sent', 1, { type: messageType })
+    getMetrics().increment('chat.conversation.activity', 1, { conversationId: conversationId.toString() })
   },
 
   messagesReceived: (conversationId: number, messageType: string = 'text') => {
-    metrics.increment('chat.messages.received', 1, { type: messageType })
+    getMetrics().increment('chat.messages.received', 1, { type: messageType })
   },
 
   // File upload metrics
   fileUploaded: (fileSize: number, mimeType: string, success: boolean) => {
-    metrics.record('files.upload.size', fileSize, { type: mimeType, success: success.toString() })
-    metrics.increment('files.upload.count', 1, { type: mimeType, success: success.toString() })
+    getMetrics().record('files.upload.size', fileSize, { type: mimeType, success: success.toString() })
+    getMetrics().increment('files.upload.count', 1, { type: mimeType, success: success.toString() })
   },
 
   // Authentication metrics
   userLogin: (success: boolean, provider: string = 'email') => {
-    metrics.increment('auth.login', 1, { success: success.toString(), provider })
+    getMetrics().increment('auth.login', 1, { success: success.toString(), provider })
   },
 
   userRegistration: (success: boolean, role: string) => {
-    metrics.increment('auth.registration', 1, { success: success.toString(), role })
+    getMetrics().increment('auth.registration', 1, { success: success.toString(), role })
   },
 
   // Database metrics
   dbQuery: (table: string, operation: string, duration: number, success: boolean) => {
-    metrics.record('db.query.duration', duration, { table, operation, success: success.toString() })
-    metrics.increment('db.query.count', 1, { table, operation, success: success.toString() })
+    getMetrics().record('db.query.duration', duration, { table, operation, success: success.toString() })
+    getMetrics().increment('db.query.count', 1, { table, operation, success: success.toString() })
   },
 
   // Rate limiting metrics
   rateLimitHit: (endpoint: string, userId?: string) => {
-    metrics.increment('rate_limit.hits', 1, { endpoint, ...(userId && { userId }) })
+    getMetrics().increment('rate_limit.hits', 1, { endpoint, ...(userId && { userId }) })
   },
 
   // Pusher/WebSocket metrics
   pusherConnection: (event: 'connected' | 'disconnected' | 'error', userId?: string) => {
-    metrics.increment('pusher.connection', 1, { event, ...(userId && { userId }) })
+    getMetrics().increment('pusher.connection', 1, { event, ...(userId && { userId }) })
   },
 
   pusherMessage: (channel: string, event: string, success: boolean) => {
-    metrics.increment('pusher.message', 1, { channel, event, success: success.toString() })
+    getMetrics().increment('pusher.message', 1, { channel, event, success: success.toString() })
   },
 
   // Session metrics
   sessionCreated: (duration: number, type: string, success: boolean) => {
-    metrics.record('sessions.duration', duration, { type, success: success.toString() })
-    metrics.increment('sessions.created', 1, { type, success: success.toString() })
+    getMetrics().record('sessions.duration', duration, { type, success: success.toString() })
+    getMetrics().increment('sessions.created', 1, { type, success: success.toString() })
   },
 
   // Error metrics
   error: (type: string, endpoint?: string, userId?: string) => {
-    metrics.increment('errors.count', 1, {
+    getMetrics().increment('errors.count', 1, {
       type,
       ...(endpoint && { endpoint }),
       ...(userId && { userId })
@@ -239,8 +257,8 @@ export const Metrics = {
 
   // Performance metrics
   performanceTimer: (operation: string, duration: number, success: boolean = true) => {
-    metrics.record('performance.operation.duration', duration, { operation, success: success.toString() })
-    metrics.increment('performance.operation.count', 1, { operation, success: success.toString() })
+    getMetrics().record('performance.operation.duration', duration, { operation, success: success.toString() })
+    getMetrics().increment('performance.operation.count', 1, { operation, success: success.toString() })
   }
 }
 
@@ -266,6 +284,12 @@ export function withMetrics<T extends any[], R>(
   }
 }
 
-// Graceful shutdown
-process.on('SIGINT', () => metrics.stop())
-process.on('SIGTERM', () => metrics.stop())
+// Graceful shutdown - only register handlers if in server environment
+if (typeof process !== 'undefined' && process.env.NODE_ENV) {
+  process.on('SIGINT', () => {
+    if (metricsInstance) metricsInstance.stop()
+  })
+  process.on('SIGTERM', () => {
+    if (metricsInstance) metricsInstance.stop()
+  })
+}

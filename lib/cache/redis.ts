@@ -226,21 +226,26 @@ function initializeRedis(): CacheStore {
 // Singleton cache instance
 let cacheInstance: CacheStore | null = null
 
+// Cleanup interval reference
+let cleanupInterval: NodeJS.Timeout | null = null
+
+function startMemoryCleanup() {
+  if (!isProduction && !cleanupInterval) {
+    cleanupInterval = setInterval(() => {
+      const now = Date.now()
+      for (const [key, item] of memoryStore.entries()) {
+        if (now > item.expiry) {
+          memoryStore.delete(key)
+        }
+      }
+    }, 60000) // Clean every minute
+  }
+}
+
 export function getCache(): CacheStore {
   if (!cacheInstance) {
     cacheInstance = createCacheStore()
+    startMemoryCleanup()
   }
   return cacheInstance
-}
-
-// Cleanup memory store periodically
-if (!isProduction) {
-  setInterval(() => {
-    const now = Date.now()
-    for (const [key, item] of memoryStore.entries()) {
-      if (now > item.expiry) {
-        memoryStore.delete(key)
-      }
-    }
-  }, 60000) // Clean every minute
 }

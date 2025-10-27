@@ -69,19 +69,22 @@ export const useConversations = ({ userId, onError }: UseConversationsOptions = 
       }
 
       const data = await response.json()
+      // API now returns empty array on errors instead of throwing
+      // So we can safely set conversations without showing error toast
       setConversations(data.conversations || [])
       setLastFetch(Date.now())
     } catch (error) {
       console.error('Error fetching conversations:', error)
-      // Only show error if it's a network error or server error, not auth issues
-      if (error instanceof TypeError || (error instanceof Error && error.message.includes('fetch'))) {
+      // Only show error for actual network failures, not API errors
+      if (error instanceof TypeError) {
         // Network error - don't show toast to avoid spam
         onError?.('Network error')
       } else {
-        // Server error
+        // Other errors - log but don't show toast since API handles gracefully
         onError?.('Failed to load conversations')
-        toast.error('Failed to load conversations')
       }
+      // Set empty array on error
+      setConversations([])
     } finally {
       setLoading(false)
     }

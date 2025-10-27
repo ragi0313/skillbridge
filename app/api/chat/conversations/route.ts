@@ -59,20 +59,24 @@ const rateLimitedPOST = withRateLimit('api', async (request: NextRequest) => {
 
 // Apply rate limiting to conversation fetching
 const rateLimitedGET = withRateLimit('api', async (request: NextRequest) => {
+  let user = null
   try {
-    const user = await getSession()
+    user = await getSession()
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    // Only mentors and learners should have conversations
+    if (user.role !== 'mentor' && user.role !== 'learner') {
+      return NextResponse.json({ conversations: [] })
     }
 
     const conversations = await ChatService.getUserConversations(user.id)
     return NextResponse.json({ conversations })
   } catch (error) {
-    console.error('Error fetching conversations:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch conversations' },
-      { status: 500 }
-    )
+    console.error('Error fetching conversations for user:', user?.id, 'role:', user?.role, error)
+    // Return empty array instead of error to prevent UI toast spam
+    return NextResponse.json({ conversations: [] })
   }
 })
 

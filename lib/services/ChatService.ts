@@ -197,24 +197,25 @@ export class ChatService {
   }
 
   static async getUserConversations(userId: number): Promise<ConversationWithParticipants[]> {
-    // Get ALL user's conversations (including soft-deleted ones)
-    const mentorConversations = await db.select()
-      .from(conversations)
-      .innerJoin(mentors, eq(conversations.mentorId, mentors.id))
-      .where(eq(mentors.userId, userId))
+    try {
+      // Get ALL user's conversations (including soft-deleted ones)
+      const mentorConversations = await db.select()
+        .from(conversations)
+        .innerJoin(mentors, eq(conversations.mentorId, mentors.id))
+        .where(eq(mentors.userId, userId))
 
-    const learnerConversations = await db.select()
-      .from(conversations)
-      .innerJoin(learners, eq(conversations.learnerId, learners.id))
-      .where(eq(learners.userId, userId))
+      const learnerConversations = await db.select()
+        .from(conversations)
+        .innerJoin(learners, eq(conversations.learnerId, learners.id))
+        .where(eq(learners.userId, userId))
 
-    const allConversationIds = [
-      ...mentorConversations.map(c => c.conversations.id),
-      ...learnerConversations.map(c => c.conversations.id)
-    ]
+      const allConversationIds = [
+        ...mentorConversations.map(c => c.conversations.id),
+        ...learnerConversations.map(c => c.conversations.id)
+      ]
 
-    const result: ConversationWithParticipants[] = []
-    for (const conversationId of allConversationIds) {
+      const result: ConversationWithParticipants[] = []
+      for (const conversationId of allConversationIds) {
       try {
         // Check if user deleted this conversation and if there are any messages after deletion
         const conversationDeletion = await db.select()
@@ -288,14 +289,20 @@ export class ChatService {
         result.push(conv)
       } catch (error) {
         console.error('Error fetching conversation:', conversationId, error)
+        // Continue with next conversation instead of failing completely
       }
     }
 
-    return result.sort((a, b) => {
-      const aTime = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0
-      const bTime = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0
-      return bTime - aTime
-    })
+      return result.sort((a, b) => {
+        const aTime = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0
+        const bTime = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0
+        return bTime - aTime
+      })
+    } catch (error) {
+      console.error('Error in getUserConversations for userId:', userId, error)
+      // Return empty array instead of throwing to prevent UI errors
+      return []
+    }
   }
 
   static async getConversationMessages(

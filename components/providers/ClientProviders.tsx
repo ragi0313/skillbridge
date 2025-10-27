@@ -73,10 +73,19 @@ export function ClientProviders({ children }: ClientProvidersProps) {
     )
   }
 
-  return (
-    <ChatProvider user={user}>
-      {children}
-      {user && !shouldHideMiniChat && <MiniChatBar user={user} />}
-    </ChatProvider>
-  )
+  // Only wrap with ChatProvider for mentors and learners, not admins
+  // Admins don't have conversations feature
+  const shouldUseChatProvider = user && user.role !== 'admin'
+
+  if (shouldUseChatProvider) {
+    return (
+      <ChatProvider user={user}>
+        {children}
+        {!shouldHideMiniChat && <MiniChatBar user={user} />}
+      </ChatProvider>
+    )
+  }
+
+  // For admins or non-authenticated users, don't use ChatProvider
+  return <>{children}</>
 }

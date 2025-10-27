@@ -1,5 +1,4 @@
 import { toast as sonnerToast } from "sonner"
-import { CheckCircle, AlertCircle, Info, AlertTriangle, X } from "lucide-react"
 
 interface ToastOptions {
   duration?: number
@@ -29,7 +28,6 @@ class ToastManager {
       duration: options?.duration || this.defaultDuration,
       position: options?.position,
       dismissible: options?.dismissible ?? true,
-      icon: CheckCircle,
       action: options?.action,
       className: "bg-green-50 border-green-200 text-green-800",
     })
@@ -40,7 +38,6 @@ class ToastManager {
       duration: options?.duration || 6000, // Longer for errors
       position: options?.position,
       dismissible: options?.dismissible ?? true,
-      icon: AlertCircle,
       action: options?.action,
       className: "bg-red-50 border-red-200 text-red-800",
     })
@@ -51,7 +48,6 @@ class ToastManager {
       duration: options?.duration || this.defaultDuration,
       position: options?.position,
       dismissible: options?.dismissible ?? true,
-      icon: AlertTriangle,
       action: options?.action,
       className: "bg-yellow-50 border-yellow-200 text-yellow-800",
     })
@@ -62,7 +58,6 @@ class ToastManager {
       duration: options?.duration || this.defaultDuration,
       position: options?.position,
       dismissible: options?.dismissible ?? true,
-      icon: Info,
       action: options?.action,
       className: "bg-blue-50 border-blue-200 text-blue-800",
     })

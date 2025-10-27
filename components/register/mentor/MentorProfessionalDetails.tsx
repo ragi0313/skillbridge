@@ -124,11 +124,17 @@ export default function MentorProfessionalDetails({ formData, setFormData, nextS
             id="professionalTitle"
             placeholder="e.g., Digital Marketing Specialist, UI/UX Designer, Full-Stack Web Developer"
             value={formData.professionalTitle}
-            onChange={(e) => setFormData({ ...formData, professionalTitle: e.target.value })}
+            onChange={(e) => {
+              // Allow letters, numbers, spaces, slashes, hyphens, commas, and parentheses
+              // Disallow special characters like @#$%^&*
+              const value = e.target.value.replace(/[^a-zA-Z0-9\s/\-,()]/g, '')
+              setFormData({ ...formData, professionalTitle: value })
+            }}
             className="h-12 text-base"
             required
+            maxLength={100}
           />
-          <p className="text-sm text-gray-500">This will be displayed as your headline to learners</p>
+          <p className="text-sm text-gray-500">This will be displayed as your headline to learners (max 100 characters)</p>
         </CardContent>
       </Card>
 

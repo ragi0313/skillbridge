@@ -55,9 +55,15 @@ export default function MentorSkillsRates({ formData, setFormData, nextStep, pre
                 id="skillName"
                 placeholder="e.g., JavaScript, React, UI/UX Design"
                 value={newSkill}
-                onChange={(e) => setNewSkill(e.target.value)}
+                onChange={(e) => {
+                  // Allow letters, spaces, slashes, hyphens, plus signs, dots, parentheses
+                  // Disallow pure numbers and special characters like @#$%^&*
+                  const value = e.target.value.replace(/[^a-zA-Z0-9\s/\-+.()]/g, '')
+                  setNewSkill(value)
+                }}
                 className="h-12 text-base bg-white"
               />
+              <p className="text-xs text-gray-500">Letters, numbers, and basic symbols only (/, -, +, .)</p>
             </div>
             <div className="space-y-3">
               <Label htmlFor="skillRate" className="text-base font-semibold text-gray-700">
@@ -69,9 +75,16 @@ export default function MentorSkillsRates({ formData, setFormData, nextStep, pre
                   type="number"
                   placeholder="e.g., 50"
                   value={newRate}
-                  onChange={(e) => setNewRate(e.target.value)}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    // Ensure only positive integers within reasonable range
+                    if (value === '' || (Number(value) >= 1 && Number(value) <= 10000)) {
+                      setNewRate(value)
+                    }
+                  }}
                   className="h-12 text-base bg-white"
                   min="1"
+                  max="10000"
                 />
                 {newRate && (
                   <div className="absolute -bottom-6 left-0 text-sm text-green-600 font-medium">
@@ -79,6 +92,7 @@ export default function MentorSkillsRates({ formData, setFormData, nextStep, pre
                   </div>
                 )}
               </div>
+              <p className="text-xs text-gray-500">Minimum: 1 credit, Maximum: 10,000 credits</p>
             </div>
           </div>
           <Button

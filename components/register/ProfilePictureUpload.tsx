@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Upload, Trash, User } from "lucide-react"
 import getCroppedImg from "@/lib/cropImage"
+import { toast } from "sonner"
 
 interface Props {
   initialImageUrl: string | null
@@ -57,12 +58,12 @@ export default function ProfilePictureUpload({ initialImageUrl, onUploadSuccess,
     if (!file) return
 
     if (!["image/jpeg", "image/png"].includes(file.type)) {
-      alert("Only JPG and PNG files are allowed.")
+      toast.error("Only JPG and PNG files are allowed.")
       return
     }
 
     if (file.size > 5 * 1024 * 1024) {
-      alert("File size must be under 5MB.")
+      toast.error("File size must be under 5MB.")
       return
     }
 
@@ -100,12 +101,13 @@ export default function ProfilePictureUpload({ initialImageUrl, onUploadSuccess,
         setPublicId(data.public_id)
         onUploadSuccess(data.secure_url, data.public_id)
         setCropModalOpen(false)
+        toast.success("Profile picture uploaded successfully!")
       } else {
-        alert("Upload failed")
+        toast.error("Upload failed. Please try again.")
       }
     } catch (err) {
       console.error("Crop or upload error", err)
-      alert("Something went wrong.")
+      toast.error("Something went wrong. Please try again.")
     } finally {
       setIsUploading(false)
     }
@@ -134,13 +136,14 @@ export default function ProfilePictureUpload({ initialImageUrl, onUploadSuccess,
         setPublicId(null)
         onDeleteSuccess()
         inputRef.current && (inputRef.current.value = "") // Clear file input
+        toast.success("Profile picture removed successfully!")
       } else {
         const errorData = await res.json()
         throw new Error(errorData.error || "Failed to delete image from Cloudinary")
       }
     } catch (err) {
       console.error("Failed to delete image from Cloudinary", err)
-      alert("Failed to delete image. Please try again.")
+      toast.error("Failed to delete image. Please try again.")
     } finally {
       setIsRemoving(false)
     }
@@ -148,7 +151,7 @@ export default function ProfilePictureUpload({ initialImageUrl, onUploadSuccess,
 
   return (
     <div>
-      <Label className="mb-2">Profile Picture</Label>
+      <Label className="mb-2">Profile Picture*</Label>
       <div className="flex items-center space-x-4">
         <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center overflow-hidden">
           {previewUrl ? (

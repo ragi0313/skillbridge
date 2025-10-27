@@ -38,7 +38,7 @@ export default function RootLayout({
         <ClientProviders>
           {children}
         </ClientProviders>
-        {/* <Toaster /> Temporarily disabled due to React child error */}
+        <Toaster />
       </body>
     </html>
   );

@@ -19,11 +19,10 @@ async function streamToBuffer(readableStream: ReadableStream<Uint8Array>): Promi
 
 async function handleUpload(req: NextRequest) {
   try {
-    // Check authentication
+    // Check authentication (allow during registration)
     const session = await getSession()
-    if (!session?.id) {
-      return NextResponse.json({ error: "Unauthorized - Please login to upload files" }, { status: 401 })
-    }
+    // Note: We allow uploads without session during registration
+    // Rate limiting provides protection against abuse
 
     const formData = await req.formData()
     const file = formData.get("file") as File

@@ -8,7 +8,8 @@ import SignupHeader from "@/components/register/SignupHeader"
 import StepIndicator from "@/components/register/StepIndicator"
 import LearnerBasicInfo from "@/components/register/learner/LearnerBasicInfo"
 import LearnerGoals from "@/components/register/learner/LearnerGoals"
-import LearnerEmailVerification from "@/components/register/learner/LearnerEmailVerification";
+import LearnerEmailVerification from "@/components/register/learner/LearnerEmailVerification"
+import { toast } from "sonner";
 
 export default function LearnerSignupPage() {
   const [currentStep, setCurrentStep] = useState(1)
@@ -51,12 +52,13 @@ export default function LearnerSignupPage() {
       if (res.ok && data.success) {
         setUserEmail(formData.email)
         setIsSubmitted(true)
+        toast.success("Registration successful! Please check your email to verify your account.")
       } else {
-        alert(data.error || "Registration failed")
+        toast.error(data.error || "Registration failed")
       }
     } catch (error) {
       console.error("Error registering:", error)
-      alert("Registration failed. Please try again.")
+      toast.error("Registration failed. Please try again.")
     }
   }
 

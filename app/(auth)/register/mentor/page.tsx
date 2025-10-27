@@ -10,6 +10,7 @@ import MentorAvailability from "@/components/register/mentor/MentorAvailability"
 import MentorReviewSubmit from "@/components/register/mentor/MentorReviewSubmit";
 import { useRouter } from "next/navigation";
 import { Header } from "@/components/landing/Header";
+import { toast } from "sonner";
 
 export default function MentorSignupPage() {
   const router = useRouter();
@@ -75,14 +76,15 @@ export default function MentorSignupPage() {
     if (res.ok) {
       setUserEmail(formData.email);
       setIsSubmitted(true);
+      toast.success("Registration successful! Welcome to BridgeMentor!");
       router.push("/");
     } else {
       const errorData = await res.json();
-      alert(errorData.error || "Something went wrong");
+      toast.error(errorData.error || "Something went wrong");
     }
   } catch (err) {
     console.error("Submission error:", err);
-    alert("Something went wrong. Please try again.");
+    toast.error("Something went wrong. Please try again.");
   } finally {
     setIsSubmitting(false)
   }

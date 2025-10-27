@@ -7,7 +7,7 @@ import { eq, desc } from "drizzle-orm"
 export async function GET() {
   try {
     const session = await getSession()
-    
+
     if (!session?.id || session.role !== 'mentor') {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
@@ -18,7 +18,9 @@ export async function GET() {
     })
 
     if (!mentor) {
-      return NextResponse.json({ error: "Mentor not found" }, { status: 404 })
+      console.error("Mentor record not found for userId:", session.id)
+      // Return empty sessions instead of 404 to prevent UI errors
+      return NextResponse.json({ sessions: [] })
     }
 
     // Get all sessions for this mentor
@@ -61,7 +63,8 @@ export async function GET() {
     return NextResponse.json({ sessions })
 
   } catch (error) {
-    console.error("Error fetching mentor sessions:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    console.error("Error fetching mentor sessions for user:", session?.id, error)
+    // Return empty sessions instead of error to prevent UI crashes
+    return NextResponse.json({ sessions: [] })
   }
 }

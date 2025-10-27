@@ -62,6 +62,7 @@ export const useConversations = ({ userId, onError }: UseConversationsOptions = 
       if (!response.ok) {
         // Handle 401 (unauthorized) silently for unauthenticated users
         if (response.status === 401) {
+          setLoading(false)
           return
         }
         throw new Error('Failed to fetch conversations')
@@ -72,8 +73,15 @@ export const useConversations = ({ userId, onError }: UseConversationsOptions = 
       setLastFetch(Date.now())
     } catch (error) {
       console.error('Error fetching conversations:', error)
-      onError?.('Failed to load conversations')
-      toast.error('Failed to load conversations')
+      // Only show error if it's a network error or server error, not auth issues
+      if (error instanceof TypeError || (error instanceof Error && error.message.includes('fetch'))) {
+        // Network error - don't show toast to avoid spam
+        onError?.('Network error')
+      } else {
+        // Server error
+        onError?.('Failed to load conversations')
+        toast.error('Failed to load conversations')
+      }
     } finally {
       setLoading(false)
     }
@@ -251,26 +259,28 @@ export const useConversations = ({ userId, onError }: UseConversationsOptions = 
     })
   }, [conversations])
 
-  // Auto-refresh conversations periodically
+  // Auto-refresh conversations periodically (only for active users)
   useEffect(() => {
     if (!userId) return // Don't auto-refresh if user is not authenticated
 
     const interval = setInterval(() => {
       const now = Date.now()
-      if (now - lastFetch > 30000) { // Refresh every 30 seconds if not recently fetched
+      // Refresh every 60 seconds if not recently fetched (reduced from 30s to reduce load)
+      if (now - lastFetch > 60000) {
         fetchConversations()
       }
-    }, 30000)
+    }, 60000)
 
     return () => clearInterval(interval)
   }, [lastFetch, fetchConversations, userId])
 
-  // Auto-fetch conversations when userId becomes available
+  // Auto-fetch conversations when userId becomes available (only once)
   useEffect(() => {
-    if (userId) {
+    if (userId && conversations.length === 0 && !loading) {
       fetchConversations()
     }
-  }, [userId, fetchConversations])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]) // Only trigger when userId changes, not when fetchConversations changes
 
   return {
     conversations: sortedConversations(),

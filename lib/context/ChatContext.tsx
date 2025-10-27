@@ -90,12 +90,8 @@ export function ChatProvider({ children, user }: ChatProviderProps) {
     }
   }, [user])
 
-  // Fetch conversations on mount
-  useEffect(() => {
-    if (user?.id) {
-      fetchConversations()
-    }
-  }, [user?.id, fetchConversations]) // Include fetchConversations in dependencies
+  // Note: Initial fetch is handled by useConversations hook
+  // We only need to handle manual refresh events here
 
   // Listen for refresh conversations event
   useEffect(() => {

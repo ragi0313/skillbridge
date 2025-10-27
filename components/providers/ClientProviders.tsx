@@ -75,7 +75,7 @@ export function ClientProviders({ children }: ClientProvidersProps) {
 
   // Only wrap with ChatProvider for mentors and learners, not admins
   // Admins don't have conversations feature
-  const shouldUseChatProvider = user && user.role !== 'admin'
+  const shouldUseChatProvider = user && (user.role === 'mentor' || user.role === 'learner')
 
   if (shouldUseChatProvider) {
     return (

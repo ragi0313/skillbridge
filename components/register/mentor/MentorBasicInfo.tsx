@@ -299,9 +299,13 @@ export default function MentorBasicInfo({ formData, setFormData, nextStep, isSet
             <Input
               id="languages"
               value={languageInput}
-              onChange={(e) => setLanguageInput(e.target.value)}
+              onChange={(e) => {
+                // Remove spaces from language input
+                const value = e.target.value.replace(/\s/g, '')
+                setLanguageInput(value)
+              }}
               onKeyDown={handleLanguageKeyPress}
-              placeholder="Enter a language (e.g., English, Spanish, French)"
+              placeholder="Enter one language (e.g., English)"
               className="h-12 flex-1"
             />
             <Button
@@ -335,7 +339,7 @@ export default function MentorBasicInfo({ formData, setFormData, nextStep, isSet
           )}
 
           {formData.languages.length === 0 && (
-            <p className="text-sm text-gray-500">Add at least one language you can speak fluently</p>
+            <p className="text-sm text-gray-500">Enter one language at a time and click "Add" button for each (e.g., English, then Add → Tagalog, then Add)</p>
           )}
         </div>
       </div>

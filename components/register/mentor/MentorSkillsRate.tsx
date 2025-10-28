@@ -77,14 +77,13 @@ export default function MentorSkillsRates({ formData, setFormData, nextStep, pre
                   value={newRate}
                   onChange={(e) => {
                     const value = e.target.value
-                    // Ensure only positive integers within reasonable range
-                    if (value === '' || (Number(value) >= 1 && Number(value) <= 10000)) {
+                    // Ensure only positive integers (minimum 1)
+                    if (value === '' || Number(value) >= 1) {
                       setNewRate(value)
                     }
                   }}
                   className="h-12 text-base bg-white"
                   min="1"
-                  max="10000"
                 />
                 {newRate && (
                   <div className="absolute -bottom-6 left-0 text-sm text-green-600 font-medium">
@@ -92,7 +91,7 @@ export default function MentorSkillsRates({ formData, setFormData, nextStep, pre
                   </div>
                 )}
               </div>
-              <p className="text-xs text-gray-500">Minimum: 1 credit, Maximum: 10,000 credits</p>
+              <p className="text-xs text-gray-500">Minimum: 1 credit</p>
             </div>
           </div>
           <Button

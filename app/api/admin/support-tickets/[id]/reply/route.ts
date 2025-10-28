@@ -4,6 +4,7 @@ import { supportTicketResponses, supportTickets, auditLogs, users } from '@/db/s
 import { getSession } from '@/lib/auth/getSession'
 import { eq, sql } from 'drizzle-orm'
 import { logSimpleAction } from '@/lib/admin/audit-log'
+import { sendSupportTicketReply } from '@/lib/email/supportTicketMail'
 
 export async function POST(
   request: NextRequest,
@@ -69,6 +70,16 @@ export async function POST(
       .set(updateData)
       .where(eq(supportTickets.id, ticketId))
 
+    // Get ticket details for email
+    const [ticketDetails] = await db
+      .select({
+        customerName: supportTickets.name,
+        customerEmail: supportTickets.email,
+        subject: supportTickets.subject,
+      })
+      .from(supportTickets)
+      .where(eq(supportTickets.id, ticketId))
+
     // Log the action
     await logSimpleAction({
       userId: session.id,
@@ -78,11 +89,22 @@ export async function POST(
       userAgent: request.headers.get('user-agent') || 'unknown',
     })
 
-    // TODO: Send email notification to customer if not internal
-    if (!isInternal) {
-      // Here you would integrate with your email service (e.g., SendGrid, AWS SES)
-      // to send the reply to the customer's email address
+    // Send email notification to customer if not internal
+    if (!isInternal && ticketDetails) {
+      try {
+        await sendSupportTicketReply({
+          ticketId,
+          customerName: ticketDetails.customerName,
+          customerEmail: ticketDetails.customerEmail,
+          subject: ticketDetails.subject,
+          adminName: `${adminUser.firstName} ${adminUser.lastName}`,
+          adminReply: message.trim(),
+        })
+      } catch (emailError) {
+        console.error('Failed to send email notification:', emailError)
+        // Don't fail the entire request if email fails
       }
+    }
 
     return NextResponse.json(
       {

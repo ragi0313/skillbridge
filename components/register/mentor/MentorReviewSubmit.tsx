@@ -196,34 +196,34 @@ export default function MentorReviewSubmit({ formData, prevStep, isSubmitting }:
         </CardContent>
       </Card>
 
-      <Card className="border-2 border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50">
+      <Card className="border-2 border-gray-300">
         <CardContent className="p-6">
           <div className="flex items-start space-x-3">
             <Checkbox
               id="terms"
               checked={agreedToTerms}
               onCheckedChange={(checked) => setAgreedToTerms(!!checked)}
-              className="mt-1"
+              className="mt-1 border-2 border-gray-400"
             />
-            <Label htmlFor="terms" className="text-sm leading-relaxed text-blue-900 block">
+            <Label htmlFor="terms" className="text-sm leading-relaxed text-gray-800 block cursor-pointer">
               I agree to the{" "}
               <Link
                 href="/terms-of-service"
-                className="text-blue-600 hover:text-blue-700 hover:underline font-semibold"
+                className="text-purple-600 hover:text-purple-700 hover:underline font-semibold"
               >
                 Terms of Service
               </Link>
               {", "}
               <Link
                 href="/privacy-policy"
-                className="text-blue-600 hover:text-blue-700 hover:underline font-semibold"
+                className="text-purple-600 hover:text-purple-700 hover:underline font-semibold"
               >
                 Privacy Policy
               </Link>
               {", and "}
               <Link
                 href="/code-of-conduct"
-                className="text-blue-600 hover:text-blue-700 hover:underline font-semibold"
+                className="text-purple-600 hover:text-purple-700 hover:underline font-semibold"
               >
                 Code of Conduct
               </Link>

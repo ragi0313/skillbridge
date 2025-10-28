@@ -33,15 +33,29 @@ export default async function LearnerSettingsPage() {
     redirect("/login")
   }
 
+  // Parse socialLinks if it exists
+  let socialLinks = null
+  try {
+    if (learner.socialLinks) {
+      socialLinks = typeof learner.socialLinks === 'string'
+        ? JSON.parse(learner.socialLinks)
+        : learner.socialLinks
+    }
+  } catch (error) {
+    console.error('Failed to parse socialLinks:', error)
+    socialLinks = null
+  }
+
   const initialData = {
-    firstName: user.firstName,
-    lastName: user.lastName,
-    email: user.email,
-    country: learner.country,
-    experienceLevel: learner.experienceLevel,
-    learningGoals: learner.learningGoals,
-    profilePictureUrl: learner.profilePictureUrl,
-    timezone: learner.timezone,
+    firstName: user.firstName || "",
+    lastName: user.lastName || "",
+    email: user.email || "",
+    country: learner.country || "",
+    experienceLevel: learner.experienceLevel || "",
+    learningGoals: learner.learningGoals || "",
+    profilePictureUrl: learner.profilePictureUrl || null,
+    timezone: learner.timezone || "",
+    socialLinks: socialLinks || undefined,
   }
 
   return (

@@ -36,6 +36,31 @@ async function handleCheckout(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Invalid package" }, { status: 400 })
   }
 
+  // Get base URL from environment or construct from request headers
+  const getBaseUrl = () => {
+    // First priority: NEXT_PUBLIC_BASE_URL from env
+    if (process.env.NEXT_PUBLIC_BASE_URL) {
+      return process.env.NEXT_PUBLIC_BASE_URL
+    }
+
+    // Second priority: Construct from request headers
+    const host = req.headers.get('host')
+    const protocol = req.headers.get('x-forwarded-proto') || 'https'
+
+    if (host) {
+      // Avoid localhost in production
+      if (host.includes('localhost') || host.includes('127.0.0.1')) {
+        return 'https://bridgementor.vercel.app' // Your production domain
+      }
+      return `${protocol}://${host}`
+    }
+
+    // Fallback to production domain
+    return 'https://bridgementor.vercel.app'
+  }
+
+  const baseUrl = getBaseUrl()
+
   try {
     // Create Xendit invoice using the correct API structure
     const invoice = await Invoice.createInvoice({
@@ -45,8 +70,8 @@ async function handleCheckout(req: NextRequest): Promise<NextResponse> {
         payerEmail: 'customer@example.com', // Required field
         description: `SkillBridge Credit Purchase - ${creditPack.name}`,
         invoiceDuration: 86400, // 24 hours
-        successRedirectUrl: `${process.env.NEXT_PUBLIC_BASE_URL}/payment/success`,
-        failureRedirectUrl: `${process.env.NEXT_PUBLIC_BASE_URL}/pricing`,
+        successRedirectUrl: `${baseUrl}/payment/success`,
+        failureRedirectUrl: `${baseUrl}/pricing`,
         currency: 'PHP',
         items: [{
           name: creditPack.name,

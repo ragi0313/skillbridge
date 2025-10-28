@@ -72,20 +72,67 @@ export default async function MentorProfilePage({
     .replace(/\s+/g, "-")
   if (slug !== expectedSlug) return notFound()
 
-  const parsedSocialLinks = typeof mentor.socialLinks === "string"
-  ? JSON.parse(mentor.socialLinks)
-  : mentor.socialLinks;
+  // Parse socialLinks safely
+  let parsedSocialLinks = null
+  try {
+    if (mentor.socialLinks) {
+      parsedSocialLinks = typeof mentor.socialLinks === "string"
+        ? JSON.parse(mentor.socialLinks)
+        : mentor.socialLinks
+    }
+  } catch (error) {
+    console.error('Failed to parse socialLinks:', error)
+    parsedSocialLinks = null
+  }
+
+  // Parse and ensure skills is an array
+  let parsedSkills: string[] = []
+  try {
+    if (mentor.skills) {
+      if (typeof mentor.skills === 'string') {
+        const parsed = JSON.parse(mentor.skills)
+        parsedSkills = Array.isArray(parsed) ? parsed : []
+      } else if (Array.isArray(mentor.skills)) {
+        parsedSkills = mentor.skills
+      }
+    }
+  } catch (error) {
+    console.error('Failed to parse skills:', error)
+    parsedSkills = []
+  }
+
+  // Parse and ensure languages is an array
+  let parsedLanguages: string[] = []
+  try {
+    if (mentor.languages) {
+      if (typeof mentor.languages === 'string') {
+        const parsed = JSON.parse(mentor.languages)
+        parsedLanguages = Array.isArray(parsed) ? parsed : []
+      } else if (Array.isArray(mentor.languages)) {
+        parsedLanguages = mentor.languages
+      }
+    }
+  } catch (error) {
+    console.error('Failed to parse languages:', error)
+    parsedLanguages = []
+  }
+
+  // Ensure reviews is an array
+  const reviews = Array.isArray(mentor.reviews) ? mentor.reviews : []
 
   const averageRating =
-    mentor.reviews.length > 0
-      ? mentor.reviews.reduce((sum, review) => sum + review.rating, 0) / mentor.reviews.length
+    reviews.length > 0
+      ? reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length
       : 0
 
+  // Ensure rates is an object
+  const rates = mentor.rates && typeof mentor.rates === 'object' ? mentor.rates : {}
+
   const averageRate =
-    Object.values(mentor.rates).length > 0
+    Object.values(rates).length > 0
       ? Math.round(
-          Object.values(mentor.rates).reduce((sum, rate) => sum + rate, 0) /
-            Object.values(mentor.rates).length,
+          Object.values(rates).reduce((sum, rate) => sum + rate, 0) /
+            Object.values(rates).length,
         )
       : 0
 
@@ -129,29 +176,43 @@ export default async function MentorProfilePage({
 
               <div className="flex items-center gap-2">
                 <Languages className="w-5 h-5 text-purple-500" />
-                <span className="font-medium">{mentor.languages.join(", ")}</span>
+                <span className="font-medium">{parsedLanguages.length > 0 ? parsedLanguages.join(", ") : "Not specified"}</span>
               </div>
 
               <div className="flex items-center gap-2">
                 <Star className="w-5 h-5 fill-current text-yellow-300" />
                 <span className="font-medium">
-                  {averageRating.toFixed(1)} ({mentor.reviews.length} reviews)
+                  {averageRating.toFixed(1)} ({reviews.length} reviews)
                 </span>
               </div>
             </div>
 
             <div className="space-y-4">
-              {/* Skills */}
+              {/* Skills - Max 4 skills shown */}
               <div className="flex flex-wrap gap-2">
-                {mentor.skills.map((skill, index) => (
-                  <Badge
-                    key={index}
-                    variant="secondary"
-                    className="px-3 py-1 bg-gray-100 text-gray-700 text-sm font-medium"
-                  >
-                    {skill}
-                  </Badge>
-                ))}
+                {parsedSkills.length > 0 ? (
+                  <>
+                    {parsedSkills.slice(0, 4).map((skill, index) => (
+                      <Badge
+                        key={index}
+                        variant="secondary"
+                        className="px-3 py-1 bg-gray-100 text-gray-700 text-sm font-medium"
+                      >
+                        {skill}
+                      </Badge>
+                    ))}
+                    {parsedSkills.length > 4 && (
+                      <Badge
+                        variant="secondary"
+                        className="px-3 py-1 bg-purple-100 text-purple-700 text-sm font-medium"
+                      >
+                        +{parsedSkills.length - 4} more
+                      </Badge>
+                    )}
+                  </>
+                ) : (
+                  <span className="text-sm text-gray-500">No skills listed</span>
+                )}
               </div>
 
               {/* LinkedIn + Social Links */}
@@ -167,23 +228,25 @@ export default async function MentorProfilePage({
                   </a>
                 )}
 
-                {Array.isArray(parsedSocialLinks) && parsedSocialLinks.length > 0 ? (
+                {parsedSocialLinks && Array.isArray(parsedSocialLinks) && parsedSocialLinks.length > 0 ? (
                   parsedSocialLinks.map((item, i) => (
-                    <a
-                      key={i}
-                      href={item.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-gray-600 hover:text-blue-600"
-                    >
-                      {item.label === "GitHub" && <Github className="w-5 h-5" />}
-                      {item.label === "Twitter" && <Twitter className="w-5 h-5" />}
-                      {item.label === "Portfolio" && <Globe className="w-5 h-5" />}
-                    </a>
+                    item && item.url ? (
+                      <a
+                        key={i}
+                        href={item.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-gray-600 hover:text-blue-600"
+                      >
+                        {item.label === "GitHub" && <Github className="w-5 h-5" />}
+                        {item.label === "Twitter" && <Twitter className="w-5 h-5" />}
+                        {item.label === "Portfolio" && <Globe className="w-5 h-5" />}
+                      </a>
+                    ) : null
                   ))
-                ) : (
+                ) : !mentor.linkedInUrl ? (
                   <p className="text-sm text-gray-500">No social links provided</p>
-                )}
+                ) : null}
               </div>
             </div>
           </div>
@@ -247,14 +310,14 @@ export default async function MentorProfilePage({
                   </Select>
                 </div>
 
-                {mentor.reviews.length === 0 ? (
+                {reviews.length === 0 ? (
                   <div className="border border-dashed border-gray-300 rounded-md p-8 text-center">
                     <MessageCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                     <h3 className="text-lg font-semibold text-gray-900 mb-2">No reviews yet</h3>
                   </div>
                 ) : (
                   <div className="divide-y divide-gray-200">
-                    {mentor.reviews.map((review, index) => (
+                    {reviews.map((review, index) => (
                       <div key={index} className="py-6">
                         <div className="flex items-start gap-4">
                           <Avatar className="w-12 h-12">

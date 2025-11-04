@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import UnifiedHeader from '@/components/UnifiedHeader'
 import { Footer } from '@/components/landing/Footer'
-import { Mail, Send, MessageCircle, Clock, CheckCircle } from 'lucide-react'
+import { Mail, Send, MessageCircle, Clock, CheckCircle, HelpCircle, FileText, Shield, AlertCircle } from 'lucide-react'
 import { toast } from 'sonner'
 
 export default function ContactContent() {
@@ -262,7 +262,7 @@ export default function ContactContent() {
                       className="flex items-center gap-3 p-3 rounded-lg hover:bg-slate-50 transition-colors group"
                     >
                       <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center group-hover:bg-blue-100 transition-colors">
-                        <span className="text-xl">❓</span>
+                        <HelpCircle className="w-5 h-5 text-slate-600 group-hover:text-blue-600 transition-colors" />
                       </div>
                       <div>
                         <div className="font-semibold text-slate-900 group-hover:text-blue-600 transition-colors">FAQs</div>
@@ -274,7 +274,7 @@ export default function ContactContent() {
                       className="flex items-center gap-3 p-3 rounded-lg hover:bg-slate-50 transition-colors group"
                     >
                       <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center group-hover:bg-blue-100 transition-colors">
-                        <span className="text-xl">📄</span>
+                        <FileText className="w-5 h-5 text-slate-600 group-hover:text-blue-600 transition-colors" />
                       </div>
                       <div>
                         <div className="font-semibold text-slate-900 group-hover:text-blue-600 transition-colors">Terms of Service</div>
@@ -286,7 +286,7 @@ export default function ContactContent() {
                       className="flex items-center gap-3 p-3 rounded-lg hover:bg-slate-50 transition-colors group"
                     >
                       <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center group-hover:bg-blue-100 transition-colors">
-                        <span className="text-xl">🔒</span>
+                        <Shield className="w-5 h-5 text-slate-600 group-hover:text-blue-600 transition-colors" />
                       </div>
                       <div>
                         <div className="font-semibold text-slate-900 group-hover:text-blue-600 transition-colors">Privacy Policy</div>
@@ -300,7 +300,7 @@ export default function ContactContent() {
                 <div className="bg-gradient-to-br from-red-50 to-orange-50 rounded-2xl p-8 border border-red-100 shadow-lg">
                   <div className="flex items-start gap-3 mb-4">
                     <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                      <span className="text-xl">⚡</span>
+                      <AlertCircle className="w-5 h-5 text-red-600" />
                     </div>
                     <div>
                       <h3 className="text-xl font-bold text-slate-900 mb-2">Urgent Issue?</h3>

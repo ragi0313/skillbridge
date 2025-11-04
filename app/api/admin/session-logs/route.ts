@@ -10,7 +10,6 @@ import {
   sessionFeedback
 } from "@/db/schema"
 import { desc, like, and, gte, sql, eq, or, inArray } from "drizzle-orm"
-import { logAdminAction, AUDIT_ACTIONS, ENTITY_TYPES, extractRequestInfo } from "@/lib/admin/audit-log"
 
 export async function GET(req: NextRequest) {
   try {
@@ -178,18 +177,8 @@ export async function GET(req: NextRequest) {
     const totalCount = countResult[0]?.count || 0
     const totalPages = Math.ceil(totalCount / limit)
 
-    // Log this session logs view
-    const { ipAddress, userAgent } = extractRequestInfo(req)
-    await logAdminAction({
-      adminId: session.id,
-      action: AUDIT_ACTIONS.VIEW_SESSION_DETAILS,
-      entityType: ENTITY_TYPES.SESSION,
-      description: `Viewed session logs page ${page} with filters: status=${status}, days=${days}`,
-      metadata: { page, search, status, days },
-      ipAddress,
-      userAgent,
-      severity: "info",
-    })
+    // Note: IP logging removed for session log viewing as it's not a security-critical action
+    // IP addresses are still logged for actual user actions (login, suspend, blacklist, etc.)
 
     return NextResponse.json({
       sessions: sessionsWithNames,

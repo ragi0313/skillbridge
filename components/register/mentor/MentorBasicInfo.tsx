@@ -463,16 +463,86 @@ export default function MentorBasicInfo({ formData, setFormData, nextStep, isSet
         </div>
       )}
 
+      {/* Validation Summary - Only show on registration page when form is incomplete */}
+      {!isSettingsPage && !isFormValid() && (formData.firstName || formData.lastName || formData.email || formData.password || formData.confirmPassword || formData.profilePicture) && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
+            <div className="flex-1">
+              <h4 className="text-sm font-semibold text-amber-900 mb-2">Please complete the following:</h4>
+              <ul className="text-sm text-amber-800 space-y-1 list-disc list-inside">
+                {!formData.profilePicture && (
+                  <li>Upload a profile picture</li>
+                )}
+                {!validateName(formData.firstName) && formData.firstName && (
+                  <li>First name must contain only letters (2-50 characters)</li>
+                )}
+                {!validateName(formData.firstName) && !formData.firstName && (
+                  <li>Enter your first name</li>
+                )}
+                {!validateLastName(formData.lastName) && formData.lastName && (
+                  <li>Last name must contain only letters (2-50 characters, no spaces)</li>
+                )}
+                {!validateLastName(formData.lastName) && !formData.lastName && (
+                  <li>Enter your last name</li>
+                )}
+                {!emailRegex.test(formData.email) && formData.email && (
+                  <li>Enter a valid email address</li>
+                )}
+                {!emailRegex.test(formData.email) && !formData.email && (
+                  <li>Enter your email address</li>
+                )}
+                {emailRegex.test(formData.email) && emailAvailable === false && (
+                  <li>Email is already taken - please use a different email</li>
+                )}
+                {emailRegex.test(formData.email) && isChecking && (
+                  <li>Checking if email is available...</li>
+                )}
+                {!formData.country && (
+                  <li>Select your country</li>
+                )}
+                {!formData.timezone && (
+                  <li>Select your timezone</li>
+                )}
+                {!formData.gender && (
+                  <li>Select your gender</li>
+                )}
+                {formData.languages.length === 0 && (
+                  <li>Add at least one language you speak</li>
+                )}
+                {!passwordRegex.test(formData.password || '') && formData.password && (
+                  <li>Password must include uppercase, lowercase, number, and special character (min 8 chars)</li>
+                )}
+                {!passwordRegex.test(formData.password || '') && !formData.password && (
+                  <li>Create a password</li>
+                )}
+                {formData.password && formData.confirmPassword !== formData.password && (
+                  <li>Passwords do not match</li>
+                )}
+                {formData.password && !formData.confirmPassword && (
+                  <li>Confirm your password</li>
+                )}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+
       {!isSettingsPage && (
-        <div className="flex justify-end w-full">
+        <div className="flex flex-col items-end w-full gap-2">
         <Button
           type="button"
           onClick={nextStep}
           disabled={!isFormValid()}
-          className="w-[15%] h-14 gradient-bg text-white font-semibold text-base rounded-lg"
+          className="w-[15%] h-14 gradient-bg text-white font-semibold text-base rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Continue
         </Button>
+        {!isFormValid() && (
+          <p className="text-sm text-gray-500">
+            Complete all required fields (*) to continue
+          </p>
+        )}
       </div>
       )}
     </div>

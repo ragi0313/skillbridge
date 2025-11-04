@@ -328,22 +328,85 @@ export default function LearnerBasicInfo({ formData, setFormData, nextStep }: Pr
         )}
       </div>
 
-      {/* Continue Button */}
-      <Button
-        type="button"
-        onClick={handleContinue}
-        disabled={!isFormValid || isChecking}
-        className="w-full h-14 gradient-bg text-white font-semibold text-base rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
-      >
-        {isChecking ? (
-          <div className="flex items-center gap-2">
-            <Loader2 className="w-5 h-5 animate-spin" />
-            Checking email...
+      {/* Validation Summary */}
+      {!isFormValid && (formData.firstName || formData.lastName || formData.email || formData.password || formData.confirmPassword) && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" />
+            <div className="flex-1">
+              <h4 className="text-sm font-semibold text-amber-900 mb-2">Please complete the following:</h4>
+              <ul className="text-sm text-amber-800 space-y-1 list-disc list-inside">
+                {!firstNameValid && formData.firstName && (
+                  <li>First name must contain only letters (2-50 characters)</li>
+                )}
+                {!firstNameValid && !formData.firstName && (
+                  <li>Enter your first name</li>
+                )}
+                {!lastNameValid && formData.lastName && (
+                  <li>Last name must contain only letters (2-50 characters, no spaces)</li>
+                )}
+                {!lastNameValid && !formData.lastName && (
+                  <li>Enter your last name</li>
+                )}
+                {!emailValid && formData.email && (
+                  <li>Enter a valid email address</li>
+                )}
+                {!emailValid && !formData.email && (
+                  <li>Enter your email address</li>
+                )}
+                {emailValid && emailAvailable === false && (
+                  <li>Email is already taken - please use a different email</li>
+                )}
+                {emailValid && isChecking && (
+                  <li>Checking if email is available...</li>
+                )}
+                {!countryValid && (
+                  <li>Select your country</li>
+                )}
+                {!timezoneValid && (
+                  <li>Select your timezone</li>
+                )}
+                {!passwordValid && formData.password && (
+                  <li>Password must include uppercase, lowercase, number, and special character (min 8 chars)</li>
+                )}
+                {!passwordValid && !formData.password && (
+                  <li>Create a password</li>
+                )}
+                {!confirmPasswordValid && formData.confirmPassword && (
+                  <li>Passwords do not match</li>
+                )}
+                {!confirmPasswordValid && !formData.confirmPassword && formData.password && (
+                  <li>Confirm your password</li>
+                )}
+              </ul>
+            </div>
           </div>
-        ) : (
-          "Continue"
+        </div>
+      )}
+
+      {/* Continue Button */}
+      <div className="space-y-2">
+        <Button
+          type="button"
+          onClick={handleContinue}
+          disabled={!isFormValid || isChecking}
+          className="w-full h-14 gradient-bg text-white font-semibold text-base rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {isChecking ? (
+            <div className="flex items-center gap-2">
+              <Loader2 className="w-5 h-5 animate-spin" />
+              Checking email...
+            </div>
+          ) : (
+            "Continue"
+          )}
+        </Button>
+        {!isFormValid && !isChecking && (
+          <p className="text-sm text-gray-500 text-center">
+            Complete all required fields (*) to continue
+          </p>
         )}
-      </Button>
+      </div>
     </div>
   )
 }

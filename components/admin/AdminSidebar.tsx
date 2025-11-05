@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useImperativeHandle, forwardRef } from "react"
-import { Clock, Users, TrendingUp, UserCheck, MessageSquare, Megaphone, Settings, LogOut, X, Video, FileText, Mail }  from "lucide-react"
+import { Clock, Users, TrendingUp, UserCheck, MessageSquare, Megaphone, LogOut, X, Video, FileText, Mail }  from "lucide-react"
 import { Layers } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -234,14 +234,6 @@ const AdminSidebar = forwardRef<AdminSidebarRef, Props>(({ activeSection, setAct
           </div>
 
           <div className="space-y-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="w-full justify-start text-slate-300 hover:text-white hover:bg-slate-800"
-            >
-              <Settings className="w-4 h-4 mr-2" />
-              Account Settings
-            </Button>
             <Button
               onClick={handleLogout}
               variant="ghost"

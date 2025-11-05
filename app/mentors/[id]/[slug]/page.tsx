@@ -26,32 +26,7 @@ import {
 import BookingWidget from "@/components/mentors/BookingWidget"
 import UnifiedHeader from "@/components/UnifiedHeader"
 import { MessageMentorButtonWrapper as MessageMentorButton } from "@/components/mentors/MessageMentorButtonWrapper"
-
-interface MentorData {
-  id: number
-  userId: number
-  firstName: string
-  lastName: string
-  profilePictureUrl: string
-  country: string
-  timezone: string
-  languages: string[]
-  professionalTitle: string
-  bio: string
-  yearsOfExperience: number
-  linkedInUrl: string
-  socialLinks: Record<string, string>
-  skills: string[]
-  rates: Record<string, number>
-  isAvailable?: boolean
-  reviews: {
-    rating: number
-    reviewText: string
-    createdAt: string
-    learnerName: string
-    learnerProfilePictureUrl?: string
-  }[]
-}
+import { getMentorById, type MentorData } from "@/lib/data/mentors"
 
 export default async function MentorProfilePage({
   params,
@@ -60,48 +35,27 @@ export default async function MentorProfilePage({
 }) {
   const { id, slug } = await params
 
-  const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/mentors/${id}`, {
-    cache: "no-store",
-  })
+  const mentorId = parseInt(id)
+  if (isNaN(mentorId)) {
+    return notFound()
+  }
 
-  if (!res.ok) return notFound()
-  const mentor: MentorData = await res.json()
+  const mentor = await getMentorById(mentorId)
+
+  if (!mentor) {
+    return notFound()
+  }
 
   const expectedSlug = `${mentor.firstName}-${mentor.lastName}`
     .toLowerCase()
     .replace(/\s+/g, "-")
   if (slug !== expectedSlug) return notFound()
 
-  // Parse socialLinks safely
-  let parsedSocialLinks = null
-  try {
-    if (mentor.socialLinks) {
-      parsedSocialLinks = typeof mentor.socialLinks === "string"
-        ? JSON.parse(mentor.socialLinks)
-        : mentor.socialLinks
-    }
-  } catch (error) {
-    console.error('Failed to parse socialLinks:', error)
-    parsedSocialLinks = null
-  }
+  // Data is already properly formatted from getMentorById
+  const parsedSocialLinks = mentor.socialLinks
+  const parsedSkills = Array.isArray(mentor.skills) ? mentor.skills : []
 
-  // Parse and ensure skills is an array
-  let parsedSkills: string[] = []
-  try {
-    if (mentor.skills) {
-      if (typeof mentor.skills === 'string') {
-        const parsed = JSON.parse(mentor.skills)
-        parsedSkills = Array.isArray(parsed) ? parsed : []
-      } else if (Array.isArray(mentor.skills)) {
-        parsedSkills = mentor.skills
-      }
-    }
-  } catch (error) {
-    console.error('Failed to parse skills:', error)
-    parsedSkills = []
-  }
-
-  // Parse and ensure languages is an array
+  // Parse languages if it's a JSON string
   let parsedLanguages: string[] = []
   try {
     if (mentor.languages) {
@@ -117,17 +71,13 @@ export default async function MentorProfilePage({
     parsedLanguages = []
   }
 
-  // Ensure reviews is an array
-  const reviews = Array.isArray(mentor.reviews) ? mentor.reviews : []
-
+  const reviews = mentor.reviews
   const averageRating =
     reviews.length > 0
       ? reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length
       : 0
 
-  // Ensure rates is an object
-  const rates = mentor.rates && typeof mentor.rates === 'object' ? mentor.rates : {}
-
+  const rates = mentor.rates
   const averageRate =
     Object.values(rates).length > 0
       ? Math.round(

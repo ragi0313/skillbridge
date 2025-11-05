@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { MessageCircle, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -23,6 +24,7 @@ export function MessageMentorButton({
   disabled = false,
 }: MessageMentorButtonProps) {
   const [loading, setLoading] = useState(false)
+  const router = useRouter()
 
   const handleClick = async () => {
     if (disabled) return
@@ -40,6 +42,13 @@ export function MessageMentorButton({
           mentorUserId,
         }),
       })
+
+      if (response.status === 401) {
+        // User not authenticated, redirect to login
+        toast.info('Please log in to message this mentor')
+        router.push('/login')
+        return
+      }
 
       if (!response.ok) {
         throw new Error('Failed to create conversation')

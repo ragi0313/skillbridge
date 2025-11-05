@@ -12,8 +12,6 @@ import {
   Globe,
   Linkedin,
 } from "lucide-react"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
@@ -27,6 +25,8 @@ import BookingWidget from "@/components/mentors/BookingWidget"
 import UnifiedHeader from "@/components/UnifiedHeader"
 import { MessageMentorButtonWrapper as MessageMentorButton } from "@/components/mentors/MessageMentorButtonWrapper"
 import { getMentorById, type MentorData } from "@/lib/data/mentors"
+import { AboutSection } from "@/components/mentors/AboutSection"
+import { SkillsDisplay } from "@/components/mentors/SkillsDisplay"
 
 export default async function MentorProfilePage({
   params,
@@ -138,32 +138,8 @@ export default async function MentorProfilePage({
             </div>
 
             <div className="space-y-4">
-              {/* Skills - Max 4 skills shown */}
-              <div className="flex flex-wrap gap-2">
-                {parsedSkills.length > 0 ? (
-                  <>
-                    {parsedSkills.slice(0, 4).map((skill, index) => (
-                      <Badge
-                        key={index}
-                        variant="secondary"
-                        className="px-3 py-1 bg-gray-100 text-gray-700 text-sm font-medium"
-                      >
-                        {skill}
-                      </Badge>
-                    ))}
-                    {parsedSkills.length > 4 && (
-                      <Badge
-                        variant="secondary"
-                        className="px-3 py-1 bg-purple-100 text-purple-700 text-sm font-medium"
-                      >
-                        +{parsedSkills.length - 4} more
-                      </Badge>
-                    )}
-                  </>
-                ) : (
-                  <span className="text-sm text-gray-500">No skills listed</span>
-                )}
-              </div>
+              {/* Skills - Display all skills in columns */}
+              <SkillsDisplay skills={parsedSkills} />
 
               {/* LinkedIn + Social Links */}
               <div className="flex items-center gap-4 ml-2">
@@ -204,22 +180,11 @@ export default async function MentorProfilePage({
 
         {/* Content Grid */}
         <div className="mx-auto py-6">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
+          <div className="grid grid-cols-1 lg:grid-cols-[2fr,1fr] gap-12">
             {/* Left Column - Main Content */}
-            <div className="lg:col-span-2 space-y-12">
+            <div className="space-y-12">
               {/* About Section */}
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900 mb-6">About</h2>
-                <div className="prose prose-gray max-w-none">
-                  <p className="text-gray-700 leading-relaxed mb-4">{mentor.bio}</p>
-                  <Button
-                    variant="ghost"
-                    className="text-teal-600 hover:text-teal-700 p-0 h-auto font-medium"
-                  >
-                    Read more
-                  </Button>
-                </div>
-              </div>
+              <AboutSection bio={mentor.bio} />
 
               {/* Open to Inquiries */}
               <Card className="bg-gray-50 border-0">
@@ -315,8 +280,10 @@ export default async function MentorProfilePage({
             </div>
 
             {/* Right Column - Booking Widget */}
-            <div className="lg:col-span-1">
-              <BookingWidget mentor={mentor} averageRate={averageRate} />
+            <div className="lg:pl-8">
+              <div className="lg:sticky lg:top-6">
+                <BookingWidget mentor={mentor} averageRate={averageRate} />
+              </div>
             </div>
           </div>
         </div>

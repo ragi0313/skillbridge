@@ -180,9 +180,9 @@ export default async function MentorProfilePage({
 
         {/* Content Grid */}
         <div className="mx-auto py-6">
-          <div className="grid grid-cols-1 lg:grid-cols-[2fr,1fr] gap-12">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
             {/* Left Column - Main Content */}
-            <div className="space-y-12">
+            <div className="lg:col-span-2 space-y-12">
               {/* About Section */}
               <AboutSection bio={mentor.bio} />
 
@@ -280,10 +280,8 @@ export default async function MentorProfilePage({
             </div>
 
             {/* Right Column - Booking Widget */}
-            <div className="lg:pl-8">
-              <div className="lg:sticky lg:top-6">
-                <BookingWidget mentor={mentor} averageRate={averageRate} />
-              </div>
+            <div className="lg:col-span-1">
+              <BookingWidget mentor={mentor} averageRate={averageRate} />
             </div>
           </div>
         </div>

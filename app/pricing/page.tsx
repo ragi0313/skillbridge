@@ -288,7 +288,7 @@ export default function PricingPage() {
               <div className="bg-white rounded-xl p-6 shadow-md">
                 <h3 className="font-semibold text-gray-900 mb-2">Can I get a refund?</h3>
                 <p className="text-gray-600 text-sm">
-                  Unused credits can be refunded within 30 days of purchase. Once credits are used to book sessions, they cannot be refunded. However, if a mentor cancels a session, your credits will be automatically returned to your account.
+                  Credits are non-refundable once purchased. However, if a mentor cancels a session, your credits will be automatically returned to your account for future use.
                 </p>
               </div>
               <div className="bg-white rounded-xl p-6 shadow-md">

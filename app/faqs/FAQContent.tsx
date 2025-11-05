@@ -28,10 +28,6 @@ const faqSections = [
         answer: "You purchase credits to book mentorship sessions. Each mentor sets their rate per session in credits. BridgeMentor deducts 20% as a platform fee."
       },
       {
-        question: "Can I get a refund for unused credits?",
-        answer: "Yes, BridgeMentor will offer refunds for unused credits upon request. However, a small processing fee will be charged to cover transaction and administrative costs. Please review our Refund Policy for full details or contact support for assistance."
-      },
-      {
         question: "What happens if my mentor doesn't show up?",
         answer: "If your mentor doesn't show up for a scheduled session, you'll receive a full refund automatically. Our support team will also help you reschedule with the same mentor or find an alternative."
       },

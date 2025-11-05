@@ -152,7 +152,7 @@ export default function FAQSection({ searchQuery, onSearchChange }: FAQSectionPr
     {
       id: "credits-work",
       question: "How do credits work?",
-      answer: "Credits are our virtual currency. You purchase credits to book sessions with mentors. Different mentors have different hourly rates. Unused credits don't expire and can be refunded under certain conditions.",
+      answer: "Credits are our virtual currency. You purchase credits to book sessions with mentors. Different mentors have different hourly rates. Credits don't expire and are non-refundable once purchased.",
       category: "payments",
       tags: ["credits", "currency", "rates"]
     },
@@ -166,7 +166,7 @@ export default function FAQSection({ searchQuery, onSearchChange }: FAQSectionPr
     {
       id: "refunds",
       question: "What is your refund policy?",
-      answer: "Credits can be refunded within 30 days if unused. Session refunds depend on our cancellation policy. Completed sessions are generally non-refundable unless there were technical issues.",
+      answer: "Credits are non-refundable once purchased. However, if a mentor cancels a session, your credits will be automatically returned to your account. Session refunds for technical issues are handled on a case-by-case basis through our support team.",
       category: "payments",
       tags: ["refunds", "policy", "cancellation"]
     },

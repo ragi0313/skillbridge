@@ -288,7 +288,7 @@ export default function PricingPage() {
               <div className="bg-white rounded-xl p-6 shadow-md">
                 <h3 className="font-semibold text-gray-900 mb-2">Can I get a refund?</h3>
                 <p className="text-gray-600 text-sm">
-                  Credits are non-refundable once purchased. However, if a mentor cancels a session, your credits will be automatically returned to your account for future use.
+                  Purchased credits are non-refundable. However, you can request a refund for completed sessions if there were technical issues, quality problems, or if the mentor didn't show up. Our admin team will review each request and refund credits if approved. Credits are also automatically returned if a mentor cancels a session.
                 </p>
               </div>
               <div className="bg-white rounded-xl p-6 shadow-md">

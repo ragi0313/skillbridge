@@ -166,7 +166,7 @@ export default function FAQSection({ searchQuery, onSearchChange }: FAQSectionPr
     {
       id: "refunds",
       question: "What is your refund policy?",
-      answer: "Credits are non-refundable once purchased. However, if a mentor cancels a session, your credits will be automatically returned to your account. Session refunds for technical issues are handled on a case-by-case basis through our support team.",
+      answer: "Purchased credits are non-refundable. However, you can request a refund for completed sessions through your session page if there were technical issues, quality problems, or if the mentor didn't show up. Our admin team reviews each request and refunds credits to your account if approved. Credits are automatically returned if a mentor cancels a session.",
       category: "payments",
       tags: ["refunds", "policy", "cancellation"]
     },

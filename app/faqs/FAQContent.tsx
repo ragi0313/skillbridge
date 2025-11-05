@@ -29,7 +29,11 @@ const faqSections = [
       },
       {
         question: "What happens if my mentor doesn't show up?",
-        answer: "If your mentor doesn't show up for a scheduled session, you'll receive a full refund automatically. Our support team will also help you reschedule with the same mentor or find an alternative."
+        answer: "If your mentor doesn't show up for a scheduled session, you can request a refund through your session page. Our admin team will review your request and refund your credits if approved. You can also contact support to reschedule with the same mentor or find an alternative."
+      },
+      {
+        question: "Can I request a refund for a completed session?",
+        answer: "Yes, you can request a session refund if you experienced technical issues, quality problems, or if the mentor didn't show up. Visit your session page and submit a refund request with details. Our admin team will review it and refund credits to your account if approved."
       },
       {
         question: "Can I become a mentor someday?",

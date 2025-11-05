@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { MessageCircle, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -23,6 +24,7 @@ export function MessageLearnerButton({
   disabled = false,
 }: MessageLearnerButtonProps) {
   const [loading, setLoading] = useState(false)
+  const router = useRouter()
 
   const handleClick = async (e: React.MouseEvent) => {
     e.preventDefault()
@@ -51,6 +53,13 @@ export function MessageLearnerButton({
       })
 
       console.log('MessageLearnerButton: Response status:', response.status)
+
+      if (response.status === 401) {
+        // User not authenticated, redirect to login
+        toast.info('Please log in to message this learner')
+        router.push('/login')
+        return
+      }
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))

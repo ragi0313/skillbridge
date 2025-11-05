@@ -7,7 +7,8 @@ import {
   learners,
   users as usersTable,
   mentorSkills,
-  sessionFeedback
+  sessionFeedback,
+  refundRequests
 } from "@/db/schema"
 import { desc, like, and, gte, sql, eq, or, inArray } from "drizzle-orm"
 
@@ -79,10 +80,16 @@ export async function GET(req: NextRequest) {
         createdAt: bookingSessions.createdAt,
         overallRating: sessionFeedback.overallRating,
         communicationRating: sessionFeedback.communicationRating,
+        refundRequestId: refundRequests.id,
+        refundStatus: refundRequests.status,
+        refundReason: refundRequests.requestReason,
+        refundAmount: refundRequests.refundedAmount,
+        refundRequestedAt: refundRequests.createdAt,
       })
       .from(bookingSessions)
       .leftJoin(mentorSkills, eq(bookingSessions.mentorSkillId, mentorSkills.id))
       .leftJoin(sessionFeedback, eq(sessionFeedback.sessionId, bookingSessions.id))
+      .leftJoin(refundRequests, eq(refundRequests.sessionId, bookingSessions.id))
       .where(whereClause)
       .orderBy(desc(bookingSessions.createdAt))
       .limit(isExport ? 1000 : limit)

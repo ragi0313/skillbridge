@@ -34,6 +34,7 @@ import {
 import { CreditsIcon } from "@/components/ui/credits-icon"
 import { format, isPast, isFuture, isToday } from "date-fns"
 import { SessionRatingModal } from "@/components/session/SessionRatingModal"
+import { RefundRequestModal } from "@/components/learner/RefundRequestModal"
 import { toast } from "sonner"
 
 interface Session {
@@ -78,6 +79,8 @@ export function LearnerSessionsClient({ sessions }: LearnerSessionsClientProps) 
   const [selectedTab, setSelectedTab] = useState("all")
   const [ratingModalOpen, setRatingModalOpen] = useState(false)
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(null)
+  const [refundModalOpen, setRefundModalOpen] = useState(false)
+  const [refundSessionId, setRefundSessionId] = useState<number | null>(null)
   const [cancelModalOpen, setCancelModalOpen] = useState(false)
   const [cancelSessionId, setCancelSessionId] = useState<number | null>(null)
   const [cancellationReason, setCancellationReason] = useState("")
@@ -661,40 +664,55 @@ export function LearnerSessionsClient({ sessions }: LearnerSessionsClientProps) 
           )}
 
           {session.status === 'completed' && (
-            session.reviewId ? (
-              // Already reviewed - show review complete with stars
-              <div className="flex items-center space-x-2 py-2">
-                <CheckCircle2 className="w-4 h-4 text-green-600" />
-                <span className="text-sm font-medium text-green-800">Review Complete</span>
-                <div className="flex items-center ml-2">
-                  {Array.from({ length: 5 }, (_, i) => (
-                    <Star
-                      key={i}
-                      className={`w-3 h-3 ${
-                        i < (session.reviewRating || 0)
-                          ? "fill-yellow-400 text-yellow-400"
-                          : "text-gray-300"
-                      }`}
-                    />
-                  ))}
-                  <span className="text-xs text-green-700 ml-1">
-                    ({session.reviewRating}/5)
-                  </span>
+            <>
+              {session.reviewId ? (
+                // Already reviewed - show review complete with stars
+                <div className="flex items-center space-x-2 py-2">
+                  <CheckCircle2 className="w-4 h-4 text-green-600" />
+                  <span className="text-sm font-medium text-green-800">Review Complete</span>
+                  <div className="flex items-center ml-2">
+                    {Array.from({ length: 5 }, (_, i) => (
+                      <Star
+                        key={i}
+                        className={`w-3 h-3 ${
+                          i < (session.reviewRating || 0)
+                            ? "fill-yellow-400 text-yellow-400"
+                            : "text-gray-300"
+                        }`}
+                      />
+                    ))}
+                    <span className="text-xs text-green-700 ml-1">
+                      ({session.reviewRating}/5)
+                    </span>
+                  </div>
                 </div>
-              </div>
-            ) : (
-              // Not reviewed yet - show rate mentor button
-              <Button 
-                variant="outline"
-                onClick={() => {
-                  setSelectedSessionId(session.id)
-                  setRatingModalOpen(true)
-                }}
-              >
-                <Star className="w-4 h-4 mr-2" />
-                Rate Mentor
-              </Button>
-            )
+              ) : (
+                // Not reviewed yet - show rate mentor button
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setSelectedSessionId(session.id)
+                    setRatingModalOpen(true)
+                  }}
+                >
+                  <Star className="w-4 h-4 mr-2" />
+                  Rate Mentor
+                </Button>
+              )}
+              {/* Request Refund button - only show if not already refunded */}
+              {!session.refundAmount && (
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setRefundSessionId(session.id)
+                    setRefundModalOpen(true)
+                  }}
+                >
+                  <AlertCircle className="w-4 h-4 mr-2" />
+                  Request Refund
+                </Button>
+              )}
+            </>
           )}
 
           {session.status === 'pending' && (
@@ -935,6 +953,22 @@ export function LearnerSessionsClient({ sessions }: LearnerSessionsClientProps) 
           onClose={() => {
             setRatingModalOpen(false)
             setSelectedSessionId(null)
+          }}
+        />
+      )}
+
+      {/* Refund Request Modal */}
+      {refundModalOpen && refundSessionId && (
+        <RefundRequestModal
+          sessionId={refundSessionId}
+          isOpen={refundModalOpen}
+          onClose={() => {
+            setRefundModalOpen(false)
+            setRefundSessionId(null)
+          }}
+          onSuccess={() => {
+            // Refresh the page to show updated session data
+            window.location.reload()
           }}
         />
       )}

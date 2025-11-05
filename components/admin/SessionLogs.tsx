@@ -46,6 +46,11 @@ interface SessionLog {
   learnerLeftAt?: string
   mentorLeftAt?: string
   createdAt: string
+  refundRequestId?: number
+  refundStatus?: string
+  refundReason?: string
+  refundAmount?: number
+  refundRequestedAt?: string
 }
 
 export default function SessionLogs() {
@@ -376,6 +381,51 @@ export default function SessionLogs() {
                                 <div>
                                   <h4 className="font-semibold mb-2">Session Notes</h4>
                                   <p className="text-sm bg-gray-50 p-3 rounded">{selectedSession.sessionNotes}</p>
+                                </div>
+                              )}
+
+                              {selectedSession.refundRequestId && (
+                                <div>
+                                  <h4 className="font-semibold mb-2">Refund Request</h4>
+                                  <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg space-y-2">
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-sm font-medium">Status:</span>
+                                      <Badge className={
+                                        selectedSession.refundStatus === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                                        selectedSession.refundStatus === 'approved' ? 'bg-green-100 text-green-800' :
+                                        'bg-red-100 text-red-800'
+                                      }>
+                                        {selectedSession.refundStatus}
+                                      </Badge>
+                                    </div>
+                                    <div>
+                                      <span className="text-sm font-medium">Reason:</span>
+                                      <p className="text-sm text-gray-700 mt-1">{selectedSession.refundReason}</p>
+                                    </div>
+                                    {selectedSession.refundAmount && (
+                                      <div>
+                                        <span className="text-sm font-medium">Amount:</span>
+                                        <p className="text-sm text-gray-700">{selectedSession.refundAmount} credits</p>
+                                      </div>
+                                    )}
+                                    <div>
+                                      <span className="text-sm font-medium">Requested At:</span>
+                                      <p className="text-sm text-gray-700">
+                                        {selectedSession.refundRequestedAt && format(new Date(selectedSession.refundRequestedAt), "MMM dd, yyyy HH:mm")}
+                                      </p>
+                                    </div>
+                                    {selectedSession.refundStatus === 'pending' && (
+                                      <div className="pt-2">
+                                        <Button
+                                          size="sm"
+                                          onClick={() => window.open(`/admin/dashboard?section=reports-feedback`, '_blank')}
+                                          variant="outline"
+                                        >
+                                          Review Request
+                                        </Button>
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
                               )}
 

@@ -45,14 +45,20 @@ export function ClientProviders({ children }: ClientProvidersProps) {
         if (response.ok) {
           const userData = await response.json()
           setUser(userData.user)
+        } else if (response.status === 401) {
+          // 401 is expected for public pages - not an error, just not authenticated
+          setUser(null)
         } else {
-          // If not authenticated, clear user (401 is expected for non-logged in users)
+          // Other errors (500, etc.) - log in development
+          if (process.env.NODE_ENV === 'development') {
+            console.error(`Auth check failed with status ${response.status}`)
+          }
           setUser(null)
         }
       } catch (error) {
-        // Only log errors in development (network errors, not 401 auth checks)
+        // Only log network errors in development
         if (process.env.NODE_ENV === 'development') {
-          console.error('Failed to get current user:', error)
+          console.error('Network error during auth check:', error)
         }
         setUser(null)
       } finally {

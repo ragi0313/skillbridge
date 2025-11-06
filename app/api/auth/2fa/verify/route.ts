@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { verify2FACode } from "@/lib/auth/two-factor-service"
-import { signToken } from "@/lib/jwt"
+import { signJwt } from "@/lib/jwt"
 import { db } from "@/db"
 import { users, learners, mentors, admins } from "@/db/schema"
 import { eq } from "drizzle-orm"
@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create JWT token
-    const token = signToken({
+    const token = signJwt({
       id: foundUser.id,
       role: foundUser.role,
       email: foundUser.email,

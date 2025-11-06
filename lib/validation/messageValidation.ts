@@ -1,5 +1,17 @@
 import { z } from 'zod'
-import DOMPurify from 'isomorphic-dompurify'
+
+// Simple HTML stripper (replaces DOMPurify to avoid jsdom dependency)
+function stripHtml(html: string): string {
+  return html
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '') // Remove scripts
+    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '') // Remove styles
+    .replace(/<[^>]+>/g, '') // Remove all HTML tags
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#x27;/g, "'")
+    .replace(/&amp;/g, '&')
+}
 
 // Message size limits
 export const MESSAGE_LIMITS = {
@@ -128,13 +140,8 @@ function validateMessageContent(content: string): {
     warnings.push(`Message is quite long (${content.length} characters)`)
   }
 
-  // Sanitize HTML content
-  let sanitizedContent = DOMPurify.sanitize(content, {
-    ALLOWED_TAGS: [],           // No HTML tags allowed
-    ALLOWED_ATTR: [],           // No attributes allowed
-    RETURN_DOM: false,          // Return string
-    RETURN_DOM_FRAGMENT: false,
-  })
+  // Sanitize HTML content (strip all HTML tags)
+  let sanitizedContent = stripHtml(content)
 
   // Additional content checks
   const contentChecks = performContentSecurityChecks(content)

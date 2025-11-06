@@ -40,11 +40,11 @@ export function ProfileSection({ initialData }: ProfileSectionProps) {
   )
 
   const countryOptions = countries
-    .filter((country) => country.cca2 === "PH")
     .map((country) => ({
       value: country.cca2,
       label: country.name.common,
     }))
+    .sort((a, b) => a.label.localeCompare(b.label))
 
   const {
     register,
@@ -107,15 +107,15 @@ export function ProfileSection({ initialData }: ProfileSectionProps) {
         <CardHeader>
           <CardTitle>Personal Information</CardTitle>
           <CardDescription>
-            Update your profile picture and basic details
+            Update your basic details
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
-            <Label>Profile Picture</Label>
             <ProfilePictureUpload
-              currentImage={profilePictureUrl}
-              onUploadSuccess={setProfilePictureUrl}
+              initialImageUrl={profilePictureUrl}
+              onUploadSuccess={(url) => setProfilePictureUrl(url)}
+              onDeleteSuccess={() => setProfilePictureUrl(null)}
             />
           </div>
 

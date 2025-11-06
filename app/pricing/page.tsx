@@ -48,32 +48,22 @@ export default function PricingPage() {
     }
     setLoading(true)
     setSelectedPackage(packageId)
-
     try {
-      // Find the package to get credits amount
-      const selectedPack = creditPackages.find(p => p.id === packageId)
-      if (!selectedPack) {
-        alert("Invalid package selected.")
-        return
-      }
-
-      // Call test mode API to add credits directly
-      const response = await fetch("/api/dev/add-credits", {
+      const res = await fetch("/api/xendit/checkout", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ credits: selectedPack.credits, packageId })
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ packageId }),
       })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to add credits")
+      const data = await res.json()
+      if (data.invoiceUrl) {
+        window.location.href = data.invoiceUrl
+      } else {
+        alert("Checkout failed.")
       }
-
-      alert(`✅ ${selectedPack.credits} credits added! New balance: ${data.newBalance}`)
-      setTimeout(() => window.location.reload(), 1000)
-    } catch (error: any) {
-      alert(`❌ Error: ${error.message || "Something went wrong."}`)
+    } catch {
+      alert("Something went wrong.")
     } finally {
       setLoading(false)
       setSelectedPackage(null)

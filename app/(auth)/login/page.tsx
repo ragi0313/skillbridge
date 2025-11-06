@@ -11,11 +11,14 @@ import SignupHeader from "@/components/register/SignupHeader";
 import Link from "next/link";
 import { usePasswordVisibility } from "@/app/hooks/usePasswordVisibility";
 import { toast } from "@/lib/toast";
+import { TwoFactorVerification } from "@/components/auth/TwoFactorVerification";
 
 const Login = () => {
   const [formData, setFormData] = useState({ email: "", password: "" })
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
+  const [show2FA, setShow2FA] = useState(false)
+  const [twoFASessionToken, setTwoFASessionToken] = useState("")
   const router = useRouter()
   const { showPassword, togglePassword } = usePasswordVisibility()
 
@@ -139,6 +142,17 @@ const Login = () => {
         throw new Error(data.message || data.error || "Invalid credentials")
       }
 
+      // Check if 2FA is required
+      if (data.status === "2fa_required") {
+        setTwoFASessionToken(data.sessionToken)
+        setShow2FA(true)
+        toast.success("✅ Verification code sent!", {
+          description: "Check your email for the verification code.",
+          duration: 3000,
+        })
+        return
+      }
+
       // Show success toast
       toast.success("✅ Login successful! Redirecting...", {
         duration: 2000,
@@ -166,6 +180,22 @@ const Login = () => {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  // Show 2FA verification if needed
+  if (show2FA) {
+    return (
+      <TwoFactorVerification
+        sessionToken={twoFASessionToken}
+        email={formData.email}
+        onSuccess={(role) => {
+          setTimeout(() => {
+            const destination = role === "admin" ? "/admin/dashboard" : `/${role}`
+            router.replace(destination)
+          }, 500)
+        }}
+      />
+    )
   }
 
   return (

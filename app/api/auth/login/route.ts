@@ -10,6 +10,7 @@ import { compare } from "bcryptjs"
 import { sign } from "jsonwebtoken"
 import { sendBlacklistNotificationEmail, sendSuspensionNotificationEmail } from "@/lib/email/userRestrictionMail"
 import { logUserAction, AUDIT_ACTIONS, ENTITY_TYPES, extractRequestInfo } from "@/lib/admin/audit-log"
+import { is2FAEnabled, create2FACode } from "@/lib/auth/two-factor-service"
 
 const withTimeout = <T>(promise: Promise<T>, ms: number): Promise<T> => {
   return Promise.race([
@@ -154,6 +155,31 @@ async function handleLogin(req: NextRequest) {
           })
           .where(eq(users.id, user.id))
       }
+    }
+
+    // Check if 2FA is enabled for this user
+    const twoFactorEnabled = await is2FAEnabled(user.id)
+
+    if (twoFactorEnabled) {
+      // Create and send 2FA code
+      const codeResult = await create2FACode(user.id)
+
+      if (!codeResult.success || !codeResult.sessionToken) {
+        return NextResponse.json(
+          { error: codeResult.error || "Failed to send verification code" },
+          { status: 500 }
+        )
+      }
+
+      // Return response indicating 2FA is required
+      return NextResponse.json(
+        {
+          status: "2fa_required",
+          sessionToken: codeResult.sessionToken,
+          message: "A verification code has been sent to your email"
+        },
+        { status: 200 }
+      )
     }
 
     if (user.status !== "online") {

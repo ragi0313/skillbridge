@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import type { z } from "zod"
@@ -10,12 +10,13 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Switch } from "@/components/ui/switch"
 import { toast } from "sonner"
 import { learnerProfileUpdateSchema } from "@/db/settings"
 import countries from "world-countries"
 import { commonTimeZones } from "@/lib/timeZones"
 import ProfilePictureUpload from "@/components/register/ProfilePictureUpload"
-import { Loader2, Save } from "lucide-react"
+import { Loader2, Save, Shield } from "lucide-react"
 
 type LearnerProfileUpdateFormValues = z.infer<typeof learnerProfileUpdateSchema>
 
@@ -35,6 +36,10 @@ interface LearnerSettingsFormProps {
 
 export function LearnerSettingsForm({ initialData }: LearnerSettingsFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [is2FAEnabled, setIs2FAEnabled] = useState(false)
+  const [is2FALoading, setIs2FALoading] = useState(true)
+  const [is2FAToggling, setIs2FAToggling] = useState(false)
+
   // Philippines-only platform, so limit country options to Philippines
   const countryOptions = countries
     .filter((country) => country.cca2 === "PH") // Only Philippines
@@ -42,6 +47,25 @@ export function LearnerSettingsForm({ initialData }: LearnerSettingsFormProps) {
       value: country.cca2,
       label: country.name.common,
     }))
+
+  // Fetch 2FA status on component mount
+  useEffect(() => {
+    const fetch2FAStatus = async () => {
+      try {
+        const response = await fetch("/api/auth/2fa/status")
+        if (response.ok) {
+          const data = await response.json()
+          setIs2FAEnabled(data.isEnabled)
+        }
+      } catch (error) {
+        console.error("Error fetching 2FA status:", error)
+      } finally {
+        setIs2FALoading(false)
+      }
+    }
+
+    fetch2FAStatus()
+  }, [])
 
   const form = useForm<LearnerProfileUpdateFormValues>({
     resolver: zodResolver(learnerProfileUpdateSchema),
@@ -93,6 +117,37 @@ export function LearnerSettingsForm({ initialData }: LearnerSettingsFormProps) {
     setIsSubmitting(false)
   }
 }
+
+  const handle2FAToggle = async (enabled: boolean) => {
+    setIs2FAToggling(true)
+    try {
+      const endpoint = enabled ? "/api/auth/2fa/enable" : "/api/auth/2fa/disable"
+      const response = await fetch(endpoint, {
+        method: "POST",
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || `Failed to ${enabled ? "enable" : "disable"} 2FA`)
+      }
+
+      setIs2FAEnabled(enabled)
+      toast.success(enabled ? "Two-factor authentication enabled" : "Two-factor authentication disabled", {
+        description: enabled
+          ? "You will receive a verification code via email on your next login."
+          : "You will no longer need a verification code to login.",
+        duration: 4000,
+      })
+    } catch (error: any) {
+      toast.error("Error", {
+        description: error.message || "An unexpected error occurred.",
+      })
+      // Revert toggle on error
+      setIs2FAEnabled(!enabled)
+    } finally {
+      setIs2FAToggling(false)
+    }
+  }
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
@@ -288,6 +343,35 @@ export function LearnerSettingsForm({ initialData }: LearnerSettingsFormProps) {
                 <p className="text-red-500 text-sm mt-1">{errors.socialLinks.website.message}</p>
               )}
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Security Section */}
+      <Card className="shadow-lg border-0">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Shield className="h-5 w-5 text-blue-600" />
+            Security
+          </CardTitle>
+          <CardDescription>Manage your account security settings.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between p-4 border rounded-lg bg-gray-50">
+            <div className="space-y-1">
+              <Label htmlFor="2fa-toggle" className="text-sm font-medium text-gray-900 cursor-pointer">
+                Two-Factor Authentication
+              </Label>
+              <p className="text-sm text-gray-500">
+                Receive a verification code via email when signing in
+              </p>
+            </div>
+            <Switch
+              id="2fa-toggle"
+              checked={is2FAEnabled}
+              onCheckedChange={handle2FAToggle}
+              disabled={is2FALoading || is2FAToggling}
+            />
           </div>
         </CardContent>
       </Card>

@@ -38,9 +38,13 @@ async function handleCheckout(req: NextRequest): Promise<NextResponse> {
 
   // Get base URL from environment or construct from request headers
   const getBaseUrl = () => {
-    // First priority: NEXT_PUBLIC_BASE_URL from env
+    // First priority: NEXT_PUBLIC_BASE_URL from env (but not if it's localhost in production)
     if (process.env.NEXT_PUBLIC_BASE_URL) {
-      return process.env.NEXT_PUBLIC_BASE_URL
+      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL
+      // Don't use localhost URL in production
+      if (!baseUrl.includes('localhost') && !baseUrl.includes('127.0.0.1')) {
+        return baseUrl
+      }
     }
 
     // Second priority: Construct from request headers
@@ -50,13 +54,13 @@ async function handleCheckout(req: NextRequest): Promise<NextResponse> {
     if (host) {
       // Avoid localhost in production
       if (host.includes('localhost') || host.includes('127.0.0.1')) {
-        return 'https://bridgementor.vercel.app' // Your production domain
+        return 'https://skillbridge-2m1e.vercel.app' // Your production domain
       }
       return `${protocol}://${host}`
     }
 
     // Fallback to production domain
-    return 'https://bridgementor.vercel.app'
+    return 'https://skillbridge-2m1e.vercel.app'
   }
 
   const baseUrl = getBaseUrl()

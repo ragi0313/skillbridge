@@ -692,4 +692,29 @@ export const refundRequests = pgTable("refund_requests", {
   createdAtIdx: index("refund_requests_created_at_idx").on(table.createdAt),
 }))
 
+// TWO-FACTOR AUTHENTICATION TABLES
+export const twoFactorSettings = pgTable("two_factor_settings", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().unique().references(() => users.id, { onDelete: "cascade" }),
+  isEnabled: boolean("is_enabled").default(false).notNull(),
+  lastVerifiedAt: timestamp("last_verified_at", { withTimezone: true }),
+  ...timestamps,
+}, (table) => ({
+  userIdIdx: index("two_factor_settings_user_id_idx").on(table.userId),
+}))
+
+export const twoFactorCodes = pgTable("two_factor_codes", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  code: varchar("code", { length: 6 }).notNull(), // 6-digit verification code
+  sessionToken: varchar("session_token", { length: 255 }).notNull().unique(), // Temporary token for 2FA login flow
+  attempts: integer("attempts").default(0).notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  isUsed: boolean("is_used").default(false).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+}, (table) => ({
+  sessionTokenIdx: index("two_factor_codes_session_token_idx").on(table.sessionToken),
+  userIdIdx: index("two_factor_codes_user_id_idx").on(table.userId),
+}))
+
 

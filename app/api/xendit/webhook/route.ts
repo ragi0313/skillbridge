@@ -98,6 +98,18 @@ export async function POST(req: Request) {
   if (eventType === "invoice.paid") {
     const metadata = invoice.metadata;
 
+    // Check if this is a test webhook from Xendit dashboard (no metadata)
+    if (!metadata || Object.keys(metadata).length === 0) {
+      console.log("[WEBHOOK TEST] Received test webhook from Xendit - no metadata present");
+      console.log("[WEBHOOK TEST] Invoice ID:", invoice.id);
+      console.log("[WEBHOOK TEST] External ID:", invoice.external_id || invoice.externalId);
+      console.log("[WEBHOOK TEST] This is expected for webhook testing. Real payments will include metadata.");
+      return NextResponse.json({
+        received: true,
+        message: "Test webhook received successfully. Real invoices will include user metadata."
+      });
+    }
+
     // SECURITY: Strict input validation
     const learnerIdStr = metadata?.userId;
     const creditsStr = metadata?.credits;
@@ -106,14 +118,14 @@ export async function POST(req: Request) {
     const learnerId = parseInt(learnerIdStr);
     if (!learnerIdStr || isNaN(learnerId) || learnerId <= 0) {
       console.error("[SECURITY] Invalid learnerId in webhook:", { metadata, learnerId: learnerIdStr });
-      return NextResponse.json({ error: "Invalid user ID" }, { status: 400 });
+      return NextResponse.json({ error: "Invalid user ID - metadata missing userId" }, { status: 400 });
     }
 
     // Validate credits is a valid positive number
     const credits = Number(creditsStr);
     if (!creditsStr || isNaN(credits) || credits <= 0 || !Number.isInteger(credits)) {
       console.error("[SECURITY] Invalid credits amount in webhook:", { metadata, credits: creditsStr });
-      return NextResponse.json({ error: "Invalid credits amount" }, { status: 400 });
+      return NextResponse.json({ error: "Invalid credits amount - metadata missing credits" }, { status: 400 });
     }
 
     // Validate invoice ID exists for idempotency check

@@ -51,6 +51,7 @@ export const useConversations = ({ userId, onError }: UseConversationsOptions = 
     if (!userId) {
       // Don't fetch if user is not authenticated
       setLoading(false)
+      setConversations([])
       return
     }
 
@@ -59,36 +60,34 @@ export const useConversations = ({ userId, onError }: UseConversationsOptions = 
     try {
       const response = await fetch('/api/chat/conversations')
 
+      // Always try to parse the response, even if not ok
+      const data = await response.json().catch(() => ({ conversations: [] }))
+
       if (!response.ok) {
-        // Handle 401 (unauthorized) silently for unauthenticated users
-        if (response.status === 401) {
-          setLoading(false)
-          return
-        }
-        throw new Error('Failed to fetch conversations')
+        console.log('Conversations fetch returned non-OK status:', response.status, data)
+        // Still set whatever conversations we got (likely empty array)
+        setConversations(data.conversations || [])
+        setLoading(false)
+        return
       }
 
-      const data = await response.json()
       // API now returns empty array on errors instead of throwing
       // So we can safely set conversations without showing error toast
       setConversations(data.conversations || [])
       setLastFetch(Date.now())
     } catch (error) {
       console.error('Error fetching conversations:', error)
-      // Only show error for actual network failures, not API errors
-      if (error instanceof TypeError) {
-        // Network error - don't show toast to avoid spam
-        onError?.('Network error')
-      } else {
-        // Other errors - log but don't show toast since API handles gracefully
-        onError?.('Failed to load conversations')
+      // Only show error for actual network failures
+      if (error instanceof TypeError || error instanceof SyntaxError) {
+        // Network error or JSON parse error - don't show toast to avoid spam
+        console.log('Network or parse error - suppressing error toast')
       }
       // Set empty array on error
       setConversations([])
     } finally {
       setLoading(false)
     }
-  }, [onError, userId])
+  }, [userId])
 
   // Create or get a conversation
   const createConversation = useCallback(async (

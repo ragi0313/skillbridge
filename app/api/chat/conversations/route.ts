@@ -63,20 +63,25 @@ const rateLimitedGET = withRateLimit('api', async (request: NextRequest) => {
   try {
     user = await getSession()
     if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      console.log('[CONVERSATIONS API] No session found - user not authenticated')
+      // Return empty array with 200 status instead of 401 to prevent UI errors
+      return NextResponse.json({ conversations: [], error: 'Not authenticated' }, { status: 200 })
     }
 
     // Only mentors and learners should have conversations
     if (user.role !== 'mentor' && user.role !== 'learner') {
+      console.log('[CONVERSATIONS API] User role not allowed for chat:', user.role)
       return NextResponse.json({ conversations: [] })
     }
 
+    console.log('[CONVERSATIONS API] Fetching conversations for user:', user.id, 'role:', user.role)
     const conversations = await ChatService.getUserConversations(user.id)
+    console.log('[CONVERSATIONS API] Found', conversations.length, 'conversations')
     return NextResponse.json({ conversations })
   } catch (error) {
-    console.error('Error fetching conversations for user:', user?.id, 'role:', user?.role, error)
+    console.error('[CONVERSATIONS API ERROR] Error fetching conversations for user:', user?.id, 'role:', user?.role, error)
     // Return empty array instead of error to prevent UI toast spam
-    return NextResponse.json({ conversations: [] })
+    return NextResponse.json({ conversations: [], error: 'Failed to load conversations' }, { status: 200 })
   }
 })
 

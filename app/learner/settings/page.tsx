@@ -43,7 +43,7 @@ export default function LearnerSettingsPage() {
       }
 
       const data = await response.json()
-      const learner = data.learner
+      const learner = data  // API returns learner data directly, not wrapped
 
       // Parse socialLinks if it exists
       let socialLinks = null

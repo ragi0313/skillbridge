@@ -40,11 +40,11 @@ export function ProfileSection({ initialData }: ProfileSectionProps) {
   )
 
   const countryOptions = countries
+    .filter((country) => country.cca2 === "PH")
     .map((country) => ({
       value: country.cca2,
       label: country.name.common,
     }))
-    .sort((a, b) => a.label.localeCompare(b.label))
 
   const {
     register,
@@ -142,11 +142,12 @@ export function ProfileSection({ initialData }: ProfileSectionProps) {
             <div>
               <Label htmlFor="country">Country</Label>
               <Select
-                value={watchedCountry}
+                value={watchedCountry || "PH"}
                 onValueChange={(value) => setValue("country", value)}
+                disabled
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select country" />
+                  <SelectValue placeholder="Philippines" />
                 </SelectTrigger>
                 <SelectContent>
                   {countryOptions.map((country) => (
@@ -156,9 +157,7 @@ export function ProfileSection({ initialData }: ProfileSectionProps) {
                   ))}
                 </SelectContent>
               </Select>
-              {errors.country && (
-                <p className="text-sm text-red-600 mt-1">{errors.country.message}</p>
-              )}
+              <p className="text-xs text-gray-500 mt-1">Service available in Philippines only</p>
             </div>
 
             <div>

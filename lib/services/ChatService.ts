@@ -198,21 +198,33 @@ export class ChatService {
 
   static async getUserConversations(userId: number): Promise<ConversationWithParticipants[]> {
     try {
+      console.log('[ChatService] Getting conversations for userId:', userId)
+
       // Get ALL user's conversations (including soft-deleted ones)
       const mentorConversations = await db.select()
         .from(conversations)
         .innerJoin(mentors, eq(conversations.mentorId, mentors.id))
         .where(eq(mentors.userId, userId))
+        .catch(err => {
+          console.error('[ChatService] Error fetching mentor conversations:', err)
+          return []
+        })
 
       const learnerConversations = await db.select()
         .from(conversations)
         .innerJoin(learners, eq(conversations.learnerId, learners.id))
         .where(eq(learners.userId, userId))
+        .catch(err => {
+          console.error('[ChatService] Error fetching learner conversations:', err)
+          return []
+        })
 
       const allConversationIds = [
         ...mentorConversations.map(c => c.conversations.id),
         ...learnerConversations.map(c => c.conversations.id)
       ]
+
+      console.log('[ChatService] Found', allConversationIds.length, 'conversations')
 
       const result: ConversationWithParticipants[] = []
       for (const conversationId of allConversationIds) {

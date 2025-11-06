@@ -58,7 +58,7 @@ const rateLimitedPOST = withRateLimit('api', async (request: NextRequest) => {
 })
 
 // Apply rate limiting to conversation fetching
-const rateLimitedGET = withRateLimit('api', async (request: NextRequest) => {
+const rateLimitedGET = async (request: NextRequest) => {
   let user = null
   try {
     user = await getSession()
@@ -71,19 +71,37 @@ const rateLimitedGET = withRateLimit('api', async (request: NextRequest) => {
     // Only mentors and learners should have conversations
     if (user.role !== 'mentor' && user.role !== 'learner') {
       console.log('[CONVERSATIONS API] User role not allowed for chat:', user.role)
-      return NextResponse.json({ conversations: [] })
+      return NextResponse.json({ conversations: [] }, { status: 200 })
     }
 
     console.log('[CONVERSATIONS API] Fetching conversations for user:', user.id, 'role:', user.role)
-    const conversations = await ChatService.getUserConversations(user.id)
-    console.log('[CONVERSATIONS API] Found', conversations.length, 'conversations')
-    return NextResponse.json({ conversations })
-  } catch (error) {
-    console.error('[CONVERSATIONS API ERROR] Error fetching conversations for user:', user?.id, 'role:', user?.role, error)
-    // Return empty array instead of error to prevent UI toast spam
-    return NextResponse.json({ conversations: [], error: 'Failed to load conversations' }, { status: 200 })
+
+    try {
+      const conversations = await ChatService.getUserConversations(user.id)
+      console.log('[CONVERSATIONS API] Found', conversations.length, 'conversations')
+      return NextResponse.json({ conversations }, { status: 200 })
+    } catch (serviceError) {
+      console.error('[CONVERSATIONS API] ChatService error:', serviceError)
+      // Return empty array on service error
+      return NextResponse.json({
+        conversations: [],
+        error: 'Service temporarily unavailable'
+      }, { status: 200 })
+    }
+  } catch (error: any) {
+    console.error('[CONVERSATIONS API ERROR] Unhandled error:', {
+      user: user?.id,
+      role: user?.role,
+      error: error?.message || error,
+      stack: error?.stack
+    })
+    // Always return 200 with empty array to prevent client errors
+    return NextResponse.json({
+      conversations: [],
+      error: 'An error occurred while loading conversations'
+    }, { status: 200 })
   }
-})
+}
 
 export const POST = rateLimitedPOST
 export const GET = rateLimitedGET

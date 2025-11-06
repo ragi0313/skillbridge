@@ -64,7 +64,15 @@ export function MessageLearnerButton({
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
         console.error('MessageLearnerButton: Error response:', errorData)
-        throw new Error(errorData.error || 'Failed to create conversation')
+
+        // Better error messages for debugging
+        if (response.status === 403) {
+          throw new Error('You do not have permission to start conversations. Please ensure you are logged in as a mentor.')
+        } else if (response.status === 500) {
+          throw new Error('Server error. Please try again in a moment.')
+        } else {
+          throw new Error(errorData.error || `Failed to create conversation (${response.status})`)
+        }
       }
 
       const data = await response.json()

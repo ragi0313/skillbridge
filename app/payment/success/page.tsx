@@ -20,6 +20,9 @@ export default function PaymentSuccessPage() {
         const externalId = searchParams.get("external_id")
         const invoiceId = searchParams.get("invoice_id")
 
+        console.log("[PAYMENT SUCCESS] External ID:", externalId)
+        console.log("[PAYMENT SUCCESS] Invoice ID:", invoiceId)
+
         if (!externalId && !invoiceId) {
           // Generic success page without specific invoice details
           setStatus("success")
@@ -28,22 +31,47 @@ export default function PaymentSuccessPage() {
         }
 
         // Wait a moment for webhook to process
-        await new Promise(resolve => setTimeout(resolve, 2000))
+        console.log("[PAYMENT SUCCESS] Waiting for webhook to process...")
+        await new Promise(resolve => setTimeout(resolve, 3000))
 
         // Check if credits were added by fetching user profile
+        console.log("[PAYMENT SUCCESS] Checking credit balance...")
         const response = await fetch("/api/learner/me")
         if (response.ok) {
           const userData = await response.json()
+          console.log("[PAYMENT SUCCESS] Current credits:", userData.learner?.creditsBalance)
           setCredits(userData.learner?.creditsBalance || null)
-          setStatus("success")
-          setMessage("Your credits have been added successfully!")
+
+          // Check recent purchases to see if webhook processed
+          const purchasesResponse = await fetch("/api/debug/recent-purchases")
+          if (purchasesResponse.ok) {
+            const purchasesData = await purchasesResponse.json()
+            console.log("[PAYMENT SUCCESS] Recent purchases:", purchasesData)
+
+            // Check if this invoice was processed
+            const processed = purchasesData.recentPurchases?.some(
+              (p: any) => p.externalId === externalId || p.xenditInvoiceId === invoiceId
+            )
+
+            if (processed) {
+              setStatus("success")
+              setMessage("Your credits have been added successfully!")
+            } else {
+              setStatus("pending")
+              setMessage("Payment confirmed! Credits are being processed and will appear shortly.")
+              console.warn("[PAYMENT SUCCESS] Invoice not found in recent purchases - webhook may not have fired yet")
+            }
+          } else {
+            setStatus("pending")
+            setMessage("Payment confirmed! Credits are being processed.")
+          }
         } else {
           // Still processing
           setStatus("pending")
           setMessage("Your payment is being processed. Credits will be added shortly.")
         }
       } catch (error) {
-        console.error("Error checking payment status:", error)
+        console.error("[PAYMENT SUCCESS ERROR]", error)
         setStatus("pending")
         setMessage("Your payment is being processed. Please check your dashboard in a few moments.")
       }

@@ -8,7 +8,7 @@ import { sendSupportTicketReply } from '@/lib/email/supportTicketMail'
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // Check if user is admin
@@ -17,7 +17,8 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const ticketId = parseInt(params.id)
+    const { id } = await params
+    const ticketId = parseInt(id)
     if (isNaN(ticketId)) {
       return NextResponse.json({ error: 'Invalid ticket ID' }, { status: 400 })
     }

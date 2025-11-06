@@ -4,16 +4,16 @@ import { Xendit } from "xendit-node";
 import { db } from "@/db";
 import { learners, creditPurchases, creditTransactions } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
-import crypto from "crypto";
 import { logUserAction, AUDIT_ACTIONS, ENTITY_TYPES } from "@/lib/admin/audit-log";
 
 const xendit = new Xendit({ 
   secretKey: process.env.XENDIT_SECRET_KEY! 
 });
 
-function verifyXenditWebhook(rawBody: string, signature: string, webhookToken: string): boolean {
-  const hash = crypto.createHmac('sha256', webhookToken).update(rawBody).digest('hex');
-  return hash === signature;
+function verifyXenditWebhook(callbackToken: string, webhookToken: string): boolean {
+  // For Xendit invoices, the X-CALLBACK-TOKEN header contains the webhook token directly
+  // No HMAC signature - just a simple token comparison
+  return callbackToken === webhookToken;
 }
 
 export async function POST(req: Request) {
@@ -32,7 +32,7 @@ export async function POST(req: Request) {
     return new NextResponse("Server configuration error", { status: 500 });
   }
 
-  const isValidSignature = verifyXenditWebhook(body, signature, process.env.XENDIT_WEBHOOK_TOKEN);
+  const isValidSignature = verifyXenditWebhook(signature, process.env.XENDIT_WEBHOOK_TOKEN);
 
   if (!isValidSignature) {
     console.error("[SECURITY] Webhook signature verification failed - potential webhook forgery attempt", {
@@ -64,9 +64,38 @@ export async function POST(req: Request) {
     return new NextResponse("Invalid JSON", { status: 400 });
   }
 
+  // Xendit sends webhooks in two formats:
+  // 1. New format: { event: "invoice.paid", data: {...} }
+  // 2. Legacy format: { status: "PAID", ... } (direct invoice object)
+
+  let invoice;
+  let eventType;
+
+  // Check if it's the new event-based format or legacy direct format
+  if (event.event) {
+    // New format
+    eventType = event.event;
+    invoice = event.data;
+    console.log(`[WEBHOOK] Received event (new format): ${eventType}`);
+  } else if (event.status) {
+    // Legacy format - invoice sent directly
+    invoice = event;
+    // Map status to event type
+    if (invoice.status === "PAID") {
+      eventType = "invoice.paid";
+    } else if (invoice.status === "EXPIRED") {
+      eventType = "invoice.expired";
+    } else {
+      eventType = `invoice.${invoice.status?.toLowerCase()}`;
+    }
+    console.log(`[WEBHOOK] Received invoice (legacy format) with status: ${invoice.status} → ${eventType}`);
+  } else {
+    console.error("[WEBHOOK] Unknown webhook format:", event);
+    return NextResponse.json({ error: "Unknown webhook format" }, { status: 400 });
+  }
+
   // Handle invoice paid event
-  if (event.event === "invoice.paid") {
-    const invoice = event.data;
+  if (eventType === "invoice.paid") {
     const metadata = invoice.metadata;
 
     // SECURITY: Strict input validation
@@ -194,26 +223,27 @@ export async function POST(req: Request) {
           severity: "info",
         })
       });
+
+      console.log(`[WEBHOOK SUCCESS] ✅ Added ${credits} credits to user ${learnerId} (Invoice: ${invoice.id})`);
     } catch (error) {
-      console.error("Failed to process Xendit credit purchase:", error);
+      console.error("[WEBHOOK ERROR] Failed to process Xendit credit purchase:", error);
       return NextResponse.json({ error: "Purchase processing failed" }, { status: 500 });
     }
   }
 
   // Handle invoice expired event
-  if (event.event === "invoice.expired") {
-    const invoice = event.data;
+  if (eventType === "invoice.expired") {
     const metadata = invoice.metadata;
     const learnerId = metadata?.userId;
 
     if (learnerId) {
       try {
-        // Update any pending credit purchase records to failed
+        // Update any pending credit purchase records to cancelled
         await db
           .update(creditPurchases)
-          .set({ 
+          .set({
             paymentStatus: 'cancelled',
-            webhookData: event 
+            webhookData: event
           })
           .where(eq(creditPurchases.externalId, invoice.externalId || invoice.external_id));
 
@@ -224,8 +254,7 @@ export async function POST(req: Request) {
   }
 
   // Handle invoice payment failed event
-  if (event.event === "invoice.payment_failed") {
-    const invoice = event.data;
+  if (eventType === "invoice.payment_failed" || eventType === "invoice.failed") {
     const metadata = invoice.metadata;
     const learnerId = metadata?.userId;
 
@@ -234,9 +263,9 @@ export async function POST(req: Request) {
         // Update credit purchase record to failed
         await db
           .update(creditPurchases)
-          .set({ 
+          .set({
             paymentStatus: 'failed',
-            webhookData: event 
+            webhookData: event
           })
           .where(eq(creditPurchases.externalId, invoice.externalId || invoice.external_id));
 

@@ -63,7 +63,7 @@ const nextConfig: NextConfig = {
   experimental: {
     optimizePackageImports: ['agora-rtc-sdk-ng']
   },
-  serverExternalPackages: ['jsonwebtoken', 'ioredis', 'bullmq', 'jsdom', 'dompurify', 'isomorphic-dompurify'],
+  serverExternalPackages: ['jsonwebtoken', 'ioredis', 'bullmq'],
 
   // Security: Configure request body size limits
   async headers() {

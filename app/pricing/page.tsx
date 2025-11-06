@@ -2,10 +2,59 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { Loader2, CreditCard, Check, Zap, TrendingUp, Target } from "lucide-react"
+import { Loader2, CreditCard, Check, Zap, TrendingUp, Target, FlaskConical } from "lucide-react"
 import { creditPackages } from "@/lib/payments/creditPackages"
 import UnifiedHeader from "@/components/UnifiedHeader"
 import { Footer } from "@/components/landing/Footer"
+
+// Test mode component
+function TestModeButton({ packageId, credits }: { packageId: string; credits: number }) {
+  const [loading, setLoading] = useState(false)
+
+  const handleTestPurchase = async () => {
+    setLoading(true)
+    try {
+      const response = await fetch("/api/dev/add-credits", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ credits, packageId })
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to add credits")
+      }
+
+      alert(`✅ Test Mode: ${credits} credits added! New balance: ${data.newBalance}`)
+      setTimeout(() => window.location.reload(), 1000)
+    } catch (error: any) {
+      alert(`❌ Error: ${error.message}`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <button
+      onClick={handleTestPurchase}
+      disabled={loading}
+      className="w-full mt-2 py-2 px-4 rounded-lg bg-yellow-100 hover:bg-yellow-200 text-yellow-800 border border-yellow-300 text-sm font-medium transition-colors flex items-center justify-center gap-2"
+    >
+      {loading ? (
+        <>
+          <Loader2 className="w-4 h-4 animate-spin" />
+          Adding...
+        </>
+      ) : (
+        <>
+          <FlaskConical className="w-4 h-4" />
+          Test Mode: Add {credits} Credits
+        </>
+      )}
+    </button>
+  )
+}
 
 type SessionUser = {
   id: number
@@ -262,6 +311,11 @@ export default function PricingPage() {
                   >
                     {getButtonContent(pack)}
                   </button>
+
+                  {/* Test Mode Button - Only show for logged-in learners */}
+                  {session && session.role === "learner" && (
+                    <TestModeButton packageId={pack.id} credits={pack.credits} />
+                  )}
                 </div>
               </div>
             ))}

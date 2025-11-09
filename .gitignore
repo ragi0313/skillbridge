@@ -43,3 +43,13 @@ next-env.d.ts
 # documentation (exclude all MD files except README)
 *.md
 !README.md
+
+# scripts directory (database seeds, migrations, etc.)
+/scripts/
+
+# test files
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
+**/__tests__/

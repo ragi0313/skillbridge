@@ -18,7 +18,6 @@ interface AdminUser {
   lastName: string
   email: string
   role: string
-  status: string
   lastLoginAt: string | null
   suspendedAt: string | null
   suspensionEndsAt: string | null
@@ -39,7 +38,6 @@ export default function UserManagement() {
   const [users, setUsers] = useState<AdminUser[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
-  const [statusFilter, setStatusFilter] = useState("all")
   const [roleFilter, setRoleFilter] = useState("all")
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null)
   const [actionDialog, setActionDialog] = useState<{ open: boolean; type: "suspend" | "blacklist" | null }>({
@@ -96,7 +94,7 @@ export default function UserManagement() {
     }
   }
 
-  const getStatusBadge = (user: AdminUser) => {
+  const getAccountStatusBadge = (user: AdminUser) => {
     if (user.blacklistedAt) {
       return (
         <Badge variant="destructive" className="flex items-center gap-1">
@@ -115,24 +113,12 @@ export default function UserManagement() {
       )
     }
 
-    switch (user.status) {
-      case "online":
-        return (
-          <Badge variant="default" className="flex items-center gap-1 bg-green-100 text-green-800">
-            <CheckCircle className="w-3 h-3" />
-            Online
-          </Badge>
-        )
-      case "offline":
-        return (
-          <Badge variant="outline" className="flex items-center gap-1">
-            <Calendar className="w-3 h-3" />
-            Offline
-          </Badge>
-        )
-      default:
-        return <Badge variant="outline">{user.status}</Badge>
-    }
+    return (
+      <Badge variant="default" className="flex items-center gap-1 bg-green-100 text-green-800">
+        <CheckCircle className="w-3 h-3" />
+        Active
+      </Badge>
+    )
   }
 
   const getRoleBadge = (role: string) => {
@@ -156,17 +142,9 @@ export default function UserManagement() {
       user.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       user.email.toLowerCase().includes(searchTerm.toLowerCase())
 
-    const matchesStatus =
-      statusFilter === "all" ||
-      user.status === statusFilter ||
-      (statusFilter === "suspended" &&
-        user.suspendedAt &&
-        (!user.suspensionEndsAt || new Date(user.suspensionEndsAt) > new Date())) ||
-      (statusFilter === "blacklisted" && user.blacklistedAt)
-
     const matchesRole = roleFilter === "all" || user.role === roleFilter
 
-    return matchesSearch && matchesStatus && matchesRole
+    return matchesSearch && matchesRole
   })
 
   const openActionDialog = (user: AdminUser, type: "suspend" | "blacklist") => {
@@ -224,18 +202,6 @@ export default function UserManagement() {
                 />
               </div>
             </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-full sm:w-48">
-                <SelectValue placeholder="Filter by status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="online">Online</SelectItem>
-                <SelectItem value="offline">Offline</SelectItem>
-                <SelectItem value="suspended">Suspended</SelectItem>
-                <SelectItem value="blacklisted">Blacklisted</SelectItem>
-              </SelectContent>
-            </Select>
             <Select value={roleFilter} onValueChange={setRoleFilter}>
               <SelectTrigger className="w-full sm:w-48">
                 <SelectValue placeholder="Filter by role" />
@@ -268,7 +234,7 @@ export default function UserManagement() {
                   <TableRow>
                     <TableHead>User</TableHead>
                     <TableHead>Role</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableHead>Account Status</TableHead>
                     <TableHead>Last Login</TableHead>
                     <TableHead>Joined</TableHead>
                     <TableHead>Actions</TableHead>
@@ -286,7 +252,7 @@ export default function UserManagement() {
                         </div>
                       </TableCell>
                       <TableCell>{getRoleBadge(user.role)}</TableCell>
-                      <TableCell>{getStatusBadge(user)}</TableCell>
+                      <TableCell>{getAccountStatusBadge(user)}</TableCell>
                       <TableCell>
                         {user.lastLoginAt ? (
                           <div className="flex items-center gap-1 text-sm">

@@ -110,6 +110,18 @@ export async function POST(req: Request) {
       });
     }
 
+    // DEMO MODE: Skip webhook processing if this is a demo purchase
+    // Credits were already added in the checkout endpoint
+    if (metadata.demoMode === 'true') {
+      console.log("[WEBHOOK DEMO MODE] Skipping processing - credits already added in checkout");
+      console.log("[WEBHOOK DEMO MODE] Invoice ID:", invoice.id);
+      console.log("[WEBHOOK DEMO MODE] User ID:", metadata.userId);
+      return NextResponse.json({
+        received: true,
+        message: "Demo mode webhook - credits already processed in checkout"
+      });
+    }
+
     // SECURITY: Strict input validation
     const learnerIdStr = metadata?.userId;
     const creditsStr = metadata?.credits;

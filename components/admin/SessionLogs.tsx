@@ -205,6 +205,7 @@ export default function SessionLogs() {
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-2">
           <Video className="w-6 h-6 text-gray-600" />
@@ -216,62 +217,57 @@ export default function SessionLogs() {
         </Button>
       </div>
 
-      {/* Filters */}
+      {/* Sessions List with Inline Filters */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center space-x-2">
-            <Filter className="w-5 h-5" />
-            <span>Filters</span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="md:col-span-2">
-              <Input
-                placeholder="Search mentor, learner, or skill..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                onKeyPress={(e) => e.key === "Enter" && handleSearch()}
-              />
-            </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger>
-                <SelectValue placeholder="All Statuses" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Statuses</SelectItem>
-                <SelectItem value="ongoing">Ongoing</SelectItem>
-                <SelectItem value="completed">Completed</SelectItem>
-                <SelectItem value="cancelled">Cancelled</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="both_no_show">No Shows</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={dateRange} onValueChange={setDateRange}>
-              <SelectTrigger>
-                <SelectValue placeholder="Time Range" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="1">Last 24 hours</SelectItem>
-                <SelectItem value="7">Last 7 days</SelectItem>
-                <SelectItem value="30">Last 30 days</SelectItem>
-                <SelectItem value="90">Last 90 days</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="mt-4">
-            <Button onClick={handleSearch} className="flex items-center space-x-2">
-              <Search className="w-4 h-4" />
-              <span>Search</span>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+          <div className="flex flex-col gap-4">
+            <CardTitle>Session History</CardTitle>
 
-      {/* Sessions List */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Session History</CardTitle>
+            {/* Inline Filters */}
+            <div className="flex flex-col lg:flex-row gap-3">
+              <div className="flex-1 flex gap-2">
+                <Input
+                  placeholder="Search mentor, learner, or skill..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onKeyPress={(e) => e.key === "Enter" && handleSearch()}
+                  className="flex-1"
+                />
+                <Button onClick={handleSearch} className="flex items-center gap-2 shrink-0">
+                  <Search className="w-4 h-4" />
+                  <span>Search</span>
+                </Button>
+              </div>
+
+              <div className="flex gap-2">
+                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                  <SelectTrigger className="w-[160px]">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Statuses</SelectItem>
+                    <SelectItem value="ongoing">Ongoing</SelectItem>
+                    <SelectItem value="completed">Completed</SelectItem>
+                    <SelectItem value="cancelled">Cancelled</SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="both_no_show">No Shows</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Select value={dateRange} onValueChange={setDateRange}>
+                  <SelectTrigger className="w-[160px]">
+                    <SelectValue placeholder="Time Range" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">Last 24 hours</SelectItem>
+                    <SelectItem value="7">Last 7 days</SelectItem>
+                    <SelectItem value="30">Last 30 days</SelectItem>
+                    <SelectItem value="90">Last 90 days</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           {loading ? (

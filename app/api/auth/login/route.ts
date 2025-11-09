@@ -146,7 +146,6 @@ async function handleLogin(req: NextRequest) {
         await db
           .update(users)
           .set({
-            status: "online",
             suspendedAt: null,
             suspensionEndsAt: null,
             suspensionReason: null,
@@ -182,24 +181,14 @@ async function handleLogin(req: NextRequest) {
       )
     }
 
-    if (user.status !== "online") {
-      await db
-        .update(users)
-        .set({
-          status: "online",
-          lastLoginAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .where(eq(users.id, user.id))
-    } else {
-      await db
-        .update(users)
-        .set({
-          lastLoginAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .where(eq(users.id, user.id))
-    }
+    // Update last login timestamp
+    await db
+      .update(users)
+      .set({
+        lastLoginAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, user.id))
 
     // Get profile picture URL based on user role
     let profilePictureUrl = null

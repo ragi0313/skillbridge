@@ -556,7 +556,6 @@ export const users = pgTable("users", {
 	email: varchar({ length: 255 }).notNull(),
 	hashedPassword: varchar("hashed_password", { length: 255 }).notNull(),
 	role: varchar({ length: 20 }).notNull(),
-	status: varchar({ length: 20 }).default('offline').notNull(),
 	xenditAccountId: varchar("xendit_account_id", { length: 255 }),
 	xenditAccountStatus: varchar("xendit_account_status", { length: 50 }).default('none'),
 	preferredPaymentProvider: varchar("preferred_payment_provider", { length: 20 }).default('xendit'),

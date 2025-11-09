@@ -18,6 +18,7 @@ interface AdminUser {
   lastName: string
   email: string
   role: string
+  status: string
   lastLoginAt: string | null
   suspendedAt: string | null
   suspensionEndsAt: string | null
@@ -94,7 +95,7 @@ export default function UserManagement() {
     }
   }
 
-  const getAccountStatusBadge = (user: AdminUser) => {
+  const getStatusBadge = (user: AdminUser) => {
     if (user.blacklistedAt) {
       return (
         <Badge variant="destructive" className="flex items-center gap-1">
@@ -113,12 +114,24 @@ export default function UserManagement() {
       )
     }
 
-    return (
-      <Badge variant="default" className="flex items-center gap-1 bg-green-100 text-green-800">
-        <CheckCircle className="w-3 h-3" />
-        Active
-      </Badge>
-    )
+    switch (user.status) {
+      case "online":
+        return (
+          <Badge variant="default" className="flex items-center gap-1 bg-green-100 text-green-800">
+            <CheckCircle className="w-3 h-3" />
+            Online
+          </Badge>
+        )
+      case "offline":
+        return (
+          <Badge variant="outline" className="flex items-center gap-1">
+            <AlertTriangle className="w-3 h-3" />
+            Offline
+          </Badge>
+        )
+      default:
+        return <Badge variant="outline">{user.status}</Badge>
+    }
   }
 
   const getRoleBadge = (role: string) => {
@@ -234,7 +247,7 @@ export default function UserManagement() {
                   <TableRow>
                     <TableHead>User</TableHead>
                     <TableHead>Role</TableHead>
-                    <TableHead>Account Status</TableHead>
+                    <TableHead>Status</TableHead>
                     <TableHead>Last Login</TableHead>
                     <TableHead>Joined</TableHead>
                     <TableHead>Actions</TableHead>
@@ -252,7 +265,7 @@ export default function UserManagement() {
                         </div>
                       </TableCell>
                       <TableCell>{getRoleBadge(user.role)}</TableCell>
-                      <TableCell>{getAccountStatusBadge(user)}</TableCell>
+                      <TableCell>{getStatusBadge(user)}</TableCell>
                       <TableCell>
                         {user.lastLoginAt ? (
                           <div className="flex items-center gap-1 text-sm">

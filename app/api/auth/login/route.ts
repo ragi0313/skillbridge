@@ -146,6 +146,7 @@ async function handleLogin(req: NextRequest) {
         await db
           .update(users)
           .set({
+            status: "online",
             suspendedAt: null,
             suspensionEndsAt: null,
             suspensionReason: null,
@@ -181,10 +182,11 @@ async function handleLogin(req: NextRequest) {
       )
     }
 
-    // Update last login timestamp
+    // Set user status to online and update last login
     await db
       .update(users)
       .set({
+        status: "online",
         lastLoginAt: new Date(),
         updatedAt: new Date(),
       })

@@ -476,17 +476,20 @@ export function MiniChatBar({ user, className }: MiniChatBarProps) {
     const conversationsWithMessages = conversations.filter(conv => conv.lastMessageAt)
 
     return (
-      <div className="p-4">
-        <h3 className="font-semibold text-lg mb-4">Messages</h3>
-        <div className="space-y-3">
-          {conversationsWithMessages.length === 0 ? (
-            <div className="text-center text-gray-500 py-8">
-              <MessageCircle className="w-12 h-12 mx-auto mb-2 opacity-50" />
-              <p>No conversations yet</p>
-              <p className="text-xs mt-2">Start chatting with mentors or learners!</p>
-            </div>
-          ) : (
-            conversationsWithMessages.map((conversation) => {
+      <div className="flex flex-col h-full overflow-hidden">
+        <div className="p-4 border-b flex-shrink-0">
+          <h3 className="font-semibold text-lg">Messages</h3>
+        </div>
+        <ScrollArea className="flex-1 overflow-y-auto">
+          <div className="space-y-3 p-4">
+            {conversationsWithMessages.length === 0 ? (
+              <div className="text-center text-gray-500 py-8">
+                <MessageCircle className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                <p>No conversations yet</p>
+                <p className="text-xs mt-2">Start chatting with mentors or learners!</p>
+              </div>
+            ) : (
+              conversationsWithMessages.map((conversation) => {
             const otherParticipant = conversation.mentor.userId === user?.id
               ? conversation.learner
               : conversation.mentor
@@ -557,8 +560,9 @@ export function MiniChatBar({ user, className }: MiniChatBarProps) {
               </div>
             )
             })
-          )}
-        </div>
+            )}
+          </div>
+        </ScrollArea>
       </div>
     )
   }

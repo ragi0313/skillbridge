@@ -186,12 +186,6 @@ export default function LearnerMessagesPage() {
         <div className="p-6 border-b border-gray-200/50 bg-gradient-to-r from-blue-600 to-purple-600">
           <div className="flex items-center justify-between">
             <h1 className="text-xl font-bold text-white drop-shadow-sm">Messages</h1>
-            <div className="flex items-center space-x-2 bg-white/20 rounded-full px-3 py-1">
-              <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-400' : 'bg-red-400'}`}></div>
-              <span className="text-xs text-white/90 font-medium">
-                {isConnected ? 'Online' : 'Offline'}
-              </span>
-            </div>
           </div>
           {totalUnreadCount > 0 && (
             <div className="mt-3">

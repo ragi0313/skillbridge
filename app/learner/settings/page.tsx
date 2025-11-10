@@ -6,7 +6,6 @@ import { LearnerHeader } from "@/components/learner/Header"
 import { SettingsSidebar } from "@/components/learner/settings/SettingsSidebar"
 import { ProfileSection } from "@/components/learner/settings/ProfileSection"
 import { AuthenticationSection } from "@/components/learner/settings/AuthenticationSection"
-import { CreditPurchasesSection } from "@/components/learner/settings/CreditPurchasesSection"
 import { Loader2 } from "lucide-react"
 
 interface LearnerData {
@@ -116,7 +115,6 @@ export default function LearnerSettingsPage() {
           <div className="lg:col-span-3">
             {activeSection === "profile" && <ProfileSection initialData={learnerData} />}
             {activeSection === "authentication" && <AuthenticationSection />}
-            {activeSection === "purchases" && <CreditPurchasesSection />}
           </div>
         </div>
       </main>

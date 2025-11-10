@@ -13,20 +13,13 @@ import {
   Linkedin,
 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import BookingWidget from "@/components/mentors/BookingWidget"
 import UnifiedHeader from "@/components/UnifiedHeader"
 import { MessageMentorButtonWrapper as MessageMentorButton } from "@/components/mentors/MessageMentorButtonWrapper"
 import { getMentorById, type MentorData } from "@/lib/data/mentors"
 import { AboutSection } from "@/components/mentors/AboutSection"
 import { SkillsDisplay } from "@/components/mentors/SkillsDisplay"
+import { ReviewsSection } from "@/components/mentors/ReviewsSection"
 
 export default async function MentorProfilePage({
   params,
@@ -210,73 +203,7 @@ export default async function MentorProfilePage({
               </Card>
 
               {/* Reviews Section */}
-              <div>
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-2xl font-bold text-gray-900">Comments & Reviews</h2>
-                  <Select defaultValue="recommended">
-                    <SelectTrigger className="w-50">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="recommended">Sort by: Recommended</SelectItem>
-                      <SelectItem value="recent">Sort by: Most Recent</SelectItem>
-                      <SelectItem value="rating">Sort by: Highest Rating</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {reviews.length === 0 ? (
-                  <div className="border border-dashed border-gray-300 rounded-md p-8 text-center">
-                    <MessageCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">No reviews yet</h3>
-                  </div>
-                ) : (
-                  <div className="divide-y divide-gray-200">
-                    {reviews.map((review, index) => (
-                      <div key={index} className="py-6">
-                        <div className="flex items-start gap-4">
-                          <Avatar className="w-12 h-12">
-                            <AvatarImage 
-                              src={review.learnerProfilePictureUrl || ""} 
-                              alt={review.learnerName}
-                            />
-                            <AvatarFallback className="bg-gray-200 text-gray-600 font-medium">
-                              {review.learnerName.charAt(0).toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="flex-1">
-                            <div className="flex items-center gap-4 mb-2 flex-wrap">
-                              <h4 className="font-semibold text-gray-900">
-                                {review.learnerName}
-                              </h4>
-                              <div className="flex items-center gap-1">
-                                {[...Array(5)].map((_, i) => (
-                                  <Star
-                                    key={i}
-                                    className={`w-4 h-4 ${
-                                      i < review.rating
-                                        ? "text-yellow-400 fill-current"
-                                        : "text-gray-300"
-                                    }`}
-                                  />
-                                ))}
-                              </div>
-                              <span className="text-gray-500 text-sm">
-                                {new Date(review.createdAt).toLocaleDateString("en-US", {
-                                  year: "numeric",
-                                  month: "long",
-                                  day: "numeric",
-                                })}
-                              </span>
-                            </div>
-                            <p className="text-gray-700 leading-relaxed">{review.reviewText}</p>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <ReviewsSection reviews={reviews} />
             </div>
 
             {/* Right Column - Booking Widget */}

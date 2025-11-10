@@ -8,7 +8,11 @@
       "Bash(git rm:*)",
       "Bash(npm install:*)",
       "Bash(npm uninstall:*)",
-      "Bash(npx drizzle-kit:*)"
+      "Bash(npx drizzle-kit:*)",
+      "WebSearch",
+      "Bash(cat:*)",
+      "Bash(nul)",
+      "Bash(python fix_session_logs.py:*)"
     ],
     "deny": [],
     "ask": []

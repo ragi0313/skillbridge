@@ -1,7 +1,7 @@
 "use client"
 
 import { cn } from "@/lib/utils"
-import { User, Shield, CreditCard } from "lucide-react"
+import { User, Shield } from "lucide-react"
 
 interface SettingsSidebarProps {
   activeSection: string
@@ -21,12 +21,6 @@ export function SettingsSidebar({ activeSection, onSectionChange }: SettingsSide
       label: "Authentication",
       icon: Shield,
       description: "Security settings"
-    },
-    {
-      id: "purchases",
-      label: "Credit Purchases",
-      icon: CreditCard,
-      description: "Payment history"
     }
   ]
 

@@ -81,7 +81,12 @@ export default function MentorSkillsRates({ formData, setFormData, nextStep, pre
                 id="skillName"
                 placeholder="e.g., JavaScript, React, UI/UX Design"
                 value={newSkill}
-                onChange={(e) => setNewSkill(e.target.value)}
+                onChange={(e) => {
+                  // Allow letters, spaces, slashes, hyphens, plus signs, dots, parentheses
+                  // Disallow pure numbers and special characters like @#$%^&*
+                  const value = e.target.value.replace(/[^a-zA-Z0-9\s/\-+.()]/g, '')
+                  setNewSkill(value)
+                }}
                 className="h-12 text-base bg-white"
               />
             </div>
@@ -111,7 +116,6 @@ export default function MentorSkillsRates({ formData, setFormData, nextStep, pre
                   </div>
                 )}
               </div>
-              <p className="text-xs text-gray-500">Minimum: 1 credit</p>
             </div>
           </div>
           <Button

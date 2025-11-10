@@ -94,12 +94,14 @@ export default function MentorSettingsPage() {
           bio: mentor.bio || "",
           yearsOfExperience: mentor.yearsOfExperience || "",
           linkedinUrl: mentor.linkedInUrl || "",
-          linkAttachments: (mentor.socialLinks || []).map((link: any) => ({
-            id: `${link.type}-${Date.now()}-${Math.random()}`, 
-            type: link.type,
-            label: link.label,
-            url: link.url,
-          })),
+          linkAttachments: Array.isArray(mentor.socialLinks)
+            ? mentor.socialLinks.map((link: any) => ({
+                id: `${link.type}-${Date.now()}-${Math.random()}`,
+                type: link.type,
+                label: link.label,
+                url: link.url,
+              }))
+            : [],
           skills: skills.map((s: any) => ({
             name: s.skillName,
             rate: s.ratePerHour,

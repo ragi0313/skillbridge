@@ -7,7 +7,7 @@ import { DayPicker } from "react-day-picker"
 import { format } from "date-fns"
 import { toZonedTime } from "date-fns-tz"
 import { toast } from "sonner"
-import { Loader2, Clock, ArrowRight, CheckCircle } from "lucide-react"
+import { Loader2, Clock, ArrowRight, CheckCircle, Coins } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
@@ -803,17 +803,15 @@ export default function BookMentorSessionPageClient({ session }: Props) {
                 {/* Session Details */}
                 <div className="space-y-4 mb-6">
                   {estimatedCost !== null && (
-                    <div className="p-5 bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-200 rounded-xl shadow-sm">
+                    <div className="p-4 border rounded-lg">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center">
-                            <span className="text-white text-lg">💰</span>
-                          </div>
-                          <span className="text-green-800 font-bold text-base">
+                          <Coins className="w-5 h-5 text-purple-600" />
+                          <span className="text-gray-700 font-medium text-sm">
                             Total Cost:
                           </span>
                         </div>
-                        <span className="text-green-900 font-bold text-2xl bg-white px-4 py-2 rounded-xl shadow-md">
+                        <span className="text-gray-900 font-bold text-lg">
                           {estimatedCost} credits
                         </span>
                       </div>

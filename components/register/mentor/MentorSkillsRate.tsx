@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { ArrowLeft, Plus, X, DollarSign, Star, Zap } from "lucide-react"
+import { ArrowLeft, Plus, X, DollarSign, Star, Zap, Info, Coins } from "lucide-react"
 
 type Props = {
   formData: any
@@ -37,6 +37,32 @@ export default function MentorSkillsRates({ formData, setFormData, nextStep, pre
 
   return (
     <div className="space-y-8">
+      {/* Credits Conversion Info */}
+      <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
+        <CardContent className="p-6">
+          <div className="flex items-start space-x-3">
+            <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+              <Coins className="w-5 h-5 text-blue-600" />
+            </div>
+            <div className="flex-1">
+              <h3 className="font-semibold text-blue-900 mb-2 flex items-center gap-2">
+                <Info className="w-4 h-4" />
+                Credits Conversion Rate
+              </h3>
+              <div className="space-y-2 text-sm">
+                <p className="text-blue-800 leading-relaxed">
+                  <span className="font-semibold">1 Credit = ₱11.20 PHP</span> (approximately)
+                </p>
+                <p className="text-blue-700 text-xs leading-relaxed">
+                  Set your hourly rate in credits. Learners purchase credits to book sessions with you.
+                  The conversion rate helps them understand the PHP equivalent of your rates.
+                </p>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Add New Skill */}
       <Card className="border-2 border-dashed border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50">
         <CardHeader>
@@ -55,15 +81,9 @@ export default function MentorSkillsRates({ formData, setFormData, nextStep, pre
                 id="skillName"
                 placeholder="e.g., JavaScript, React, UI/UX Design"
                 value={newSkill}
-                onChange={(e) => {
-                  // Allow letters, spaces, slashes, hyphens, plus signs, dots, parentheses
-                  // Disallow pure numbers and special characters like @#$%^&*
-                  const value = e.target.value.replace(/[^a-zA-Z0-9\s/\-+.()]/g, '')
-                  setNewSkill(value)
-                }}
+                onChange={(e) => setNewSkill(e.target.value)}
                 className="h-12 text-base bg-white"
               />
-              <p className="text-xs text-gray-500">Letters, numbers, and basic symbols only (/, -, +, .)</p>
             </div>
             <div className="space-y-3">
               <Label htmlFor="skillRate" className="text-base font-semibold text-gray-700">

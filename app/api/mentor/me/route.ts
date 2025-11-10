@@ -51,6 +51,21 @@ export async function GET() {
     return NextResponse.json({ error: "Mentor not found" }, { status: 404 })
   }
 
+  // Normalize socialLinks to always be an array
+  let normalizedSocialLinks = []
+  if (mentor.socialLinks) {
+    if (Array.isArray(mentor.socialLinks)) {
+      normalizedSocialLinks = mentor.socialLinks
+    } else if (typeof mentor.socialLinks === 'object') {
+      // Convert object format to array format
+      normalizedSocialLinks = Object.entries(mentor.socialLinks).map(([key, value]) => ({
+        type: key,
+        label: key.charAt(0).toUpperCase() + key.slice(1),
+        url: value as string
+      }))
+    }
+  }
+
   const availability = await db
     .select()
     .from(mentorAvailability)
@@ -67,7 +82,10 @@ export async function GET() {
     .where(eq(mentorBlockedDates.mentorId, mentor.id))
 
   return NextResponse.json({
-    mentor,
+    mentor: {
+      ...mentor,
+      socialLinks: normalizedSocialLinks
+    },
     availability,
     skills,
     blockedDates,

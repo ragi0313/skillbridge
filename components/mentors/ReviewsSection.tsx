@@ -16,8 +16,8 @@ interface Review {
   learnerName: string
   learnerProfilePictureUrl: string | null
   rating: number
-  reviewText: string
-  createdAt: string
+  reviewText: string | null
+  createdAt: string | Date
 }
 
 interface ReviewsSectionProps {
@@ -139,7 +139,7 @@ export function ReviewsSection({ reviews }: ReviewsSectionProps) {
                         })}
                       </span>
                     </div>
-                    <p className="text-gray-700 leading-relaxed">{review.reviewText}</p>
+                    <p className="text-gray-700 leading-relaxed">{review.reviewText || "No review text provided."}</p>
                   </div>
                 </div>
               </div>

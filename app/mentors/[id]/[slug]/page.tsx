@@ -173,9 +173,9 @@ export default async function MentorProfilePage({
 
         {/* Content Grid */}
         <div className="mx-auto py-6">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
             {/* Left Column - Main Content */}
-            <div className="lg:col-span-2 space-y-12">
+            <div className="lg:col-span-3 space-y-12">
               {/* About Section */}
               <AboutSection bio={mentor.bio} />
 

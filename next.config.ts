@@ -55,6 +55,16 @@ const nextConfig: NextConfig = {
         hostname: "api.dicebear.com",
         pathname: "**",
       },
+      {
+        protocol: "https",
+        hostname: "i.pravatar.cc",
+        pathname: "**",
+      },
+      {
+        protocol: "https",
+        hostname: "avatars.githubusercontent.com",
+        pathname: "**",
+      },
     ],
     dangerouslyAllowSVG: true,
     contentDispositionType: 'attachment',

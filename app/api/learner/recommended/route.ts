@@ -113,64 +113,143 @@ export async function GET() {
   const filteredMentors = allMentors.filter((mentor) => {
     const mentorSkillsInfo = mentorSkillsMap.get(mentor.mentorId)
     const mentorCategories = mentorCategoriesMap.get(mentor.mentorId) || []
-    
+
     if (!mentorSkillsInfo) return false
 
     const mentorSkillNames = mentorSkillsInfo.skills.map(skill => skill.toLowerCase())
     const mentorCategoryNames = mentorCategories.map(cat => cat.toLowerCase())
-    
+
     // Check if any mentor skill or category is mentioned in learner's goals
-    const hasSkillMatch = mentorSkillNames.some(skill => 
-      learningGoalsText.includes(skill)
-    )
-    
-    const hasCategoryMatch = mentorCategoryNames.some(category => 
-      learningGoalsText.includes(category)
-    )
+    // Use more precise matching: require either full phrase match or multiple significant word matches
+    const hasSkillMatch = mentorSkillNames.some(skill => {
+      const skillLower = skill.toLowerCase()
 
-    // Also check bio for additional matching
-    const bioText = (mentor.bio || "").toLowerCase()
-    const hasBioMatch = mentorSkillNames.some(skill => 
-      bioText.includes(skill)
-    ) || mentorCategoryNames.some(category => 
-      bioText.includes(category)
-    )
+      // First check for exact phrase match (most accurate)
+      if (learningGoalsText.includes(skillLower)) {
+        return true
+      }
 
-    return hasSkillMatch || hasCategoryMatch || hasBioMatch
+      // Then check if multiple significant words from the skill appear
+      const skillWords = skillLower.split(/\s+/).filter(word => word.length > 3)
+      if (skillWords.length === 0) return false
+
+      // For multi-word skills, require at least 2 words to match
+      if (skillWords.length >= 2) {
+        const matchedWords = skillWords.filter(word => {
+          // Use word boundary matching to avoid partial matches
+          const regex = new RegExp(`\\b${word}\\b`, 'i')
+          return regex.test(learningGoalsText)
+        })
+        return matchedWords.length >= 2
+      }
+
+      // For single-word skills, require exact word match with boundaries
+      const regex = new RegExp(`\\b${skillWords[0]}\\b`, 'i')
+      return regex.test(learningGoalsText)
+    })
+
+    const hasCategoryMatch = mentorCategoryNames.some(category => {
+      const categoryLower = category.toLowerCase()
+
+      // Check for exact phrase match first
+      if (learningGoalsText.includes(categoryLower)) {
+        return true
+      }
+
+      // For categories, check with word boundaries
+      const categoryWords = categoryLower.split(/\s+/).filter(word => word.length > 3)
+      if (categoryWords.length === 0) return false
+
+      // Require at least one significant word match with boundaries
+      return categoryWords.some(word => {
+        const regex = new RegExp(`\\b${word}\\b`, 'i')
+        return regex.test(learningGoalsText)
+      })
+    })
+
+    // Professional title matching (e.g., "designer", "developer")
+    // Only match significant words (5+ chars) with word boundaries
+    const titleText = (mentor.title || "").toLowerCase()
+    const titleWords = titleText.split(/\s+/).filter(word => word.length > 4)
+    const hasTitleMatch = titleWords.some(word => {
+      const regex = new RegExp(`\\b${word}\\b`, 'i')
+      return regex.test(learningGoalsText)
+    })
+
+    return hasSkillMatch || hasCategoryMatch || hasTitleMatch
   })
 
   // Calculate match scores and format response
   const mentorsWithScore = filteredMentors.slice(0, 10).map((mentor) => {
     const mentorSkillsInfo = mentorSkillsMap.get(mentor.mentorId)!
     const mentorCategories = mentorCategoriesMap.get(mentor.mentorId) || []
-    
-    // Calculate match score based on keyword matches
-    let matchScore = 50 // Base score
-    
+
+    // Calculate match score based on precise keyword matches in learning goals
+    let matchScore = 40 // Base score
+
     const mentorSkillNames = mentorSkillsInfo.skills.map(skill => skill.toLowerCase())
     const mentorCategoryNames = mentorCategories.map(cat => cat.toLowerCase())
-    const bioText = (mentor.bio || "").toLowerCase()
-    
+
     // Add points for each skill match in learning goals
     mentorSkillNames.forEach(skill => {
-      if (learningGoalsText.includes(skill)) {
-        matchScore += 15
+      const skillLower = skill.toLowerCase()
+
+      // Exact phrase match gets highest points
+      if (learningGoalsText.includes(skillLower)) {
+        matchScore += 30
+        return
       }
-      if (bioText.includes(skill)) {
-        matchScore += 5
+
+      // Multiple word match gets medium points
+      const skillWords = skillLower.split(/\s+/).filter(word => word.length > 3)
+      if (skillWords.length >= 2) {
+        const matchedWords = skillWords.filter(word => {
+          const regex = new RegExp(`\\b${word}\\b`, 'i')
+          return regex.test(learningGoalsText)
+        })
+        if (matchedWords.length >= 2) {
+          matchScore += 20
+        } else if (matchedWords.length === 1) {
+          matchScore += 10
+        }
+      } else if (skillWords.length === 1) {
+        const regex = new RegExp(`\\b${skillWords[0]}\\b`, 'i')
+        if (regex.test(learningGoalsText)) {
+          matchScore += 15
+        }
       }
     })
-    
+
     // Add points for each category match in learning goals
     mentorCategoryNames.forEach(category => {
-      if (learningGoalsText.includes(category)) {
+      const categoryLower = category.toLowerCase()
+
+      // Exact phrase match
+      if (learningGoalsText.includes(categoryLower)) {
+        matchScore += 20
+        return
+      }
+
+      // Word boundary match
+      const categoryWords = categoryLower.split(/\s+/).filter(word => word.length > 3)
+      categoryWords.forEach(word => {
+        const regex = new RegExp(`\\b${word}\\b`, 'i')
+        if (regex.test(learningGoalsText)) {
+          matchScore += 10
+        }
+      })
+    })
+
+    // Add points for professional title match (word boundary only)
+    const titleText = (mentor.title || "").toLowerCase()
+    const titleWords = titleText.split(/\s+/).filter(word => word.length > 4)
+    titleWords.forEach(word => {
+      const regex = new RegExp(`\\b${word}\\b`, 'i')
+      if (regex.test(learningGoalsText)) {
         matchScore += 10
       }
-      if (bioText.includes(category)) {
-        matchScore += 3
-      }
     })
-    
+
     // Cap at 100
     matchScore = Math.min(matchScore, 100)
 

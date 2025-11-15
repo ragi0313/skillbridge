@@ -4,6 +4,7 @@ import { ReactNode, useEffect, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { ChatProvider } from '@/lib/context/ChatContext'
 import { MiniChatBar } from '@/components/chat/MiniChatBar'
+import { useHeartbeat } from '@/lib/hooks/useHeartbeat'
 
 interface ClientProvidersProps {
   children: ReactNode
@@ -21,6 +22,9 @@ export function ClientProviders({ children }: ClientProvidersProps) {
   const [user, setUser] = useState<User | null>(null)
   const [isInitialLoading, setIsInitialLoading] = useState(true)
   const pathname = usePathname()
+
+  // Send periodic heartbeats to keep online status updated
+  useHeartbeat()
 
   // Pages where MiniChatBar should not be shown
   const hideMiniChatOnPaths = [

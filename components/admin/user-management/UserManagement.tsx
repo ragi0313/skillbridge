@@ -99,6 +99,7 @@ export default function UserManagement() {
   }
 
   const getStatusBadge = (user: AdminUser) => {
+    // Check blacklisted first
     if (user.blacklistedAt) {
       return (
         <Badge variant="destructive" className="flex items-center gap-1">
@@ -108,6 +109,7 @@ export default function UserManagement() {
       )
     }
 
+    // Check suspended second
     if (user.suspendedAt && (!user.suspensionEndsAt || new Date(user.suspensionEndsAt) > new Date())) {
       return (
         <Badge variant="secondary" className="flex items-center gap-1 bg-orange-100 text-orange-800">
@@ -117,23 +119,26 @@ export default function UserManagement() {
       )
     }
 
-    switch (user.status) {
-      case "online":
-        return (
-          <Badge variant="default" className="flex items-center gap-1 bg-green-100 text-green-800">
-            <CheckCircle className="w-3 h-3" />
-            Online
-          </Badge>
-        )
-      case "offline":
-        return (
-          <Badge variant="outline" className="flex items-center gap-1">
-            <AlertTriangle className="w-3 h-3" />
-            Offline
-          </Badge>
-        )
-      default:
-        return <Badge variant="outline">{user.status}</Badge>
+    // Determine online/offline based on lastLoginAt
+    // Consider user online if they logged in within the last 10 minutes
+    const now = new Date()
+    const tenMinutesAgo = new Date(now.getTime() - 10 * 60 * 1000)
+    const isOnline = user.lastLoginAt && new Date(user.lastLoginAt) > tenMinutesAgo
+
+    if (isOnline) {
+      return (
+        <Badge variant="default" className="flex items-center gap-1 bg-green-100 text-green-800">
+          <div className="w-2 h-2 bg-green-600 rounded-full animate-pulse" />
+          Online
+        </Badge>
+      )
+    } else {
+      return (
+        <Badge variant="outline" className="flex items-center gap-1 text-gray-600">
+          <div className="w-2 h-2 bg-gray-400 rounded-full" />
+          Offline
+        </Badge>
+      )
     }
   }
 

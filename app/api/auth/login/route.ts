@@ -137,10 +137,11 @@ async function handleLogin(req: NextRequest) {
           { status: 403 },
         )
       } else if (suspensionEnd && now >= suspensionEnd) {
+        // Suspension has expired - clear suspension data
         await db
           .update(users)
           .set({
-            status: "online",
+            status: "active",
             suspendedAt: null,
             suspensionEndsAt: null,
             suspensionReason: null,
@@ -176,11 +177,10 @@ async function handleLogin(req: NextRequest) {
       )
     }
 
-    // Set user status to online and update last login
+    // Update last login timestamp (online/offline status determined by lastLoginAt)
     await db
       .update(users)
       .set({
-        status: "online",
         lastLoginAt: new Date(),
         updatedAt: new Date(),
       })

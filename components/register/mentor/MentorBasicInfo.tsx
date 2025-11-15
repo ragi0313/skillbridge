@@ -14,6 +14,7 @@ import { useEmailAvailability } from "@/app/hooks/useEmailAvailability"
 import { usePasswordVisibility } from "@/app/hooks/usePasswordVisibility"
 import { commonTimeZones, getDefaultTimezone } from "@/lib/timeZones"
 import { useState } from "react"
+import { AlertCircle } from "lucide-react"
 
 type MentorBasicInfoFormData = {
   profilePicture: string | null

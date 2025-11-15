@@ -180,13 +180,6 @@ export default function FAQSection({ searchQuery, onSearchChange }: FAQSectionPr
       tags: ["email", "settings", "verification"]
     },
     {
-      id: "delete-account",
-      question: "How do I delete my account?",
-      answer: "Account deletion is permanent and irreversible. Go to Account Settings → Privacy & Security → Delete Account. Download your data first if needed. Active sessions must be completed before deletion.",
-      category: "account",
-      tags: ["delete", "permanent", "data"]
-    },
-    {
       id: "privacy",
       question: "How is my personal information protected?",
       answer: "We use industry-standard encryption, never share personal data without consent, and comply with privacy regulations. Read our Privacy Policy for complete details on data handling.",

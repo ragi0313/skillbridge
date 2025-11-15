@@ -33,7 +33,7 @@ export default function AdminDashboardPage() {
         return <SupportTickets onTicketUpdate={() => sidebarRef.current?.refreshCounts()} />
       case "audit-log":
         return <AuditLog />
-      case "reports-feedback":
+      case "reports":
         return <ReportsFeedback onReportUpdate={() => sidebarRef.current?.refreshCounts()} />
       // Future features:
       // case "learner-insights":

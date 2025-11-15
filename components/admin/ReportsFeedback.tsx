@@ -150,7 +150,7 @@ export default function ReportsFeedback({ onReportUpdate }: ReportsFeedbackProps
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-2">
           <MessageSquare className="w-6 h-6 text-gray-600" />
-          <h1 className="text-2xl font-bold text-gray-900">Reports & Feedback</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Reports</h1>
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-48">

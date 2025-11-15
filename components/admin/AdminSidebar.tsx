@@ -51,8 +51,8 @@ const getMenuItems = (counts: SidebarCounts) => [
   },
   { id: "audit-log", label: "Audit Log", icon: FileText },
   {
-    id: "reports-feedback",
-    label: "Reports & Feedback",
+    id: "reports",
+    label: "Reports",
     icon: MessageSquare,
     badge: counts.pendingReports > 0 ? counts.pendingReports.toString() : undefined
   },

@@ -20,6 +20,7 @@ import { getMentorById, type MentorData } from "@/lib/data/mentors"
 import { AboutSection } from "@/components/mentors/AboutSection"
 import { SkillsDisplay } from "@/components/mentors/SkillsDisplay"
 import { ReviewsSection } from "@/components/mentors/ReviewsSection"
+import ReportDialog from "@/components/reports/ReportDialog"
 
 export default async function MentorProfilePage({
   params,
@@ -193,11 +194,17 @@ export default async function MentorProfilePage({
                         </p>
                       </div>
                     </div>
-                    <MessageMentorButton
-                      mentorUserId={mentor.userId}
-                      mentorName={`${mentor.firstName} ${mentor.lastName}`}
-                      className="cursor-pointer bg-transparent"
-                    />
+                    <div className="flex items-center gap-2">
+                      <MessageMentorButton
+                        mentorUserId={mentor.userId}
+                        mentorName={`${mentor.firstName} ${mentor.lastName}`}
+                        className="cursor-pointer bg-transparent"
+                      />
+                      <ReportDialog
+                        reportedUserId={mentor.userId}
+                        reportedUserName={`${mentor.firstName} ${mentor.lastName}`}
+                      />
+                    </div>
                   </div>
                 </CardContent>
               </Card>

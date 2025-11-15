@@ -7,7 +7,7 @@ import { eq, sql } from "drizzle-orm"
 import { NextResponse } from "next/server"
 import { sendMentorApprovedEmail } from "@/lib/email/approvedMail"
 import { getSession } from "@/lib/auth/getSession"
-import { logAdminAction, AUDIT_ACTIONS, ENTITY_TYPES, extractRequestInfo } from "@/lib/admin/audit-log"
+import { logAdminAction, AUDIT_ACTIONS, ENTITY_TYPES } from "@/lib/admin/audit-log"
 import { withRateLimit } from "@/lib/middleware/rate-limit"
 
 // Helper to convert "09:00 AM" to "09:00" (24-hour format)

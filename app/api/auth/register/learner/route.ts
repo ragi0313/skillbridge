@@ -8,7 +8,7 @@ import { nanoid } from "nanoid"
 import { sendVerificationEmail } from "@/lib/email/activationMail"
 import { eq, or } from "drizzle-orm"
 import { isValidPhilippineTimezone } from "@/lib/timeZones"
-import { logUserAction, AUDIT_ACTIONS, ENTITY_TYPES, extractRequestInfo } from "@/lib/admin/audit-log"
+import { logUserAction, AUDIT_ACTIONS, ENTITY_TYPES } from "@/lib/admin/audit-log"
 
 
 async function handleRegisterLearner(req: NextRequest) {

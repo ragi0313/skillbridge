@@ -3,7 +3,7 @@ import { getSession } from "@/lib/auth/getSession"
 import { db } from "@/db"
 import { auditLogs, users } from "@/db/schema"
 import { desc, like, and, gte, sql, eq } from "drizzle-orm"
-import { logAdminAction, AUDIT_ACTIONS, ENTITY_TYPES, extractRequestInfo } from "@/lib/admin/audit-log"
+import { logAdminAction, AUDIT_ACTIONS, ENTITY_TYPES } from "@/lib/admin/audit-log"
 
 export async function GET(req: NextRequest) {
   try {
@@ -61,7 +61,6 @@ export async function GET(req: NextRequest) {
           entityId: auditLogs.entityId,
           description: auditLogs.description,
           severity: auditLogs.severity,
-          ipAddress: auditLogs.ipAddress,
           createdAt: auditLogs.createdAt,
         })
         .from(auditLogs)
@@ -70,7 +69,7 @@ export async function GET(req: NextRequest) {
         .orderBy(desc(auditLogs.createdAt))
 
       // Convert to CSV
-      const csvHeaders = ["ID", "Admin", "Action", "Entity Type", "Entity ID", "Description", "Severity", "IP Address", "Date"]
+      const csvHeaders = ["ID", "Admin", "Action", "Entity Type", "Entity ID", "Description", "Severity", "Date"]
       const csvRows = allLogs.map(log => [
         log.id,
         log.adminName || "Unknown",
@@ -79,22 +78,18 @@ export async function GET(req: NextRequest) {
         log.entityId || "",
         `"${(log.description || '').replace(/"/g, '""')}"`, // Escape quotes
         log.severity,
-        log.ipAddress || "",
         log.createdAt ? new Date(log.createdAt).toISOString() : "",
       ])
 
       const csvContent = [csvHeaders, ...csvRows].map(row => row.join(",")).join("\n")
 
       // Log the export action
-      const { ipAddress, userAgent } = extractRequestInfo(req)
       await logAdminAction({
         adminId: session.id,
         action: AUDIT_ACTIONS.EXPORT_DATA,
         entityType: ENTITY_TYPES.ADMIN,
         description: `Exported ${allLogs.length} audit log entries to CSV`,
         metadata: { count: allLogs.length, filters: { action, severity, days, search } },
-        ipAddress,
-        userAgent,
         severity: "info",
       })
 
@@ -119,7 +114,6 @@ export async function GET(req: NextRequest) {
           description: auditLogs.description,
           details: auditLogs.details,
           metadata: auditLogs.metadata,
-          ipAddress: auditLogs.ipAddress,
           severity: auditLogs.severity,
           createdAt: auditLogs.createdAt,
         })

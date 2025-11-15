@@ -4,7 +4,7 @@ import { db } from '@/db'
 import { bookingSessions, learners, mentors } from '@/db/schema'
 import { eq } from 'drizzle-orm'
 import { agoraService } from '@/lib/agora/AgoraService'
-import { logUserAction, AUDIT_ACTIONS, ENTITY_TYPES, extractRequestInfo } from '@/lib/admin/audit-log'
+import { logUserAction, AUDIT_ACTIONS, ENTITY_TYPES } from '@/lib/admin/audit-log'
 
 export async function POST(
   request: NextRequest,

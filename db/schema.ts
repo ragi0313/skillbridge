@@ -136,8 +136,6 @@ export const auditLogs = pgTable("audit_logs", {
   description: text("description"), // More detailed description
   metadata: json("metadata"), // Additional structured data
   severity: varchar("severity", { length: 20 }).default("info"), // 'info', 'warning', 'critical'
-  ipAddress: varchar("ip_address", { length: 45 }),
-  userAgent: varchar("user_agent", { length: 500 }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 }, (table) => ({
   userIdIdx: index("audit_logs_user_id_idx").on(table.userId),

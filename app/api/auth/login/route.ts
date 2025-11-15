@@ -9,7 +9,7 @@ import { users, learners, mentors, admins } from "@/db/schema"
 import { compare } from "bcryptjs"
 import { sign } from "jsonwebtoken"
 import { sendBlacklistNotificationEmail, sendSuspensionNotificationEmail } from "@/lib/email/userRestrictionMail"
-import { logUserAction, AUDIT_ACTIONS, ENTITY_TYPES, extractRequestInfo } from "@/lib/admin/audit-log"
+import { logUserAction, AUDIT_ACTIONS, ENTITY_TYPES } from "@/lib/admin/audit-log"
 import { is2FAEnabled, create2FACode } from "@/lib/auth/two-factor-service"
 
 const withTimeout = <T>(promise: Promise<T>, ms: number): Promise<T> => {
@@ -43,8 +43,6 @@ async function handleLogin(req: NextRequest) {
     
     const [user] = userQuery
 
-    const { ipAddress, userAgent } = extractRequestInfo(req)
-
     if (!user) {
       // Log failed login attempt
       await logUserAction({
@@ -52,8 +50,6 @@ async function handleLogin(req: NextRequest) {
         entityType: ENTITY_TYPES.USER,
         description: `Failed login attempt for email: ${email}`,
         metadata: { email, reason: "email_not_found" },
-        ipAddress,
-        userAgent,
         severity: "warning",
       })
 
@@ -78,8 +74,6 @@ async function handleLogin(req: NextRequest) {
         entityId: user.id,
         description: `Failed login attempt: Incorrect password for ${user.email}`,
         metadata: { email: user.email, reason: "incorrect_password" },
-        ipAddress,
-        userAgent,
         severity: "warning",
       })
 
@@ -271,8 +265,6 @@ async function handleLogin(req: NextRequest) {
       entityId: user.id,
       description: `${user.role} logged in: ${user.firstName} ${user.lastName} (${user.email})`,
       metadata: { role: user.role, email: user.email },
-      ipAddress,
-      userAgent,
       severity: "info",
     })
 

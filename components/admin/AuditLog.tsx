@@ -18,7 +18,6 @@ interface AuditLogEntry {
   entityId?: number
   description: string | null
   metadata?: Record<string, any>
-  ipAddress?: string
   severity: "info" | "warning" | "critical"
   createdAt: string | null
 }
@@ -245,7 +244,6 @@ export default function AuditLog() {
                         <span>Admin: {log.adminName}</span>
                         <span>Entity: {log.entityType}</span>
                         {log.entityId && <span>ID: {log.entityId}</span>}
-                        {log.ipAddress && <span>IP: {log.ipAddress}</span>}
                       </div>
                       {log.metadata && (
                         <Button

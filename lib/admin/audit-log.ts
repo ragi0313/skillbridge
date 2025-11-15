@@ -10,8 +10,6 @@ export interface AuditLogEntry {
   entityId?: number
   description: string
   metadata?: Record<string, any>
-  ipAddress?: string
-  userAgent?: string
   severity?: "info" | "warning" | "critical"
 }
 
@@ -23,8 +21,6 @@ export async function logAdminAction({
   entityId,
   description,
   metadata,
-  ipAddress,
-  userAgent,
   severity = "info",
 }: AuditLogEntry) {
   try {
@@ -38,8 +34,6 @@ export async function logAdminAction({
       description,
       metadata,
       severity,
-      ipAddress,
-      userAgent,
       createdAt: new Date(),
     })
   } catch (error) {
@@ -57,8 +51,6 @@ export async function logUserAction({
   entityId,
   description,
   metadata,
-  ipAddress,
-  userAgent,
   severity = "info",
 }: AuditLogEntry) {
   try {
@@ -72,8 +64,6 @@ export async function logUserAction({
       description,
       metadata,
       severity,
-      ipAddress,
-      userAgent,
       createdAt: new Date(),
     })
   } catch (error) {
@@ -87,14 +77,10 @@ export async function logSimpleAction({
   userId,
   action,
   details,
-  ipAddress,
-  userAgent,
 }: {
   userId?: number | null
   action: string
   details: string
-  ipAddress?: string
-  userAgent?: string
 }) {
   try {
     await db.insert(auditLogs).values({
@@ -104,24 +90,11 @@ export async function logSimpleAction({
       details,
       description: details,
       severity: "info",
-      ipAddress,
-      userAgent,
       createdAt: new Date(),
     })
   } catch (error) {
     console.error("Failed to log simple action:", error)
   }
-}
-
-export function extractRequestInfo(req: NextRequest) {
-  const ipAddress =
-    req.headers.get("x-forwarded-for")?.split(",")[0] ||
-    req.headers.get("x-real-ip") ||
-    "unknown"
-
-  const userAgent = req.headers.get("user-agent") || "unknown"
-
-  return { ipAddress, userAgent }
 }
 
 // Common audit log actions

@@ -95,19 +95,8 @@ export function Footer() {
           </div>
         </div>
 
-        <div className="border-t border-gray-800 pt-8 flex flex-col md:flex-row justify-between items-center">
-          <p className="text-gray-400 mb-4 md:mb-0">© 2025 BridgeMentor Philippines. All rights reserved.</p>
-          <div className="flex space-x-6">
-            <a href="#" className="text-gray-400 hover:text-white transition-colors">
-              Twitter
-            </a>
-            <a href="#" className="text-gray-400 hover:text-white transition-colors">
-              LinkedIn
-            </a>
-            <a href="#" className="text-gray-400 hover:text-white transition-colors">
-              Instagram
-            </a>
-          </div>
+        <div className="border-t border-gray-800 pt-8 text-center">
+          <p className="text-gray-400">© 2025 BridgeMentor Philippines. All rights reserved.</p>
         </div>
       </div>
     </footer>

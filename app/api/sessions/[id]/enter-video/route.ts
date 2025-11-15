@@ -197,17 +197,34 @@ export async function POST(
       }
     })
 
-    const responseMessage = entryResult.wasAlreadyInVideo 
+    const responseMessage = entryResult.wasAlreadyInVideo
       ? 'Already in video call'
       : entryResult.isRejoining
       ? 'Successfully re-entered video call'
       : 'Successfully entered video call'
 
-    return NextResponse.json({ 
+    // Fetch updated session status to return to client
+    const updatedSession = await db
+      .select({
+        status: bookingSessions.status,
+        learnerJoinedAt: bookingSessions.learnerJoinedAt,
+        mentorJoinedAt: bookingSessions.mentorJoinedAt,
+        agoraCallStartedAt: bookingSessions.agoraCallStartedAt
+      })
+      .from(bookingSessions)
+      .where(eq(bookingSessions.id, sessionId))
+      .limit(1)
+
+    return NextResponse.json({
       success: true,
       message: responseMessage,
       isRejoining: entryResult.isRejoining,
-      wasAlreadyInVideo: entryResult.wasAlreadyInVideo
+      wasAlreadyInVideo: entryResult.wasAlreadyInVideo,
+      sessionStatus: updatedSession[0]?.status,
+      learnerJoined: updatedSession[0]?.learnerJoinedAt !== null,
+      mentorJoined: updatedSession[0]?.mentorJoinedAt !== null,
+      bothJoined: updatedSession[0]?.learnerJoinedAt !== null && updatedSession[0]?.mentorJoinedAt !== null,
+      callStarted: updatedSession[0]?.agoraCallStartedAt !== null
     })
 
   } catch (error) {

@@ -76,14 +76,20 @@ export function WaitingRoom({
     if (!hasJoinedSession && canJoin && onJoinSession && !hasAutoJoinedRef.current) {
       hasAutoJoinedRef.current = true
       setJoinStatus("joining")
-      onJoinSession().then(success => {
-        if (success) {
-          setJoinStatus("joined")
-        } else {
+      onJoinSession()
+        .then(success => {
+          if (success) {
+            setJoinStatus("joined")
+          } else {
+            setJoinStatus("error")
+            setErrorMessage("Failed to join session")
+          }
+        })
+        .catch(error => {
+          console.error("[WAITING_ROOM] Auto-join error:", error)
           setJoinStatus("error")
-          setErrorMessage("Failed to join session")
-        }
-      })
+          setErrorMessage("Failed to join session. Please try again.")
+        })
     }
   }, [hasJoinedSession, canJoin, onJoinSession])
 

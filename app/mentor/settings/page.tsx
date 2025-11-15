@@ -14,7 +14,8 @@ import MentorProfessionalDetails from "@/components/register/mentor/MentorProfes
 import MentorSkillsRates from "@/components/register/mentor/MentorSkillsRate"
 import MentorAvailability from "@/components/register/mentor/MentorAvailability"
 import BlockedDatesSelector from "@/components/settings/BlockedDateSelector"
-import { Loader2, Save, Shield } from "lucide-react"
+import { MentorReviewsSection } from "@/components/mentor/MentorReviewsSection"
+import { Loader2, Save, Shield, User, Briefcase, Award, Calendar, Star } from "lucide-react"
 
 
 type FormData = {
@@ -23,7 +24,7 @@ type FormData = {
   lastName: string
   email: string
   country: string
-  password?: string 
+  password?: string
   confirmPassword?: string
   timezone: string
   gender: string
@@ -40,6 +41,7 @@ type FormData = {
 
 export default function MentorSettingsPage() {
   const router = useRouter()
+  const [activeSection, setActiveSection] = useState("basic")
   const [formData, setFormData] = useState<FormData>({
     profilePicture: null,
     firstName: "",
@@ -63,6 +65,7 @@ export default function MentorSettingsPage() {
   const [is2FAEnabled, setIs2FAEnabled] = useState(false)
   const [is2FALoading, setIs2FALoading] = useState(true)
   const [is2FAToggling, setIs2FAToggling] = useState(false)
+  const [mentorId, setMentorId] = useState<number | null>(null)
 
   useEffect(() => {
     async function fetchMentorData() {
@@ -79,6 +82,8 @@ export default function MentorSettingsPage() {
         const availability = data.availability
         const skills = data.skills
         const blockedDates = data.blockedDates
+
+        setMentorId(mentor.id)
 
         // Map fetched data to form state
         setFormData({
@@ -111,24 +116,21 @@ export default function MentorSettingsPage() {
               acc[curr.day] = []
             }
             acc[curr.day].push({
-              id: `${curr.day}-${curr.startTime}-${curr.endTime}`, // Add unique ID for React keys
-              start: curr.startTime.substring(0, 5), // Format to HH:MM
-              end: curr.endTime.substring(0, 5), // Format to HH:MM
+              id: `${curr.day}-${curr.startTime}-${curr.endTime}`,
+              start: curr.startTime.substring(0, 5),
+              end: curr.endTime.substring(0, 5),
             })
             return acc
           }, {}),
-          // Map blockedDates to Date objects (preserve local date) with validation
           blockedDates: blockedDates
-            .filter((bd: any) => bd && bd.blockedDate) // Filter out invalid entries
+            .filter((bd: any) => bd && bd.blockedDate)
             .map((bd: any) => {
               const dateStr = bd.blockedDate
-              // Handle both YYYY-MM-DD and full datetime formats
-              const dateOnly = dateStr.split('T')[0] // Get just the date part
+              const dateOnly = dateStr.split('T')[0]
               const date = new Date(dateOnly + 'T00:00:00')
-              // Validate the date is valid
               return isNaN(date.getTime()) ? null : date
             })
-            .filter(Boolean), // Remove any invalid dates
+            .filter(Boolean),
         })
       } catch (err) {
         console.error("Failed to fetch mentor data", err)
@@ -141,7 +143,7 @@ export default function MentorSettingsPage() {
       }
     }
     fetchMentorData()
-  }, [router, toast])
+  }, [router])
 
   // Fetch 2FA status
   useEffect(() => {
@@ -190,7 +192,6 @@ export default function MentorSettingsPage() {
       toast.error("Error", {
         description: error.message || "An unexpected error occurred.",
       })
-      // Revert toggle on error
       setIs2FAEnabled(!enabled)
     } finally {
       setIs2FAToggling(false)
@@ -202,7 +203,6 @@ export default function MentorSettingsPage() {
     setIsSaving(true)
 
     try {
-      // Prepare data for API
       const dataToSend = {
         profilePictureUrl: formData.profilePicture,
         languagesSpoken: formData.languages,
@@ -213,14 +213,11 @@ export default function MentorSettingsPage() {
         bio: formData.bio,
         yearsOfExperience: formData.yearsOfExperience,
         linkedInUrl: formData.linkedinUrl,
-        // Convert linkAttachments back to socialLinks (remove temporary IDs)
         socialLinks: formData.linkAttachments.map(({ id, ...rest }) => rest),
-        // Map skills back to mentorSkills format
         skills: formData.skills.map((s) => ({
           skillName: s.name,
           ratePerHour: s.rate,
         })),
-        // Flatten availability object back to array
         availability: Object.entries(formData.availability).flatMap(([day, slots]) =>
           slots.map((slot) => ({
             day,
@@ -228,7 +225,6 @@ export default function MentorSettingsPage() {
             endTime: slot.end,
           })),
         ),
-        // Map blockedDates (Date objects) to YYYY-MM-DD strings (preserve local date)
         blockedDates: formData.blockedDates.map((date) => {
           const year = date.getFullYear()
           const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -264,6 +260,15 @@ export default function MentorSettingsPage() {
     }
   }
 
+  const navigationItems = [
+    { id: "basic", label: "Basic Information", icon: User },
+    { id: "professional", label: "Professional Details", icon: Briefcase },
+    { id: "skills", label: "Skills & Rates", icon: Award },
+    { id: "availability", label: "Availability", icon: Calendar },
+    { id: "security", label: "Security", icon: Shield },
+    { id: "reviews", label: "My Reviews", icon: Star },
+  ]
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
@@ -285,130 +290,173 @@ export default function MentorSettingsPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
       <MentorHeader />
-      <main className="container mx-auto px-4 py-8 space-y-8">
-        <h1 className="text-4xl font-bold text-gray-900 mb-8">Profile Settings</h1>
+      <main className="container mx-auto px-4 py-8">
+        <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-8">Profile Settings</h1>
 
-        <form onSubmit={handleSubmit} className="space-y-8">
-          {/* Basic Information */}
-          <Card className="shadow-lg border-0">
-            <CardHeader>
-              <CardTitle>Basic Information</CardTitle>
-              <CardDescription>Update your personal details and contact information.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <MentorBasicInfo
-                formData={formData}
-                setFormData={handleFormChange}
-                nextStep={() => {}}
-                isSettingsPage={true}
-              />
-            </CardContent>
-          </Card>
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          {/* Left Navigation */}
+          <aside className="lg:col-span-1">
+            <Card className="shadow-lg border-0 sticky top-4">
+              <CardContent className="p-4">
+                <nav className="space-y-1">
+                  {navigationItems.map((item) => {
+                    const Icon = item.icon
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => setActiveSection(item.id)}
+                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors ${
+                          activeSection === item.id
+                            ? "bg-blue-600 text-white"
+                            : "text-gray-700 hover:bg-gray-100"
+                        }`}
+                      >
+                        <Icon className="w-5 h-5 flex-shrink-0" />
+                        <span className="text-sm font-medium">{item.label}</span>
+                      </button>
+                    )
+                  })}
+                </nav>
+              </CardContent>
+            </Card>
+          </aside>
 
-          {/* Professional Details */}
-          <Card className="shadow-lg border-0">
-            <CardHeader>
-              <CardTitle>Professional Details</CardTitle>
-              <CardDescription>Showcase your experience, bio, and professional links.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <MentorProfessionalDetails
-                formData={formData}
-                setFormData={handleFormChange}
-                nextStep={() => {}}
-                prevStep={() => {}}
-                isSettingsPage={true}
-              />
-            </CardContent>
-          </Card>
-
-          {/* Skills and Rates */}
-          <Card className="shadow-lg border-0">
-            <CardHeader>
-              <CardTitle>Skills and Rates</CardTitle>
-              <CardDescription>Manage your mentoring skills and set your hourly rates.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <MentorSkillsRates
-                formData={formData}
-                setFormData={handleFormChange}
-                nextStep={() => {}}
-                prevStep={() => {}}
-                isSettingsPage={true}
-              />
-            </CardContent>
-          </Card>
-
-          {/* Availability and Blocked Dates */}
-          <Card className="shadow-lg border-0">
-            <CardHeader>
-              <CardTitle>Availability & Blocked Dates</CardTitle>
-              <CardDescription>Set your weekly availability and block specific dates.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <MentorAvailability
-                formData={formData}
-                setFormData={handleFormChange}
-                nextStep={() => {}}
-                prevStep={() => {}}
-                isSettingsPage={true}
-              />
-              <BlockedDatesSelector
-                blockedDates={formData.blockedDates}
-                onBlockedDatesChange={(dates) => handleFormChange({ blockedDates: dates })}
-              />
-            </CardContent>
-          </Card>
-
-          {/* Security Section */}
-          <Card className="shadow-lg border-0">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Shield className="h-5 w-5 text-blue-600" />
-                Security
-              </CardTitle>
-              <CardDescription>Manage your account security settings.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between p-4 border rounded-lg bg-gray-50">
-                <div className="space-y-1">
-                  <Label htmlFor="2fa-toggle" className="text-sm font-medium text-gray-900 cursor-pointer">
-                    Two-Factor Authentication
-                  </Label>
-                  <p className="text-sm text-gray-500">
-                    Receive a verification code via email when signing in
-                  </p>
-                </div>
-                <Switch
-                  id="2fa-toggle"
-                  checked={is2FAEnabled}
-                  onCheckedChange={handle2FAToggle}
-                  disabled={is2FALoading || is2FAToggling}
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          <div className="flex justify-end">
-            <Button
-              type="submit"
-              className="w-48 h-14 gradient-bg text-white font-semibold text-lg rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-[1.02] disabled:opacity-50 disabled:transform-none"
-              disabled={isSaving}
-            >
-              {isSaving ? (
-                <>
-                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                <>
-                  <Save className="mr-2 h-5 w-5" />
-                  Save Changes
-                </>
+          {/* Right Content */}
+          <div className="lg:col-span-3">
+            <form onSubmit={handleSubmit} className="space-y-8">
+              {activeSection === "basic" && (
+                <Card className="shadow-lg border-0">
+                  <CardHeader>
+                    <CardTitle>Basic Information</CardTitle>
+                    <CardDescription>Update your personal details and contact information.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <MentorBasicInfo
+                      formData={formData}
+                      setFormData={handleFormChange}
+                      nextStep={() => {}}
+                      isSettingsPage={true}
+                    />
+                  </CardContent>
+                </Card>
               )}
-            </Button>
+
+              {activeSection === "professional" && (
+                <Card className="shadow-lg border-0">
+                  <CardHeader>
+                    <CardTitle>Professional Details</CardTitle>
+                    <CardDescription>Showcase your experience, bio, and professional links.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <MentorProfessionalDetails
+                      formData={formData}
+                      setFormData={handleFormChange}
+                      nextStep={() => {}}
+                      prevStep={() => {}}
+                      isSettingsPage={true}
+                    />
+                  </CardContent>
+                </Card>
+              )}
+
+              {activeSection === "skills" && (
+                <Card className="shadow-lg border-0">
+                  <CardHeader>
+                    <CardTitle>Skills and Rates</CardTitle>
+                    <CardDescription>Manage your mentoring skills and set your hourly rates.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <MentorSkillsRates
+                      formData={formData}
+                      setFormData={handleFormChange}
+                      nextStep={() => {}}
+                      prevStep={() => {}}
+                      isSettingsPage={true}
+                    />
+                  </CardContent>
+                </Card>
+              )}
+
+              {activeSection === "availability" && (
+                <Card className="shadow-lg border-0">
+                  <CardHeader>
+                    <CardTitle>Availability & Blocked Dates</CardTitle>
+                    <CardDescription>Set your weekly availability and block specific dates.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    <MentorAvailability
+                      formData={formData}
+                      setFormData={handleFormChange}
+                      nextStep={() => {}}
+                      prevStep={() => {}}
+                      isSettingsPage={true}
+                    />
+                    <BlockedDatesSelector
+                      blockedDates={formData.blockedDates}
+                      onBlockedDatesChange={(dates) => handleFormChange({ blockedDates: dates })}
+                    />
+                  </CardContent>
+                </Card>
+              )}
+
+              {activeSection === "security" && (
+                <Card className="shadow-lg border-0">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Shield className="h-5 w-5 text-blue-600" />
+                      Security
+                    </CardTitle>
+                    <CardDescription>Manage your account security settings.</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex items-center justify-between p-4 border rounded-lg bg-gray-50">
+                      <div className="space-y-1">
+                        <Label htmlFor="2fa-toggle" className="text-sm font-medium text-gray-900 cursor-pointer">
+                          Two-Factor Authentication
+                        </Label>
+                        <p className="text-sm text-gray-500">
+                          Receive a verification code via email when signing in
+                        </p>
+                      </div>
+                      <Switch
+                        id="2fa-toggle"
+                        checked={is2FAEnabled}
+                        onCheckedChange={handle2FAToggle}
+                        disabled={is2FALoading || is2FAToggling}
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {activeSection === "reviews" && mentorId && (
+                <MentorReviewsSection mentorId={mentorId} />
+              )}
+
+              {activeSection !== "reviews" && (
+                <div className="flex justify-end">
+                  <Button
+                    type="submit"
+                    className="w-48 h-14 gradient-bg text-white font-semibold text-lg rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-[1.02] disabled:opacity-50 disabled:transform-none"
+                    disabled={isSaving}
+                  >
+                    {isSaving ? (
+                      <>
+                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="mr-2 h-5 w-5" />
+                        Save Changes
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
+            </form>
           </div>
-        </form>
+        </div>
       </main>
     </div>
   )

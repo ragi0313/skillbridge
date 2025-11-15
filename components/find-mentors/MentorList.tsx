@@ -2,7 +2,6 @@
 
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Star, Users, Award } from "lucide-react"
 import { MentorCard } from "./MentorCard"
 import { MentorCardSkeleton } from "./MentorCardSkeleton"
 import { EmptyState } from "./EmptyState"
@@ -60,20 +59,6 @@ export function MentorList({
       {/* Mentor Grid - Single Column */}
       {!isLoading && filteredMentors.length > 0 && (
         <>
-          {/* Show personalized section if there are mentors with personalization scores */}
-          {paginatedMentors.some((m: any) => m.personalizedScore && m.personalizedScore > 0) && (
-            <div className="mb-8">
-              <div className="flex items-center gap-2 mb-4">
-                <Star className="w-5 h-5 text-yellow-500 fill-yellow-500" />
-                <h3 className="text-lg font-semibold text-gray-900">Recommended For You</h3>
-                <Badge variant="secondary" className="text-xs">Based on your learning goals</Badge>
-              </div>
-              <p className="text-sm text-gray-600 mb-6">
-                These mentors match your learning interests and goals
-              </p>
-            </div>
-          )}
-
           <div className="space-y-8">
             {paginatedMentors.map((mentor) => (
               <MentorCard key={mentor.id} mentor={mentor} />

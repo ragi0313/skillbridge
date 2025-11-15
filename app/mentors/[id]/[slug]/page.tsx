@@ -174,21 +174,21 @@ export default async function MentorProfilePage({
 
         {/* Content Grid */}
         <div className="mx-auto py-6">
-          <div className="space-y-8">
-            {/* Main Content */}
-            <div className="space-y-12">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* Main Content - Left Column */}
+            <div className="lg:col-span-2 space-y-8 lg:space-y-12">
               {/* About Section */}
               <AboutSection bio={mentor.bio} />
 
               {/* Open to Inquiries */}
               <Card className="bg-gray-50 border-0">
-                <CardContent className="px-6 py-1">
+                <CardContent className="px-4 sm:px-6 py-4 sm:py-1">
                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                    <div className="flex items-center gap-4">
-                      <MessageCircle className="w-8 h-8 text-gray-600 flex-shrink-0" />
+                    <div className="flex items-center gap-3 sm:gap-4">
+                      <MessageCircle className="w-6 h-6 sm:w-8 sm:h-8 text-gray-600 flex-shrink-0" />
                       <div>
-                        <h3 className="font-semibold text-gray-900">Open to inquiries</h3>
-                        <p className="text-sm sm:text-base text-gray-600">
+                        <h3 className="text-sm sm:text-base font-semibold text-gray-900">Open to inquiries</h3>
+                        <p className="text-xs sm:text-sm lg:text-base text-gray-600">
                           You can message {mentor.firstName} to ask questions before booking their
                           services
                         </p>
@@ -213,8 +213,8 @@ export default async function MentorProfilePage({
               <ReviewsSection reviews={reviews} />
             </div>
 
-            {/* Booking Widget - Always Below */}
-            <div className="w-full max-w-2xl mx-auto">
+            {/* Booking Widget - Right Column on Large Screens, Below on Mobile */}
+            <div className="lg:col-span-1 lg:sticky lg:top-4 lg:self-start">
               <BookingWidget mentor={mentor} averageRate={averageRate} />
             </div>
           </div>

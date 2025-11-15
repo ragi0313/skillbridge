@@ -30,45 +30,45 @@ export default function BookingWidget({ mentor, averageRate }: BookingWidgetProp
   return (
     <div id="booking-widget" className="w-full">
       <Card className="bg-white shadow-xl border overflow-hidden w-full">
-        <div className="border-b text-center py-4 px-4 sm:px-6">
-          <h1 className="text-lg sm:text-xl font-semibold text-gray-700">Book Session</h1>
+        <div className="border-b text-center py-3 sm:py-4 px-4 sm:px-6">
+          <h1 className="text-base sm:text-lg lg:text-xl font-semibold text-gray-700">Book Session</h1>
         </div>
 
         <div className="px-4 sm:px-6 py-4 sm:py-5 border-b">
           <div className="text-center">
             <div className="flex items-center justify-center gap-2 mb-1">
-              <CreditCard className="w-5 h-5 sm:w-6 sm:h-6 text-purple-600" />
+              <CreditCard className="w-5 h-5 text-purple-600" />
               <span className="text-xl sm:text-2xl font-bold text-gray-900">{averageRate}</span>
-              <span className="text-sm sm:text-base text-gray-600">credits/hour</span>
+              <span className="text-sm text-gray-600">credits/hour</span>
             </div>
             <p className="text-xs sm:text-sm text-gray-500">Average rate</p>
           </div>
         </div>
 
-        <CardContent className="p-4 sm:p-6 pt-4">
-          <div className="space-y-4 sm:space-y-6">
-            <div className="border-b pb-4 space-y-2 sm:space-y-3 text-sm sm:text-base text-gray-600">
-              <div className="flex items-center gap-3">
-                <Calendar className="w-4 h-4 sm:w-5 sm:h-5 text-purple-500 flex-shrink-0" />
+        <CardContent className="p-4 sm:p-5 lg:p-6 pt-4">
+          <div className="space-y-4 sm:space-y-5 lg:space-y-6">
+            <div className="border-b pb-3 sm:pb-4 space-y-2 sm:space-y-3 text-xs sm:text-sm lg:text-base text-gray-600">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <Calendar className="w-4 h-4 text-purple-500 flex-shrink-0" />
                 <span>Flexible scheduling</span>
               </div>
-              <div className="flex items-center gap-3">
-                <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-purple-500 flex-shrink-0" />
+              <div className="flex items-center gap-2 sm:gap-3">
+                <Clock className="w-4 h-4 text-purple-500 flex-shrink-0" />
                 <span>1-hour minimum session</span>
               </div>
-              <div className="flex items-center gap-3">
-                <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5 text-purple-500 flex-shrink-0" />
+              <div className="flex items-center gap-2 sm:gap-3">
+                <MessageCircle className="w-4 h-4 text-purple-500 flex-shrink-0" />
                 <span>Q&A support included</span>
               </div>
-              <div className="flex items-center gap-3">
-                <Users className="w-4 h-4 sm:w-5 sm:h-5 text-purple-500 flex-shrink-0" />
+              <div className="flex items-center gap-2 sm:gap-3">
+                <Users className="w-4 h-4 text-purple-500 flex-shrink-0" />
                 <span>1-on-1 personalized sessions</span>
               </div>
             </div>
 
             <div>
               <Link href={bookingUrl}>
-                <Button className="w-full cursor-pointer bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 sm:py-4 text-sm sm:text-base transition-colors">
+                <Button className="w-full cursor-pointer bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2.5 sm:py-3 text-sm sm:text-base transition-colors">
                   Book Now
                 </Button>
               </Link>

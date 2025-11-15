@@ -79,7 +79,7 @@ async function handleCreateUserReport(req: NextRequest) {
   }
 }
 
-export const POST = withRateLimit(handleCreateUserReport, {
+export const POST = withRateLimit({
   maxRequests: 5, // Max 5 reports per hour to prevent spam
   windowMs: 60 * 60 * 1000, // 1 hour
-})
+}, handleCreateUserReport)

@@ -167,13 +167,13 @@ export function WaitingRoom({
   const toggleCamera = useCallback(async () => {
     try {
       setMediaError("")
-      
+
       if (cameraEnabled) {
         // Turn off camera
         if (cameraStreamRef.current) {
-          cameraStreamRef.current.getVideoTracks().forEach(track => {
+          cameraStreamRef.current.getTracks().forEach(track => {
             track.stop()
-            })
+          })
           cameraStreamRef.current = null
         }
         if (videoRef.current) {
@@ -185,51 +185,48 @@ export function WaitingRoom({
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
           throw new Error('Camera access is not supported in this browser')
         }
-        
-        // Check for camera permissions first
-        try {
-          const permissions = await navigator.permissions.query({ name: 'camera' as PermissionName })
-          } catch (permError) {
-          }
-        
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-          video: { 
-            width: { ideal: 640, min: 320, max: 1280 }, 
-            height: { ideal: 480, min: 240, max: 720 },
-            facingMode: 'user',
-            frameRate: { ideal: 15, max: 30 }
-          }, 
-          audio: false 
+
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+            facingMode: 'user'
+          },
+          audio: false
         })
-        
+
         cameraStreamRef.current = stream
-        
+
         if (videoRef.current) {
+          // Set srcObject and ensure video plays
           videoRef.current.srcObject = stream
-          
-          videoRef.current.onloadedmetadata = async () => {
-            if (videoRef.current) {
-              try {
-                await videoRef.current.play()
-                } catch (playError: any) {
-                if (playError.name === 'NotAllowedError') {
-                  videoRef.current.muted = true
-                  try {
-                    await videoRef.current.play()
-                  } catch (retryError) {
-                    }
+          videoRef.current.muted = true // Ensure muted for autoplay
+
+          // Wait for metadata to load then play
+          try {
+            await videoRef.current.play()
+            setCameraEnabled(true)
+          } catch (playError) {
+            console.error("Video play error:", playError)
+            // Try again after a brief delay
+            setTimeout(async () => {
+              if (videoRef.current) {
+                try {
+                  await videoRef.current.play()
+                  setCameraEnabled(true)
+                } catch (retryError) {
+                  console.error("Retry play error:", retryError)
+                  throw new Error("Failed to start video preview")
                 }
               }
-            }
+            }, 100)
           }
         }
-        
-        setCameraEnabled(true)
       }
     } catch (error: any) {
       console.error("Camera error:", error)
       let errorMessage = "Unable to access camera."
-      
+
       if (error.name === 'NotAllowedError') {
         errorMessage = "Camera access denied. Please allow camera permissions and try again."
       } else if (error.name === 'NotFoundError') {
@@ -237,9 +234,15 @@ export function WaitingRoom({
       } else if (error.name === 'NotReadableError') {
         errorMessage = "Camera is already in use by another application."
       }
-      
+
       setMediaError(errorMessage)
       setCameraEnabled(false)
+
+      // Clean up stream if error occurred
+      if (cameraStreamRef.current) {
+        cameraStreamRef.current.getTracks().forEach(track => track.stop())
+        cameraStreamRef.current = null
+      }
     }
   }, [cameraEnabled])
 
@@ -431,13 +434,13 @@ export function WaitingRoom({
   const renderJoinButton = () => {
     if (joinStatus === "joining") {
       return (
-        <Button 
-          disabled 
-          className="w-full max-w-md px-8 py-4 bg-blue-600/50 hover:bg-blue-600/50 text-white font-semibold rounded-2xl transition-all duration-200 border-2 border-blue-500/30"
+        <Button
+          disabled
+          className="w-full max-w-md"
           size="lg"
         >
-          <div className="flex items-center space-x-3">
-            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+          <div className="flex items-center space-x-2">
+            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
             <span>Joining Session...</span>
           </div>
         </Button>
@@ -446,12 +449,13 @@ export function WaitingRoom({
 
     if (joinStatus === "error") {
       return (
-        <Button 
-          onClick={handleJoinSession} 
-          className="w-full max-w-md px-8 py-4 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-2xl transition-all duration-200 hover:scale-105 border-2 border-red-500/50 shadow-lg"
+        <Button
+          onClick={handleJoinSession}
+          variant="destructive"
+          className="w-full max-w-md"
           size="lg"
         >
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-2">
             <AlertCircle className="h-5 w-5" />
             <span>Retry Join</span>
           </div>
@@ -462,12 +466,12 @@ export function WaitingRoom({
     if (!hasJoinedSession && joinStatus !== "joined") {
       if (canJoin) {
         return (
-          <Button 
-            onClick={handleJoinSession} 
-            className="w-full max-w-md px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-2xl transition-all duration-200 hover:scale-105 border-2 border-blue-500/50 shadow-lg"
+          <Button
+            onClick={handleJoinSession}
+            className="w-full max-w-md"
             size="lg"
           >
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-2">
               <Users className="h-5 w-5" />
               <span>Join Session</span>
             </div>
@@ -475,12 +479,13 @@ export function WaitingRoom({
         )
       } else {
         return (
-          <Button 
-            disabled 
-            className="w-full max-w-md px-8 py-4 bg-gray-600/50 hover:bg-gray-600/50 text-gray-300 font-semibold rounded-2xl border-2 border-gray-500/30"
+          <Button
+            disabled
+            variant="secondary"
+            className="w-full max-w-md"
             size="lg"
           >
-            <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-2">
               <Clock className="h-5 w-5" />
               <span>Join opens 30 min before session</span>
             </div>
@@ -491,15 +496,13 @@ export function WaitingRoom({
 
     if (isSessionStarted) {
       return (
-        <Button 
+        <Button
           onClick={handleStartVideoCall}
-          className="w-full max-w-md px-8 py-4 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-bold rounded-2xl transition-all duration-200 hover:scale-105 shadow-xl border-2 border-green-500/50 animate-pulse"
+          className="w-full max-w-md bg-green-600 hover:bg-green-700"
           size="lg"
         >
-          <div className="flex items-center space-x-3">
-            <div className="w-6 h-6 bg-white/20 rounded-full flex items-center justify-center">
-              <VideoIcon className="h-4 w-4" />
-            </div>
+          <div className="flex items-center space-x-2">
+            <VideoIcon className="h-5 w-5" />
             <span>Join Video Call</span>
           </div>
         </Button>
@@ -508,12 +511,13 @@ export function WaitingRoom({
 
     if (isTimeRemaining(timeToSession)) {
       return (
-        <Button 
-          disabled 
-          className="w-full max-w-md px-8 py-4 bg-gray-600/50 hover:bg-gray-600/50 text-gray-300 font-semibold rounded-2xl border-2 border-gray-500/30"
+        <Button
+          disabled
+          variant="secondary"
+          className="w-full max-w-md"
           size="lg"
         >
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-2">
             <Clock className="h-5 w-5" />
             <span>Starts in {formatTimeRemaining(timeToSession, { compact: true })}</span>
           </div>
@@ -522,12 +526,13 @@ export function WaitingRoom({
     }
 
     return (
-      <Button 
-        disabled 
-        className="w-full max-w-md px-8 py-4 bg-gray-600/50 hover:bg-gray-600/50 text-gray-300 font-semibold rounded-2xl border-2 border-gray-500/30"
+      <Button
+        disabled
+        variant="secondary"
+        className="w-full max-w-md"
         size="lg"
       >
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center space-x-2">
           <CheckCircle className="h-5 w-5" />
           <span>Waiting for session...</span>
         </div>
@@ -547,16 +552,16 @@ export function WaitingRoom({
   }
 
   return (
-    <div className="h-screen w-full bg-gradient-to-br from-slate-950 via-blue-950 to-slate-950 flex items-center justify-center p-3 overflow-hidden">
-      <Card className="w-full max-w-6xl h-full max-h-screen bg-slate-900/95 border-slate-700/50 backdrop-blur-xl shadow-2xl flex flex-col">
-        <CardHeader className="text-center space-y-4 px-4 py-4 flex-shrink-0">
-          {/* Hero Section with Timer */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-center space-x-3">
-              <div className="w-12 h-12 bg-gradient-to-br from-blue-500 via-purple-600 to-indigo-700 rounded-2xl flex items-center justify-center shadow-xl">
-                <VideoIcon className="h-6 w-6 text-white" />
+    <div className="h-screen w-full bg-gray-50 flex items-center justify-center p-4">
+      <Card className="w-full max-w-6xl h-full max-h-screen bg-white border border-gray-200 flex flex-col">
+        <CardHeader className="text-center space-y-3 px-4 py-4 flex-shrink-0 border-b border-gray-200">
+          {/* Header Section */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-center space-x-2">
+              <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+                <VideoIcon className="h-5 w-5 text-white" />
               </div>
-              <h1 className="text-2xl font-black bg-gradient-to-r from-white via-blue-100 to-slate-300 bg-clip-text text-transparent tracking-tight">
+              <h1 className="text-xl font-semibold text-gray-900">
                 Session Waiting Room
               </h1>
             </div>
@@ -568,44 +573,38 @@ export function WaitingRoom({
             />
           </div>
 
-          {/* Modern Status Alerts */}
+          {/* Status Alerts */}
           {isSessionStarted && joinStatus === "ready" && (
-            <div className="bg-green-900/30 border border-green-500/50 rounded-xl p-4 backdrop-blur-sm">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 bg-green-600/20 rounded-full flex items-center justify-center">
-                  <CheckCircle className="h-5 w-5 text-green-400" />
-                </div>
+            <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+              <div className="flex items-center space-x-2">
+                <CheckCircle className="h-5 w-5 text-green-600" />
                 <div>
-                  <h4 className="text-green-200 font-semibold text-sm mb-1">Ready to Start!</h4>
-                  <p className="text-green-300/90 text-sm">Your session is ready. Click below to join the video call.</p>
+                  <h4 className="text-green-900 font-medium text-sm">Ready to Start</h4>
+                  <p className="text-green-700 text-sm">Your session is ready. Click below to join the video call.</p>
                 </div>
               </div>
             </div>
           )}
 
           {errorMessage && (
-            <div className="bg-red-900/30 border border-red-500/50 rounded-xl p-4 backdrop-blur-sm">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 bg-red-600/20 rounded-full flex items-center justify-center">
-                  <AlertCircle className="h-5 w-5 text-red-400" />
-                </div>
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+              <div className="flex items-center space-x-2">
+                <AlertCircle className="h-5 w-5 text-red-600" />
                 <div>
-                  <h4 className="text-red-200 font-semibold text-sm mb-1">Connection Issue</h4>
-                  <p className="text-red-300/90 text-sm">{errorMessage}</p>
+                  <h4 className="text-red-900 font-medium text-sm">Connection Issue</h4>
+                  <p className="text-red-700 text-sm">{errorMessage}</p>
                 </div>
               </div>
             </div>
           )}
 
           {isReconnection && previouslyJoinedAt && (
-            <div className="bg-blue-900/30 border border-blue-500/50 rounded-xl p-4 backdrop-blur-sm">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 bg-blue-600/20 rounded-full flex items-center justify-center">
-                  <AlertCircle className="h-5 w-5 text-blue-400" />
-                </div>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <div className="flex items-center space-x-2">
+                <AlertCircle className="h-5 w-5 text-blue-600" />
                 <div>
-                  <h4 className="text-blue-200 font-semibold text-sm mb-1">Welcome Back!</h4>
-                  <p className="text-blue-300/90 text-sm">
+                  <h4 className="text-blue-900 font-medium text-sm">Welcome Back</h4>
+                  <p className="text-blue-700 text-sm">
                     You rejoined at {new Date(previouslyJoinedAt).toLocaleTimeString()}
                   </p>
                 </div>
@@ -620,139 +619,107 @@ export function WaitingRoom({
             
             {/* Left Column - Device Testing */}
             <div className="space-y-4 overflow-y-auto">
-              <div className="text-center mb-4">
-                <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 via-teal-600 to-blue-600 rounded-xl flex items-center justify-center mx-auto mb-2 shadow-lg">
-                  <Camera className="h-5 w-5 text-white" />
-                </div>
-                <h3 className="text-lg font-bold text-white mb-1 tracking-tight">
+              <div className="mb-3">
+                <h3 className="text-base font-semibold text-gray-900 mb-1">
                   Device Setup & Testing
                 </h3>
-                <p className="text-slate-300 text-xs">
+                <p className="text-gray-600 text-sm">
                   Test your camera and microphone before the session
                 </p>
               </div>
 
-            {/* Enhanced Camera Test */}
+            {/* Camera Test */}
             <div className="space-y-3">
-              <div className="bg-slate-800/60 rounded-xl p-4 border border-slate-600/30 shadow-lg">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center space-x-3">
-                    <div className={`p-2 rounded-lg ${
-                      cameraEnabled ? 'bg-emerald-600/20 border border-emerald-500/30' : 'bg-slate-600/20 border border-slate-500/30'
-                    }`}>
-                      {cameraEnabled ? (
-                        <Camera className="h-5 w-5 text-emerald-400" />
-                      ) : (
-                        <CameraOff className="h-5 w-5 text-slate-400" />
-                      )}
-                    </div>
+              <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center space-x-2">
+                    {cameraEnabled ? (
+                      <Camera className="h-5 w-5 text-green-600" />
+                    ) : (
+                      <CameraOff className="h-5 w-5 text-gray-400" />
+                    )}
                     <div>
-                      <h4 className="text-white font-semibold">Camera Test</h4>
-                      <p className="text-xs text-slate-300">
-                        {cameraEnabled ? 'Camera is active and ready' : 'Click to test your camera'}
+                      <h4 className="text-gray-900 font-medium text-sm">Camera Test</h4>
+                      <p className="text-xs text-gray-600">
+                        {cameraEnabled ? 'Camera is active' : 'Click to test your camera'}
                       </p>
                     </div>
                   </div>
                   <Button
                     onClick={toggleCamera}
-                    className={`px-4 py-2 rounded-lg font-medium transition-all duration-300 transform hover:scale-105 ${
-                      cameraEnabled
-                        ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-600/25'
-                        : 'bg-slate-700 hover:bg-slate-600 text-white border border-slate-600 shadow-lg'
-                    }`}
+                    variant={cameraEnabled ? "default" : "outline"}
+                    size="sm"
                   >
                     {cameraEnabled ? 'Stop Camera' : 'Test Camera'}
                   </Button>
                 </div>
-                
+
                 {cameraEnabled && (
-                  <div className="relative bg-black rounded-xl overflow-hidden border-2 border-emerald-500/40 shadow-xl">
+                  <div className="relative bg-black rounded-lg overflow-hidden border border-gray-300">
                     <video
                       ref={videoRef}
                       autoPlay
                       muted
                       playsInline
-                      className="w-full h-48 object-cover"
-                      style={{ filter: 'brightness(1.05) contrast(1.1)' }}
+                      className="w-full h-64 object-cover"
                     />
-                    <div className="absolute top-2 right-2 bg-emerald-600/90 backdrop-blur-sm px-2 py-1 rounded-full">
-                      <div className="flex items-center space-x-1">
-                        <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
-                        <span className="text-white text-xs font-medium">Live</span>
-                      </div>
+                    <div className="absolute top-2 right-2 bg-red-600 px-2 py-1 rounded text-xs text-white font-medium">
+                      Live
                     </div>
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Enhanced Microphone Test */}
+            {/* Microphone Test */}
             <div className="space-y-3">
-              <div className="bg-slate-800/60 rounded-xl p-4 border border-slate-600/30 shadow-lg">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center space-x-3">
-                    <div className={`p-2 rounded-lg ${
-                      microphoneEnabled ? 'bg-blue-600/20 border border-blue-500/30' : 'bg-slate-600/20 border border-slate-500/30'
-                    }`}>
-                      {microphoneEnabled ? (
-                        <Mic className="h-5 w-5 text-blue-400" />
-                      ) : (
-                        <MicOff className="h-5 w-5 text-slate-400" />
-                      )}
-                    </div>
+              <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center space-x-2">
+                    {microphoneEnabled ? (
+                      <Mic className="h-5 w-5 text-green-600" />
+                    ) : (
+                      <MicOff className="h-5 w-5 text-gray-400" />
+                    )}
                     <div>
-                      <div className="flex items-center space-x-2">
-                        <h4 className="text-white font-semibold">Microphone Test</h4>
-                        {microphoneEnabled && (
-                          <div className="flex items-center space-x-1">
-                            <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse" />
-                            <span className="text-xs text-blue-400 font-medium">Active</span>
-                          </div>
-                        )}
-                      </div>
-                      <p className="text-xs text-slate-300">
-                        {microphoneEnabled ? 'Microphone is active and listening' : 'Click to test your microphone'}
+                      <h4 className="text-gray-900 font-medium text-sm">Microphone Test</h4>
+                      <p className="text-xs text-gray-600">
+                        {microphoneEnabled ? 'Microphone is active' : 'Click to test your microphone'}
                       </p>
                     </div>
                   </div>
                   <Button
                     onClick={toggleMicrophone}
-                    className={`px-4 py-2 rounded-lg font-medium transition-all duration-300 transform hover:scale-105 ${
-                      microphoneEnabled
-                        ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-600/25'
-                        : 'bg-slate-700 hover:bg-slate-600 text-white border border-slate-600 shadow-lg'
-                    }`}
+                    variant={microphoneEnabled ? "default" : "outline"}
+                    size="sm"
                   >
                     {microphoneEnabled ? 'Stop Mic' : 'Test Microphone'}
                   </Button>
                 </div>
 
                 {microphoneEnabled && (
-                  <div className="space-y-3">
+                  <div className="space-y-2">
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-slate-300 font-medium">Speak to test your microphone</span>
-                      <span className="text-white font-mono bg-slate-700/60 px-2 py-1 rounded border border-slate-600/40">
+                      <span className="text-gray-600">Speak to test your microphone</span>
+                      <span className="text-gray-900 font-mono bg-gray-200 px-2 py-1 rounded">
                         {Math.round(audioLevel)}%
                       </span>
                     </div>
-                    <div className="w-full bg-slate-700/60 rounded-full h-3 border border-slate-600/40 shadow-inner">
+                    <div className="w-full bg-gray-200 rounded-full h-2">
                       <div
-                        className="h-full rounded-full transition-all duration-150 relative overflow-hidden shadow-lg"
+                        className="h-full rounded-full transition-all duration-150"
                         style={{
                           width: `${Math.min(audioLevel, 100)}%`,
                           backgroundColor: audioLevel > 60 ? '#ef4444' : audioLevel > 30 ? '#f59e0b' : '#10b981'
                         }}
-                      >
-                        <div className="absolute inset-0 bg-gradient-to-r from-transparent to-white/30" />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/10 to-transparent" />
-                      </div>
+                      />
                     </div>
 
-                    <div className="pt-2 border-t border-slate-700/50">
-                      <p className="text-xs text-slate-300 font-medium text-center">
+                    <div className="pt-2 border-t border-gray-200">
+                      <p className="text-xs text-gray-600 text-center">
                         Audio playback is automatically tested for 3 seconds when microphone is enabled.
                         <br />
-                        <span className="text-slate-400">Use headphones to avoid feedback.</span>
+                        Use headphones to avoid feedback.
                       </p>
                     </div>
                   </div>
@@ -761,14 +728,12 @@ export function WaitingRoom({
             </div>
 
               {mediaError && (
-                <div className="bg-red-900/30 border border-red-500/50 rounded-xl p-3 backdrop-blur-sm">
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
                   <div className="flex items-start space-x-2">
-                    <div className="flex-shrink-0">
-                      <AlertCircle className="h-4 w-4 text-red-400 mt-0.5" />
-                    </div>
+                    <AlertCircle className="h-4 w-4 text-red-600 mt-0.5" />
                     <div>
-                      <h4 className="text-red-200 font-semibold text-xs mb-1">Media Error</h4>
-                      <p className="text-red-300/90 text-xs leading-relaxed">{mediaError}</p>
+                      <h4 className="text-red-900 font-medium text-xs mb-1">Media Error</h4>
+                      <p className="text-red-700 text-xs">{mediaError}</p>
                     </div>
                   </div>
                 </div>
@@ -777,34 +742,34 @@ export function WaitingRoom({
 
             {/* Right Column - Session Info & Participants */}
             <div className="space-y-4 overflow-y-auto">
-              
+
               {/* Session Details */}
-              <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 rounded-xl p-4 border border-slate-700/50">
-                <h4 className="text-white font-semibold mb-3 flex items-center text-sm">
-                  <Clock className="h-4 w-4 mr-2 text-blue-400" />
+              <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                <h4 className="text-gray-900 font-semibold mb-3 flex items-center text-sm">
+                  <Clock className="h-4 w-4 mr-2 text-gray-600" />
                   Session Details
                 </h4>
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between py-2 border-b border-slate-700/50">
-                    <span className="text-slate-400 font-medium text-xs">Time</span>
-                    <span className="text-white font-mono text-xs bg-slate-700/50 px-2 py-1 rounded">
+                  <div className="flex items-center justify-between py-2 border-b border-gray-200">
+                    <span className="text-gray-600 text-xs">Time</span>
+                    <span className="text-gray-900 font-mono text-xs bg-gray-200 px-2 py-1 rounded">
                       {formatSessionTime()}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between py-2 border-b border-slate-700/50">
-                    <span className="text-slate-400 font-medium text-xs">Duration</span>
-                    <span className="text-white font-semibold text-xs">
+                  <div className="flex items-center justify-between py-2 border-b border-gray-200">
+                    <span className="text-gray-600 text-xs">Duration</span>
+                    <span className="text-gray-900 text-xs">
                       {sessionData.durationMinutes} minutes
                     </span>
                   </div>
                   <div className="flex items-center justify-between py-2">
-                    <span className="text-slate-400 font-medium text-xs">Status</span>
-                    <div className={`px-2 py-1 rounded text-xs font-medium ${
-                      sessionData.status === "ongoing" 
-                        ? "bg-green-600/20 text-green-300 border border-green-600/30" 
-                        : sessionData.status === "confirmed" 
-                          ? "bg-blue-600/20 text-blue-300 border border-blue-600/30"
-                          : "bg-slate-600/20 text-slate-300 border border-slate-600/30"
+                    <span className="text-gray-600 text-xs">Status</span>
+                    <div className={`px-2 py-1 rounded text-xs ${
+                      sessionData.status === "ongoing"
+                        ? "bg-green-100 text-green-800 border border-green-200"
+                        : sessionData.status === "confirmed"
+                          ? "bg-blue-100 text-blue-800 border border-blue-200"
+                          : "bg-gray-100 text-gray-800 border border-gray-200"
                     }`}>
                       {sessionData.status.charAt(0).toUpperCase() + sessionData.status.slice(1)}
                     </div>
@@ -815,19 +780,17 @@ export function WaitingRoom({
               {/* Participants Section */}
               <div className="space-y-3">
                 {/* Your Status */}
-                <div className="bg-gradient-to-br from-blue-900/20 to-purple-900/20 rounded-xl p-3 border border-blue-700/30">
-                  <div className="flex items-center space-x-3 mb-1">
-                  <div className="w-10 h-10 bg-blue-600/20 rounded-lg flex items-center justify-center">
-                    <User className="h-5 w-5 text-blue-400" />
-                  </div>
+                <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
+                  <div className="flex items-center space-x-2">
+                  <User className="h-5 w-5 text-blue-600" />
                   <div>
-                    <h4 className="text-white font-semibold text-sm">You ({userRole})</h4>
+                    <h4 className="text-gray-900 font-medium text-sm">You ({userRole})</h4>
                     <div className="flex items-center space-x-2 mt-1">
                       <div className={`w-2 h-2 rounded-full ${
-                        joinStatus === "joined" || joinStatus === "ready" ? "bg-green-400" : "bg-yellow-400 animate-pulse"
+                        joinStatus === "joined" || joinStatus === "ready" ? "bg-green-500" : "bg-yellow-500"
                       }`} />
-                      <span className={`text-xs font-medium ${
-                        joinStatus === "joined" || joinStatus === "ready" ? "text-green-300" : "text-yellow-300"
+                      <span className={`text-xs ${
+                        joinStatus === "joined" || joinStatus === "ready" ? "text-green-700" : "text-yellow-700"
                       }`}>
                         {getJoinStatusText(joinStatus)}
                       </span>
@@ -835,38 +798,32 @@ export function WaitingRoom({
                   </div>
                 </div>
               </div>
-              
+
               {/* Other Participant */}
-              <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 rounded-xl p-4 border border-slate-700/50">
+              <div className="bg-gray-50 rounded-lg p-3 border border-gray-200">
                 <div className="flex items-center space-x-3">
                   <div className="relative">
-                    <Avatar className="h-12 w-12 border-2 border-slate-600/50">
+                    <Avatar className="h-12 w-12 border border-gray-300">
                       <AvatarImage src={otherParticipant.profilePictureUrl || ""} className="object-cover" />
-                      <AvatarFallback className="bg-gradient-to-br from-purple-500 to-pink-600 text-white text-sm font-bold">
+                      <AvatarFallback className="bg-blue-600 text-white text-sm font-semibold">
                         {getInitials(otherParticipant.firstName, otherParticipant.lastName)}
                       </AvatarFallback>
                     </Avatar>
-                    <div className={`absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full flex items-center justify-center border-2 border-slate-800 ${
+                    <div className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${
                       otherUserStatus === "joined" ? "bg-green-500" :
-                      otherUserStatus === "not_joined" ? "bg-slate-500" :
+                      otherUserStatus === "not_joined" ? "bg-gray-400" :
                       "bg-yellow-500"
-                    }`}>
-                      <div className={`w-1.5 h-1.5 rounded-full ${
-                        otherUserStatus === "joined" ? "bg-white" :
-                        otherUserStatus === "not_joined" ? "bg-slate-300" :
-                        "bg-white animate-pulse"
-                      }`} />
-                    </div>
+                    }`} />
                   </div>
                   <div className="flex-1">
-                    <h4 className="font-semibold text-white text-sm mb-1">
+                    <h4 className="font-medium text-gray-900 text-sm">
                       {otherParticipant.firstName} {otherParticipant.lastName}
                     </h4>
-                    <p className="text-slate-300 font-medium mb-1 text-xs">{otherParticipant.title}</p>
-                    <div className={`inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-xs font-medium ${
-                      otherUserStatus === "joined" ? "bg-green-600/20 text-green-300 border border-green-600/30" :
-                      otherUserStatus === "not_joined" ? "bg-slate-600/20 text-slate-300 border border-slate-600/30" :
-                      "bg-yellow-600/20 text-yellow-300 border border-yellow-600/30"
+                    <p className="text-gray-600 text-xs mb-1">{otherParticipant.title}</p>
+                    <div className={`inline-flex items-center px-2 py-0.5 rounded text-xs ${
+                      otherUserStatus === "joined" ? "bg-green-100 text-green-800 border border-green-200" :
+                      otherUserStatus === "not_joined" ? "bg-gray-100 text-gray-700 border border-gray-200" :
+                      "bg-yellow-100 text-yellow-800 border border-yellow-200"
                     }`}>
                       <span>
                         {otherUserStatus === "joined" && "Online"}
@@ -884,28 +841,28 @@ export function WaitingRoom({
                 <div className="flex justify-center">
                   {renderJoinButton()}
                 </div>
-                
+
                 <div className="text-center">
-                  <div className={`inline-flex items-center space-x-2 px-3 py-2 rounded-lg ${
+                  <div className={`inline-flex items-center space-x-2 px-3 py-2 rounded-lg border ${
                     isSessionStarted && joinStatus === "ready"
-                      ? "bg-green-600/10 border border-green-600/20"
+                      ? "bg-green-50 border-green-200"
                       : joinStatus === "joined"
-                        ? "bg-blue-600/10 border border-blue-600/20"
-                        : "bg-slate-600/10 border border-slate-600/20"
+                        ? "bg-blue-50 border-blue-200"
+                        : "bg-gray-50 border-gray-200"
                   }`}>
                     <div className={`w-2 h-2 rounded-full ${
                       isSessionStarted && joinStatus === "ready"
-                        ? "bg-green-400"
+                        ? "bg-green-500"
                         : joinStatus === "joined"
-                          ? "bg-blue-400 animate-pulse"
-                          : "bg-slate-400"
+                          ? "bg-blue-500"
+                          : "bg-gray-400"
                     }`} />
-                    <p className={`text-xs font-medium ${
+                    <p className={`text-xs ${
                       isSessionStarted && joinStatus === "ready"
-                        ? "text-green-300"
+                        ? "text-green-700"
                         : joinStatus === "joined"
-                          ? "text-blue-300"
-                          : "text-slate-400"
+                          ? "text-blue-700"
+                          : "text-gray-600"
                     }`}>
                       {isSessionStarted && joinStatus === "ready"
                         ? "Ready to start! Click above to join the video call."
@@ -915,13 +872,6 @@ export function WaitingRoom({
                       }
                     </p>
                   </div>
-                  {!isSessionStarted && joinStatus === "joined" && (
-                    <div className="flex items-center justify-center space-x-1 mt-2">
-                      <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" />
-                      <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' } as React.CSSProperties} />
-                      <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' } as React.CSSProperties} />
-                    </div>
-                  )}
                 </div>
               </div>
             </div>

@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Search, Ban, Clock, AlertTriangle, CheckCircle, Mail, Calendar, Shield } from "lucide-react"
+import { Search, Ban, Clock, AlertTriangle, CheckCircle, Mail, Calendar, Shield, RotateCcw } from "lucide-react"
 import { toast } from "sonner"
 
 interface AdminUser {
@@ -29,7 +29,7 @@ interface AdminUser {
 }
 
 interface UserAction {
-  type: "suspend" | "blacklist"
+  type: "suspend" | "blacklist" | "unsuspend" | "unblacklist"
   userId: number
   reason: string
   duration?: number // for suspension in days
@@ -41,7 +41,10 @@ export default function UserManagement() {
   const [searchTerm, setSearchTerm] = useState("")
   const [roleFilter, setRoleFilter] = useState("all")
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null)
-  const [actionDialog, setActionDialog] = useState<{ open: boolean; type: "suspend" | "blacklist" | null }>({
+  const [actionDialog, setActionDialog] = useState<{
+    open: boolean
+    type: "suspend" | "blacklist" | "unsuspend" | "unblacklist" | null
+  }>({
     open: false,
     type: null,
   })
@@ -160,7 +163,7 @@ export default function UserManagement() {
     return matchesSearch && matchesRole
   })
 
-  const openActionDialog = (user: AdminUser, type: "suspend" | "blacklist") => {
+  const openActionDialog = (user: AdminUser, type: "suspend" | "blacklist" | "unsuspend" | "unblacklist") => {
     setSelectedUser(user)
     setActionDialog({ open: true, type })
     setActionReason("")
@@ -280,7 +283,8 @@ export default function UserManagement() {
                         <div className="text-sm">{new Date(user.createdAt).toLocaleDateString()}</div>
                       </TableCell>
                       <TableCell>
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 flex-wrap">
+                          {/* Show suspend/blacklist for active users */}
                           {!user.blacklistedAt && !user.suspendedAt && (
                             <>
                               <Button
@@ -303,10 +307,29 @@ export default function UserManagement() {
                               </Button>
                             </>
                           )}
-                          {(user.suspendedAt || user.blacklistedAt) && (
-                            <Badge variant="secondary" className="text-xs">
-                              Action Applied
-                            </Badge>
+                          {/* Show unsuspend for suspended users */}
+                          {user.suspendedAt && !user.blacklistedAt && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => openActionDialog(user, "unsuspend")}
+                              className="text-green-600 hover:text-green-700"
+                            >
+                              <RotateCcw className="w-3 h-3 mr-1" />
+                              Unsuspend
+                            </Button>
+                          )}
+                          {/* Show unblacklist for blacklisted users */}
+                          {user.blacklistedAt && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => openActionDialog(user, "unblacklist")}
+                              className="text-blue-600 hover:text-blue-700"
+                            >
+                              <RotateCcw className="w-3 h-3 mr-1" />
+                              Unblacklist
+                            </Button>
                           )}
                         </div>
                       </TableCell>
@@ -324,15 +347,28 @@ export default function UserManagement() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              {actionDialog.type === "suspend" ? (
+              {actionDialog.type === "suspend" && (
                 <>
                   <Clock className="w-5 h-5 text-orange-600" />
                   Suspend User
                 </>
-              ) : (
+              )}
+              {actionDialog.type === "blacklist" && (
                 <>
                   <Ban className="w-5 h-5 text-red-600" />
                   Blacklist User
+                </>
+              )}
+              {actionDialog.type === "unsuspend" && (
+                <>
+                  <RotateCcw className="w-5 h-5 text-green-600" />
+                  Unsuspend User
+                </>
+              )}
+              {actionDialog.type === "unblacklist" && (
+                <>
+                  <RotateCcw className="w-5 h-5 text-blue-600" />
+                  Unblacklist User
                 </>
               )}
             </DialogTitle>
@@ -369,7 +405,11 @@ export default function UserManagement() {
 
               <div>
                 <label className="block text-sm font-medium mb-2">
-                  Reason for {actionDialog.type === "suspend" ? "Suspension" : "Blacklisting"} *
+                  Reason for{" "}
+                  {actionDialog.type === "suspend" && "Suspension"}
+                  {actionDialog.type === "blacklist" && "Blacklisting"}
+                  {actionDialog.type === "unsuspend" && "Unsuspension"}
+                  {actionDialog.type === "unblacklist" && "Unblacklisting"} *
                 </label>
                 <Textarea
                   placeholder="Provide a detailed reason for this action..."
@@ -379,14 +419,37 @@ export default function UserManagement() {
                 />
               </div>
 
-              <div className="flex items-start gap-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                <AlertTriangle className="w-4 h-4 text-yellow-600 mt-0.5 flex-shrink-0" />
-                <div className="text-sm text-yellow-800">
-                  <p className="font-medium">Warning:</p>
+              <div
+                className={`flex items-start gap-2 p-3 border rounded-lg ${
+                  actionDialog.type === "unsuspend" || actionDialog.type === "unblacklist"
+                    ? "bg-green-50 border-green-200"
+                    : "bg-yellow-50 border-yellow-200"
+                }`}
+              >
+                {actionDialog.type === "unsuspend" || actionDialog.type === "unblacklist" ? (
+                  <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+                ) : (
+                  <AlertTriangle className="w-4 h-4 text-yellow-600 mt-0.5 flex-shrink-0" />
+                )}
+                <div
+                  className={`text-sm ${
+                    actionDialog.type === "unsuspend" || actionDialog.type === "unblacklist"
+                      ? "text-green-800"
+                      : "text-yellow-800"
+                  }`}
+                >
+                  <p className="font-medium">
+                    {actionDialog.type === "unsuspend" || actionDialog.type === "unblacklist" ? "Note:" : "Warning:"}
+                  </p>
                   <p>
-                    {actionDialog.type === "suspend"
-                      ? `This user will be suspended for ${suspensionDays} days and will receive an email notification. They won't be able to log in during this period.`
-                      : "This user will be permanently blacklisted and will receive an email notification. They will not be able to log in again."}
+                    {actionDialog.type === "suspend" &&
+                      `This user will be suspended for ${suspensionDays} days and will receive an email notification. They won't be able to log in during this period.`}
+                    {actionDialog.type === "blacklist" &&
+                      "This user will be permanently blacklisted and will receive an email notification. They will not be able to log in again."}
+                    {actionDialog.type === "unsuspend" &&
+                      "This user will be unsuspended and will receive an email notification. They will regain access to their account immediately."}
+                    {actionDialog.type === "unblacklist" &&
+                      "This user will be removed from the blacklist and will receive an email notification. They will regain access to their account immediately."}
                   </p>
                 </div>
               </div>
@@ -397,7 +460,11 @@ export default function UserManagement() {
                   className={
                     actionDialog.type === "suspend"
                       ? "bg-orange-600 hover:bg-orange-700"
-                      : "bg-red-600 hover:bg-red-700"
+                      : actionDialog.type === "blacklist"
+                        ? "bg-red-600 hover:bg-red-700"
+                        : actionDialog.type === "unsuspend"
+                          ? "bg-green-600 hover:bg-green-700"
+                          : "bg-blue-600 hover:bg-blue-700"
                   }
                   disabled={!actionReason.trim()}
                 >

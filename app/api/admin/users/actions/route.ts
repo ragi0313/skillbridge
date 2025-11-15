@@ -4,7 +4,12 @@ import { db } from "@/db"
 import { users } from "@/db/schema"
 import { eq } from "drizzle-orm"
 import { getSession } from "@/lib/auth/getSession"
-import { sendSuspensionEmail, sendBlacklistEmail } from "@/lib/email/userActionsMail"
+import {
+  sendSuspensionEmail,
+  sendBlacklistEmail,
+  sendUnsuspensionEmail,
+  sendUnblacklistEmail,
+} from "@/lib/email/userActionsMail"
 
 async function handleUserAction(request: NextRequest) {
   try {
@@ -113,6 +118,67 @@ async function handleUserAction(request: NextRequest) {
         {
           message: `User ${user.firstName} ${user.lastName} has been permanently blacklisted. Email notification sent.`,
           action: "blacklisted",
+        },
+        { status: 200 },
+      )
+    } else if (type === "unsuspend") {
+      await db
+        .update(users)
+        .set({
+          status: "active",
+          suspendedAt: null,
+          suspensionEndsAt: null,
+          suspensionReason: null,
+          updatedAt: now,
+        })
+        .where(eq(users.id, userId))
+
+      const emailResult = await sendUnsuspensionEmail({
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        reason,
+        adminMessage: reason,
+      })
+
+      if (!emailResult.success) {
+        console.error("Failed to send unsuspension email:", emailResult.error)
+      }
+
+      return NextResponse.json(
+        {
+          message: `User ${user.firstName} ${user.lastName} has been unsuspended. Email notification sent.`,
+          action: "unsuspended",
+        },
+        { status: 200 },
+      )
+    } else if (type === "unblacklist") {
+      await db
+        .update(users)
+        .set({
+          status: "active",
+          blacklistedAt: null,
+          blacklistReason: null,
+          updatedAt: now,
+        })
+        .where(eq(users.id, userId))
+
+      const emailResult = await sendUnblacklistEmail({
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        reason,
+        adminMessage: reason,
+      })
+
+      if (!emailResult.success) {
+        console.error("Failed to send unblacklist email:", emailResult.error)
+      }
+
+      return NextResponse.json(
+        {
+          message: `User ${user.firstName} ${user.lastName} has been removed from the blacklist. Email notification sent.`,
+          action: "unblacklisted",
         },
         { status: 200 },
       )

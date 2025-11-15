@@ -692,9 +692,9 @@ export function VideoCallRoom({
       const isReconnection = sessionStorage.getItem(`agora_connected_${sessionId}`) === "true"
       if (isReconnection) {
         console.log("[VIDEO_CALL] Detected reconnection scenario")
-        // Clear the flag and add extra delay
+        // Clear the flag with minimal delay
         sessionStorage.removeItem(`agora_connected_${sessionId}`)
-        await new Promise((resolve) => setTimeout(resolve, 2000))
+        await new Promise((resolve) => setTimeout(resolve, 500))
       }
 
       isInitializingRef.current = true
@@ -702,23 +702,22 @@ export function VideoCallRoom({
       try {
         console.log("[VIDEO_CALL] Initializing Agora SDK...")
 
-        try {
-          console.log("[VIDEO_CALL] Attempting to track video call entry...")
-          const response = await fetch(`/api/sessions/${sessionId}/enter-video`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
+        // Fire-and-forget video call entry tracking (non-blocking)
+        fetch(`/api/sessions/${sessionId}/enter-video`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        })
+          .then((response) => {
+            if (response.ok) {
+              return response.json()
+            }
           })
-
-          if (response.ok) {
-            const data = await response.json()
-            console.log("[VIDEO_CALL] Video call entry tracked:", data.message)
-          } else {
-            console.warn("[VIDEO_CALL] Failed to track video call entry (API not available):", response.status)
-          }
-        } catch (error) {
-          console.warn("[VIDEO_CALL] Video call entry tracking not available (demo mode):", error)
-          // Continue without tracking - this is expected in demo mode
-        }
+          .then((data) => {
+            if (data) console.log("[VIDEO_CALL] Video call entry tracked:", data.message)
+          })
+          .catch((error) => {
+            console.warn("[VIDEO_CALL] Video call entry tracking failed:", error)
+          })
 
         // Validate config before proceeding
         if (!agoraConfig.appId || !agoraConfig.channel || !agoraConfig.token || !agoraConfig.uid) {
@@ -936,19 +935,12 @@ export function VideoCallRoom({
           else setCallQuality("unknown")
         })
 
-        // Initialize session chat immediately after RTC connection
-        setTimeout(() => {
-          if (!isCleaningUpRef.current && !isCallEnding) {
-            initializeSessionChat()
-          }
-        }, 1000) // Reduced delay
-
         setConnectionState("connected")
         console.log("[VIDEO_CALL] Agora initialization completed successfully")
 
-        // Always initialize chat after successful connection
-        if (!chatInitializedRef.current) {
-          setTimeout(initializeSessionChat, 500)
+        // Initialize session chat immediately (non-blocking)
+        if (!chatInitializedRef.current && !isCleaningUpRef.current && !isCallEnding) {
+          setTimeout(initializeSessionChat, 100)
         }
 
         // Start session tracking with proper cleanup handling

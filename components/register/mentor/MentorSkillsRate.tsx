@@ -153,9 +153,6 @@ export default function MentorSkillsRates({ formData, setFormData, nextStep, pre
                         <Zap className="w-4 h-4 mr-1 text-blue-500" />
                         {skill.rate} credits/hour
                       </span>
-                      <span className="flex items-center text-green-600 font-medium">
-                        <DollarSign className="w-4 h-4 mr-1" />₱{(skill.rate * 11.2).toFixed(0)} PHP
-                      </span>
                     </div>
                   </div>
                   <Button

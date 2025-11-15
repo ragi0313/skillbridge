@@ -141,7 +141,6 @@ async function handleRegisterLearner(req: NextRequest) {
     })
 
     // Log registration
-    const { ipAddress, userAgent } = extractRequestInfo(req)
     await logUserAction({
       action: AUDIT_ACTIONS.USER_REGISTER,
       entityType: ENTITY_TYPES.LEARNER,
@@ -154,8 +153,6 @@ async function handleRegisterLearner(req: NextRequest) {
         experienceLevel,
         role: "learner"
       },
-      ipAddress,
-      userAgent,
       severity: "info",
     })
 

@@ -160,7 +160,6 @@ export async function POST(
     })
 
     // Log session start
-    const { ipAddress, userAgent } = extractRequestInfo(request)
     await logUserAction({
       userId: session.id,
       action: AUDIT_ACTIONS.SESSION_START,
@@ -172,8 +171,6 @@ export async function POST(
         userId: session.id,
         agoraChannelName: result.agoraChannelName,
       },
-      ipAddress,
-      userAgent,
       severity: "info",
     })
 

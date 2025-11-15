@@ -164,7 +164,6 @@ async function handleApproveMentor(request: Request, { params }: { params: Promi
     await sendMentorApprovedEmail(pending.email, `${pending.firstName} ${pending.lastName}`)
 
     // Log admin action
-    const { ipAddress, userAgent } = extractRequestInfo(request as any)
     await logAdminAction({
       adminId: session.id,
       action: AUDIT_ACTIONS.APPROVE_MENTOR,
@@ -179,8 +178,6 @@ async function handleApproveMentor(request: Request, { params }: { params: Promi
         skillCount: pendingSkills.length,
         categoryAssignments: skillCategoryAssignments.length
       },
-      ipAddress,
-      userAgent,
       severity: 'info'
     })
 

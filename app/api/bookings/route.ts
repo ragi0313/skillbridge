@@ -241,7 +241,6 @@ async function handleBooking(req: NextRequest) {
     });
 
     // Log booking creation
-    const { ipAddress, userAgent } = extractRequestInfo(req)
     await logUserAction({
       userId: learnerUserId,
       action: AUDIT_ACTIONS.BOOKING_CREATE,
@@ -257,8 +256,6 @@ async function handleBooking(req: NextRequest) {
         durationMinutes,
         totalCostCredits: result.totalCostCredits,
       },
-      ipAddress,
-      userAgent,
       severity: "info",
     })
 

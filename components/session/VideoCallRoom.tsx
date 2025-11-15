@@ -7,6 +7,7 @@ import { useRealTimeTimer } from "@/lib/hooks/useRealTimeTimer"
 import { getPusherConfig, getSessionChannel, PUSHER_EVENTS } from "@/lib/pusher/config"
 
 import { Whiteboard } from "../whiteboard/Whiteboard"
+import Logo from "../ui/logo"
 
 interface VideoCallRoomProps {
   sessionId: string
@@ -1629,18 +1630,7 @@ export function VideoCallRoom({
             <div className="flex items-center space-x-2 sm:space-x-3">
               <div className="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-gradient-to-r from-green-400 to-emerald-500 animate-pulse shadow-lg shadow-green-400/50"></div>
               <div>
-                <h1 className="text-sm sm:text-xl font-semibold text-white">
-                  {userRole === "learner" ? "Learning Session" : "Mentoring Session"}
-                </h1>
-                <p className={`text-xs sm:text-sm font-medium ${getConnectionStatusColor(connectionState)}`}>
-                  {connectionState === "connected"
-                    ? "Connected"
-                    : connectionState === "connecting"
-                      ? "Connecting..."
-                      : connectionState === "reconnecting"
-                        ? "Reconnecting..."
-                        : "Disconnected"}
-                </p>
+                <Logo textColor="white" />
               </div>
             </div>
 

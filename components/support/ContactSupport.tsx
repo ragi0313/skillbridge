@@ -9,13 +9,8 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   Mail,
-  Phone,
   MessageCircle,
-  Clock,
-  Globe,
-  Send,
-  CheckCircle2,
-  MapPin
+  Send
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -32,29 +27,18 @@ export default function ContactSupport() {
 
   const contactMethods = [
     {
-      icon: Mail,
-      title: "Email Support",
-      description: "Get detailed help via email",
-      contact: "contact@bridge-mentor.com",
-      responseTime: "Within 24 hours",
-      color: "bg-blue-50 text-blue-600 border-blue-200"
-    },
-    {
       icon: MessageCircle,
       title: "Support Tickets",
       description: "Track your support requests",
       contact: "Login to create tickets",
-      responseTime: "Response within 24 hours",
-      color: "bg-green-50 text-green-600 border-green-200",
-      available: false
+      responseTime: "Within 24 hours"
     },
     {
-      icon: Phone,
-      title: "Priority Support",
-      description: "For critical session issues",
-      contact: "Available for urgent tickets",
-      responseTime: "Mon-Fri, 9AM-6PM PST",
-      color: "bg-purple-50 text-purple-600 border-purple-200"
+      icon: Mail,
+      title: "Contact Form",
+      description: "Send us a message",
+      contact: "Use the form below",
+      responseTime: "We'll respond via email"
     }
   ]
 
@@ -102,28 +86,18 @@ export default function ContactSupport() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Contact Methods */}
       <div>
-        <h3 className="text-xl font-semibold mb-6">Get in Touch</h3>
-        <div className="grid md:grid-cols-3 gap-6">
+        <h3 className="text-lg font-semibold mb-4">Get in Touch</h3>
+        <div className="grid md:grid-cols-2 gap-4">
           {contactMethods.map((method, index) => (
-            <Card key={index} className={`border-2 ${method.color} relative overflow-hidden`}>
-              <CardContent className="p-6">
-                {method.available && (
-                  <div className="absolute top-3 right-3">
-                    <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
-                  </div>
-                )}
-                <method.icon className="w-10 h-10 mb-4" />
-                <h4 className="font-semibold text-lg mb-2">{method.title}</h4>
-                <p className="text-sm opacity-80 mb-3">{method.description}</p>
-                <div className="space-y-2">
-                  <p className="font-medium">{method.contact}</p>
-                  <p className="text-sm opacity-75">{method.responseTime}</p>
-                </div>
-              </CardContent>
-            </Card>
+            <div key={index} className="border border-gray-200 rounded-lg p-4">
+              <method.icon className="w-6 h-6 text-gray-700 mb-2" />
+              <h4 className="font-semibold mb-1">{method.title}</h4>
+              <p className="text-sm text-gray-600 mb-2">{method.description}</p>
+              <p className="text-sm text-gray-500">{method.responseTime}</p>
+            </div>
           ))}
         </div>
       </div>
@@ -132,10 +106,7 @@ export default function ContactSupport() {
         {/* Contact Form */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Send className="w-5 h-5" />
-              Send us a Message
-            </CardTitle>
+            <CardTitle className="text-base">Send us a Message</CardTitle>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-6">
@@ -245,25 +216,16 @@ export default function ContactSupport() {
           {/* Business Hours */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Clock className="w-5 h-5" />
-                Business Hours
-              </CardTitle>
+              <CardTitle className="text-base">Response Times</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
+              <div className="space-y-2 text-sm">
                 {businessHours.map((schedule, index) => (
-                  <div key={index} className="flex justify-between items-center">
-                    <span className="font-medium">{schedule.day}</span>
+                  <div key={index} className="flex justify-between">
+                    <span className="text-gray-700">{schedule.day}</span>
                     <span className="text-gray-600">{schedule.hours}</span>
                   </div>
                 ))}
-              </div>
-              <div className="mt-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
-                <p className="text-sm text-blue-800">
-                  <CheckCircle2 className="w-4 h-4 inline mr-1" />
-                  We aim to respond to all inquiries within our stated timeframes
-                </p>
               </div>
             </CardContent>
           </Card>
@@ -271,29 +233,26 @@ export default function ContactSupport() {
           {/* Quick Tips */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <MessageCircle className="w-5 h-5" />
-                Get Faster Support
-              </CardTitle>
+              <CardTitle className="text-base">Tips for Faster Help</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
-                  <p className="text-sm font-medium text-blue-900 mb-1">For Session Issues</p>
-                  <p className="text-xs text-blue-700">
-                    Include session ID, time, and screenshots if possible
+              <div className="space-y-3 text-sm">
+                <div>
+                  <p className="font-medium text-gray-900 mb-1">For Session Issues</p>
+                  <p className="text-gray-600">
+                    Include session ID and time
                   </p>
                 </div>
-                <div className="p-3 bg-green-50 rounded-lg border border-green-200">
-                  <p className="text-sm font-medium text-green-900 mb-1">For Payment Issues</p>
-                  <p className="text-xs text-green-700">
-                    Include transaction ID and payment method used
+                <div>
+                  <p className="font-medium text-gray-900 mb-1">For Payment Issues</p>
+                  <p className="text-gray-600">
+                    Include transaction ID
                   </p>
                 </div>
-                <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
-                  <p className="text-sm font-medium text-purple-900 mb-1">For Technical Issues</p>
-                  <p className="text-xs text-purple-700">
-                    Include browser version, device type, and error messages
+                <div>
+                  <p className="font-medium text-gray-900 mb-1">For Technical Issues</p>
+                  <p className="text-gray-600">
+                    Include browser and device info
                   </p>
                 </div>
               </div>
@@ -303,24 +262,18 @@ export default function ContactSupport() {
           {/* Additional Resources */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Globe className="w-5 h-5" />
-                Additional Resources
-              </CardTitle>
+              <CardTitle className="text-base">More Help</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-3">
-                <a href="/support#faq" className="block p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                  <div className="font-medium">FAQ & Knowledge Base</div>
-                  <div className="text-sm text-gray-600">Find quick answers to common questions</div>
+              <div className="space-y-2 text-sm">
+                <a href="/support#faq" className="block text-blue-600 hover:underline">
+                  FAQ & Knowledge Base
                 </a>
-                <a href="/terms-of-service" className="block p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                  <div className="font-medium">Terms of Service</div>
-                  <div className="text-sm text-gray-600">Read our platform terms and conditions</div>
+                <a href="/terms-of-service" className="block text-blue-600 hover:underline">
+                  Terms of Service
                 </a>
-                <a href="/privacy-policy" className="block p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors">
-                  <div className="font-medium">Privacy Policy</div>
-                  <div className="text-sm text-gray-600">Learn how we protect your data</div>
+                <a href="/privacy-policy" className="block text-blue-600 hover:underline">
+                  Privacy Policy
                 </a>
               </div>
             </CardContent>

@@ -68,8 +68,6 @@ export async function GET() {
     return NextResponse.json({ sessions })
 
   } catch (error) {
-    console.error("Error fetching learner sessions for user:", session?.id, error)
-    // Return empty sessions instead of error to prevent UI crashes
     return NextResponse.json({ sessions: [] })
   }
 }

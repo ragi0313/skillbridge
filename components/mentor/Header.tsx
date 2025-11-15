@@ -325,7 +325,7 @@ export default function MentorHeader() {
             {/* Credits - Hidden on mobile, shown in menu instead */}
             <Badge
               variant="outline"
-              className="hidden sm:flex cursor-pointer px-2 sm:px-3 py-1.5 sm:py-2 bg-yellow-600 border-yellow-500 text-white hover:bg-yellow-700 text-xs sm:text-sm"
+              className="hidden sm:flex px-2 sm:px-3 py-1.5 sm:py-2 bg-yellow-600 border-yellow-500 text-white text-xs sm:text-sm"
             >
               <CreditsIcon className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
               <span className="hidden lg:inline">{mentor.creditsBalance} credits</span>

@@ -85,9 +85,9 @@ export default async function MentorProfilePage({
       <UnifiedHeader />
       <section className="bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 py-55"></section>
 
-      <div className="relative max-w-7xl mx-auto px-10 z-20 py-10">
+      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-10 z-20 py-6 sm:py-10">
         <div className="flex-shrink-0 relative">
-          <div className="absolute w-32 h-32 sm:w-40 sm:h-40 lg:w-50 lg:h-50 rounded-full overflow-hidden border-4 border-white shadow-2xl -top-35">
+          <div className="absolute w-24 h-24 sm:w-32 sm:h-32 md:w-40 md:h-40 lg:w-50 lg:h-50 rounded-full overflow-hidden border-4 border-white shadow-2xl -top-24 sm:-top-28 md:-top-35">
             <img
               src={mentor.profilePictureUrl || "/placeholder.svg"}
               alt={`${mentor.firstName} ${mentor.lastName}`}
@@ -96,53 +96,53 @@ export default async function MentorProfilePage({
           </div>
         </div>
 
-        <div className="flex-1 flex-col mt-4 sm:mt-12 lg:mt-20">
-          <h1 className="text-xl sm:text-3xl lg:text-4xl font-semibold mb-2">
+        <div className="flex-1 flex-col mt-2 sm:mt-8 md:mt-12 lg:mt-20">
+          <h1 className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-semibold mb-2">
             {mentor.firstName} {mentor.lastName}
           </h1>
-          <p className="text-md text-gray-700 sm:text-lg mb-6 font-medium">
+          <p className="text-sm sm:text-md md:text-lg text-gray-700 mb-4 sm:mb-6 font-medium">
             {mentor.professionalTitle}
           </p>
 
           {/* Grouped Grid Section */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:mr-50 gap-y-6 mb-15 text-gray-700">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 lg:gap-x-8 gap-y-4 sm:gap-y-6 mb-8 sm:mb-12 lg:mb-15 text-gray-700">
             {/* Column 1 */}
-            <div className="space-y-3">
+            <div className="space-y-2 sm:space-y-3">
               <div className="flex items-center gap-2">
-                <MapPin className="w-5 h-5 text-purple-500" />
-                <span className="font-medium">{mentor.country}</span>
+                <MapPin className="w-4 h-4 sm:w-5 sm:h-5 text-purple-500 flex-shrink-0" />
+                <span className="font-medium text-sm sm:text-base">{mentor.country}</span>
               </div>
 
               <div className="flex items-center gap-2">
-                <Award className="w-5 h-5 text-purple-500" />
-                <span className="font-medium">{mentor.yearsOfExperience} years experience</span>
+                <Award className="w-4 h-4 sm:w-5 sm:h-5 text-purple-500 flex-shrink-0" />
+                <span className="font-medium text-sm sm:text-base">{mentor.yearsOfExperience} years experience</span>
               </div>
 
               <div className="flex items-center gap-2">
-                <Languages className="w-5 h-5 text-purple-500" />
-                <span className="font-medium">{parsedLanguages.length > 0 ? parsedLanguages.join(", ") : "Not specified"}</span>
+                <Languages className="w-4 h-4 sm:w-5 sm:h-5 text-purple-500 flex-shrink-0" />
+                <span className="font-medium text-sm sm:text-base">{parsedLanguages.length > 0 ? parsedLanguages.join(", ") : "Not specified"}</span>
               </div>
 
               <div className="flex items-center gap-2">
-                <Star className="w-5 h-5 fill-current text-yellow-300" />
-                <span className="font-medium">
+                <Star className="w-4 h-4 sm:w-5 sm:h-5 fill-current text-yellow-300 flex-shrink-0" />
+                <span className="font-medium text-sm sm:text-base">
                   {averageRating.toFixed(1)} ({reviews.length} reviews)
                 </span>
               </div>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-3 sm:space-y-4">
               {/* Skills - Display all skills in columns */}
               <SkillsDisplay skills={parsedSkills} />
 
               {/* LinkedIn + Social Links */}
-              <div className="flex items-center gap-4 ml-2">
+              <div className="flex items-center gap-3 sm:gap-4 ml-0 sm:ml-2">
                 {mentor.linkedInUrl && (
                   <a
                     href={mentor.linkedInUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-gray-600 hover:text-blue-600"
+                    className="text-gray-600 hover:text-blue-600 transition-colors"
                   >
                     <Linkedin className="w-5 h-5" />
                   </a>
@@ -156,7 +156,7 @@ export default async function MentorProfilePage({
                         href={item.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-gray-600 hover:text-blue-600"
+                        className="text-gray-600 hover:text-blue-600 transition-colors"
                       >
                         {item.label === "GitHub" && <Github className="w-5 h-5" />}
                         {item.label === "Twitter" && <Twitter className="w-5 h-5" />}
@@ -165,7 +165,7 @@ export default async function MentorProfilePage({
                     ) : null
                   ))
                 ) : !mentor.linkedInUrl ? (
-                  <p className="text-sm text-gray-500">No social links provided</p>
+                  <p className="text-xs sm:text-sm text-gray-500">No social links provided</p>
                 ) : null}
               </div>
             </div>
@@ -174,27 +174,27 @@ export default async function MentorProfilePage({
 
         {/* Content Grid */}
         <div className="mx-auto py-6">
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-            {/* Left Column - Main Content */}
-            <div className="lg:col-span-3 space-y-12">
+          <div className="space-y-8">
+            {/* Main Content */}
+            <div className="space-y-12">
               {/* About Section */}
               <AboutSection bio={mentor.bio} />
 
               {/* Open to Inquiries */}
               <Card className="bg-gray-50 border-0">
                 <CardContent className="px-6 py-1">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                     <div className="flex items-center gap-4">
-                      <MessageCircle className="w-8 h-8 text-gray-600" />
+                      <MessageCircle className="w-8 h-8 text-gray-600 flex-shrink-0" />
                       <div>
                         <h3 className="font-semibold text-gray-900">Open to inquiries</h3>
-                        <p className="text-gray-600">
+                        <p className="text-sm sm:text-base text-gray-600">
                           You can message {mentor.firstName} to ask questions before booking their
                           services
                         </p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
                       <MessageMentorButton
                         mentorUserId={mentor.userId}
                         mentorName={`${mentor.firstName} ${mentor.lastName}`}
@@ -213,8 +213,8 @@ export default async function MentorProfilePage({
               <ReviewsSection reviews={reviews} />
             </div>
 
-            {/* Right Column - Booking Widget */}
-            <div className="lg:col-span-1">
+            {/* Booking Widget - Always Below */}
+            <div className="w-full max-w-2xl mx-auto">
               <BookingWidget mentor={mentor} averageRate={averageRate} />
             </div>
           </div>

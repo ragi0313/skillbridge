@@ -154,7 +154,7 @@ const Login = () => {
       }
 
       // Show success toast
-      toast.success("✅ Login successful! Redirecting...", {
+      toast.success("Login successful! Redirecting...", {
         duration: 2000,
       })
 

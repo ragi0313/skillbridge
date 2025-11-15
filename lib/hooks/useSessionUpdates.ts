@@ -48,10 +48,6 @@ export function useSessionUpdates({
         setIsConnected(true)
         reconnectAttempts.current = 0
         reconnectDelay.current = 1000 // Reset delay on successful connection
-        
-        if (enableToasts) {
-          toast.success('Connected to live updates')
-        }
       }
 
       eventSource.onmessage = (event) => {

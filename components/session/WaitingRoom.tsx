@@ -203,27 +203,36 @@ export function WaitingRoom({
         })
         
         cameraStreamRef.current = stream
-        
+
         if (videoRef.current) {
           videoRef.current.srcObject = stream
-          
-          videoRef.current.onloadedmetadata = async () => {
-            if (videoRef.current) {
-              try {
-                await videoRef.current.play()
-                } catch (playError: any) {
-                if (playError.name === 'NotAllowedError') {
-                  videoRef.current.muted = true
-                  try {
-                    await videoRef.current.play()
-                  } catch (retryError) {
+
+          // Try to play immediately
+          try {
+            await videoRef.current.play()
+          } catch (playError: any) {
+            console.log("Initial play failed, waiting for metadata:", playError.message)
+
+            // If autoplay fails, try again when metadata loads
+            videoRef.current.onloadedmetadata = async () => {
+              if (videoRef.current) {
+                try {
+                  await videoRef.current.play()
+                } catch (metadataPlayError: any) {
+                  if (metadataPlayError.name === 'NotAllowedError') {
+                    videoRef.current.muted = true
+                    try {
+                      await videoRef.current.play()
+                    } catch (retryError) {
+                      console.error("Failed to play video after retry:", retryError)
                     }
+                  }
                 }
               }
             }
           }
         }
-        
+
         setCameraEnabled(true)
       }
     } catch (error: any) {

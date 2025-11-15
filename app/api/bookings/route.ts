@@ -226,12 +226,19 @@ async function handleBooking(req: NextRequest) {
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours from now
       }).returning();
 
-      // Notify mentor
+      // Notify mentor with correct timezone formatting
+      const scheduledDateStr = scheduledStart.toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+        timeZone: mentor.timezone,
+      });
+
       await tx.insert(notifications).values({
         userId: mentor.userId,
         type: "session_request",
         title: "New Session Request!",
-        message: `You have a new session request from a learner for ${skill.skillName} on ${scheduledStart.toLocaleDateString()} at ${startTimeStr}.`,
+        message: `You have a new session request from a learner for ${skill.skillName} on ${scheduledDateStr} at ${startTimeStr}.`,
         relatedEntityType: "session",
         relatedEntityId: booking[0].id,
         createdAt: new Date(),

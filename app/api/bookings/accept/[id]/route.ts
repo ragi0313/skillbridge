@@ -84,18 +84,34 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           userId: learners.userId,
           firstName: users.firstName,
           lastName: users.lastName,
+          timezone: learners.timezone,
         })
         .from(learners)
         .innerJoin(users, eq(learners.userId, users.id))
         .where(eq(learners.id, booking.learnerId))
 
       if (learnerData) {
+        // Format date and time in learner's timezone
+        const learnerTimezone = learnerData.timezone || "UTC"
+        const scheduledDateStr = booking.scheduledDate.toLocaleDateString("en-US", {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+          timeZone: learnerTimezone,
+        })
+        const scheduledTimeStr = booking.scheduledDate.toLocaleTimeString("en-US", {
+          hour: "numeric",
+          minute: "2-digit",
+          hour12: true,
+          timeZone: learnerTimezone,
+        })
+
         // Notify learner that session was accepted
         await tx.insert(notifications).values({
           userId: learnerData.userId,
           type: "booking_accepted",
           title: "Session Confirmed!",
-          message: `Your mentoring session has been confirmed. The session will start on ${booking.scheduledDate.toLocaleDateString()} at ${booking.scheduledDate.toLocaleTimeString()}.`,
+          message: `Your mentoring session has been confirmed. The session will start on ${scheduledDateStr} at ${scheduledTimeStr}.`,
           relatedEntityType: "session",
           relatedEntityId: sessionId,
           createdAt: now,

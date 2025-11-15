@@ -577,10 +577,11 @@ export class SessionMonitorService {
   private async completeFinishedSessions(): Promise<void> {
     try {
       const now = new Date()
-      
+
       const sessions = await db
         .select({
           id: bookingSessions.id,
+          status: bookingSessions.status,
           learner: {
             userId: learners.userId,
           },
@@ -593,13 +594,22 @@ export class SessionMonitorService {
         .leftJoin(mentors, eq(bookingSessions.mentorId, mentors.id))
         .where(
           and(
-            eq(bookingSessions.status, 'ongoing'),
+            or(
+              eq(bookingSessions.status, 'ongoing'),
+              eq(bookingSessions.status, 'upcoming'),
+              eq(bookingSessions.status, 'confirmed')
+            ),
             lt(bookingSessions.endTime, now)
           )
         )
 
       for (const session of sessions) {
         try {
+          // Log if completing a session that wasn't in 'ongoing' status
+          if (session.status !== 'ongoing') {
+            console.log(`[SESSION_MONITOR] Completing session ${session.id} stuck in '${session.status}' status`)
+          }
+
           const result = await sessionCompletionService.completeSession({
             sessionId: session.id,
             reason: 'time_expired',
@@ -608,7 +618,7 @@ export class SessionMonitorService {
 
           if (result.success && !result.alreadyCompleted) {
             this.stats.sessionsCompleted++
-            
+
             if (session.learner && session.mentor) {
               await broadcastSessionUpdate(
                 session.id,

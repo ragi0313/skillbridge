@@ -702,21 +702,29 @@ export function VideoCallRoom({
       try {
         console.log("[VIDEO_CALL] Initializing Agora SDK...")
 
-        // Fire-and-forget video call entry tracking (non-blocking)
+        // Track video call entry (critical for session status management)
+        console.log("[VIDEO_CALL] Calling enter-video API for session:", sessionId)
         fetch(`/api/sessions/${sessionId}/enter-video`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
         })
-          .then((response) => {
+          .then(async (response) => {
+            console.log("[VIDEO_CALL] enter-video response status:", response.status)
             if (response.ok) {
               return response.json()
+            } else {
+              const errorText = await response.text()
+              console.error("[VIDEO_CALL] enter-video failed:", response.status, errorText)
+              throw new Error(`Failed to track video entry: ${errorText}`)
             }
           })
           .then((data) => {
-            if (data) console.log("[VIDEO_CALL] Video call entry tracked:", data.message)
+            console.log("[VIDEO_CALL] Video call entry tracked successfully:", data)
+            console.log("[VIDEO_CALL] Both users joined:", data.bothJoined)
+            console.log("[VIDEO_CALL] Session status:", data.sessionStatus)
           })
           .catch((error) => {
-            console.warn("[VIDEO_CALL] Video call entry tracking failed:", error)
+            console.error("[VIDEO_CALL] Video call entry tracking error:", error)
           })
 
         // Validate config before proceeding
@@ -1627,16 +1635,16 @@ export function VideoCallRoom({
             <div className="flex items-center space-x-2 sm:space-x-3">
               <div>
                 <Logo textColor="text-white" />
-                <p className={`text-xs sm:text-sm font-medium ${getConnectionStatusColor(connectionState)}`}>
+                <div className={`flex items-center gap-2 text-xs sm:text-sm font-medium ${getConnectionStatusColor(connectionState)}`}>
                    <div className="w-2 h-2 sm:w-3 sm:h-3 rounded-full bg-gradient-to-r from-green-400 to-emerald-500 animate-pulse shadow-lg shadow-green-400/50"></div>
-                  {connectionState === "connected"
+                  <span>{connectionState === "connected"
                     ? "Connected"
                     : connectionState === "connecting"
                       ? "Connecting..."
                       : connectionState === "reconnecting"
                         ? "Reconnecting..."
-                        : "Disconnected"}
-                </p>
+                        : "Disconnected"}</span>
+                </div>
               </div>
             </div>
 

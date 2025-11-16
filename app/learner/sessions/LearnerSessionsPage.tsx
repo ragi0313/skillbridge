@@ -56,7 +56,7 @@ export function LearnerSessionsPage() {
         )
       )
     },
-    enableToasts: true
+    enableToasts: false
   })
 
   useEffect(() => {

@@ -52,7 +52,7 @@ export function MentorSessionsPage() {
         )
       )
     },
-    enableToasts: true
+    enableToasts: false
   })
 
   useEffect(() => {

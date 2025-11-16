@@ -147,28 +147,6 @@ export default function SessionPage() {
       const data = await response.json()
       console.log("[SESSION_PAGE] Successfully joined session via /join API")
       setHasJoinedSession(true)
-
-      // CRITICAL: Record join timestamp immediately when user joins waiting room
-      console.log("[SESSION_PAGE] Recording join timestamp via /enter-video API...")
-      try {
-        const enterVideoResponse = await fetch(`/api/sessions/${sessionId}/enter-video`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' }
-        })
-
-        if (enterVideoResponse.ok) {
-          const enterVideoData = await enterVideoResponse.json()
-          console.log("[SESSION_PAGE] Join timestamp recorded successfully:", enterVideoData)
-        } else {
-          const errorText = await enterVideoResponse.text()
-          console.error("[SESSION_PAGE] Failed to record join timestamp:", enterVideoResponse.status, errorText)
-          // Don't fail the whole join process if this fails
-        }
-      } catch (enterVideoError) {
-        console.error("[SESSION_PAGE] Error recording join timestamp:", enterVideoError)
-        // Don't fail the whole join process if this fails
-      }
-
       return true
     } catch (error) {
       console.error("[SESSION_PAGE] Error joining session:", error)
@@ -280,6 +258,27 @@ export default function SessionPage() {
         }
         // Wait a moment for the backend state to settle
         await new Promise(resolve => setTimeout(resolve, 500))
+      }
+
+      // CRITICAL: Record join timestamp when user clicks "Join Video"
+      console.log("[SESSION_PAGE] Recording join timestamp (user clicked Join Video)...")
+      try {
+        const enterVideoResponse = await fetch(`/api/sessions/${sessionId}/enter-video`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        })
+
+        if (enterVideoResponse.ok) {
+          const enterVideoData = await enterVideoResponse.json()
+          console.log("[SESSION_PAGE] Join timestamp recorded:", enterVideoData)
+        } else {
+          const errorText = await enterVideoResponse.text()
+          console.warn("[SESSION_PAGE] Failed to record join timestamp:", enterVideoResponse.status, errorText)
+          // Don't fail video call if timestamp recording fails
+        }
+      } catch (enterVideoError) {
+        console.warn("[SESSION_PAGE] Error recording join timestamp:", enterVideoError)
+        // Don't fail video call if timestamp recording fails
       }
 
       // Get Agora tokens with improved retry logic

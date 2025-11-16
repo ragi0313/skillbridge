@@ -1,3 +1,7 @@
+'use client'
+
+import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { Header } from "@/components/landing/Header"
 import { HeroSectionAnimated } from "@/components/landing/HeroSectionAnimated"
 import { StatsSectionWithImages } from "@/components/landing/statsSectionWithImages"
@@ -14,6 +18,35 @@ import { StartJourneySection } from "@/components/landing/startJourneySection"
 import { Footer } from "@/components/landing/Footer"
 
 export default function HomePage() {
+  const router = useRouter()
+
+  useEffect(() => {
+    // Client-side check to redirect logged-in users
+    // This is a safety net in case middleware doesn't catch it
+    async function checkAuth() {
+      try {
+        const response = await fetch('/api/auth/session', {
+          method: 'GET',
+          credentials: 'include'
+        })
+
+        if (response.ok) {
+          const data = await response.json()
+          if (data.session && data.session.role) {
+            const role = data.session.role
+            const redirectPath = role === 'admin' ? `/${role}/dashboard` : `/${role}`
+            router.replace(redirectPath)
+          }
+        }
+      } catch (error) {
+        // If auth check fails, just show the landing page
+        console.log('Auth check failed, showing landing page')
+      }
+    }
+
+    checkAuth()
+  }, [router])
+
   return (
     <div className="min-h-screen bg-background">
       <Header />

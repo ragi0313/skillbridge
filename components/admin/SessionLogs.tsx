@@ -45,6 +45,8 @@ interface SessionLog {
   mentorJoinedAt?: string
   learnerLeftAt?: string
   mentorLeftAt?: string
+  learnerConnectionDurationMs?: number
+  mentorConnectionDurationMs?: number
   createdAt: string
   refundRequestId?: number
   refundStatus?: string
@@ -345,12 +347,22 @@ export default function SessionLogs() {
                               {(selectedSession.learnerJoinedAt || selectedSession.mentorJoinedAt) && (
                                 <div>
                                   <h4 className="font-semibold mb-2">Connection Timeline</h4>
-                                  <div className="space-y-1 text-sm">
+                                  <div className="space-y-2 text-sm">
                                     {selectedSession.mentorJoinedAt && (
-                                      <p>✅ Mentor joined: {format(new Date(selectedSession.mentorJoinedAt), "HH:mm:ss")}</p>
+                                      <div>
+                                        <p>✅ Mentor joined: {format(new Date(selectedSession.mentorJoinedAt), "HH:mm:ss")}</p>
+                                        {selectedSession.mentorConnectionDurationMs && (
+                                          <p className="ml-6 text-gray-600">Duration in session: {formatDuration(selectedSession.mentorConnectionDurationMs)}</p>
+                                        )}
+                                      </div>
                                     )}
                                     {selectedSession.learnerJoinedAt && (
-                                      <p>✅ Learner joined: {format(new Date(selectedSession.learnerJoinedAt), "HH:mm:ss")}</p>
+                                      <div>
+                                        <p>✅ Learner joined: {format(new Date(selectedSession.learnerJoinedAt), "HH:mm:ss")}</p>
+                                        {selectedSession.learnerConnectionDurationMs && (
+                                          <p className="ml-6 text-gray-600">Duration in session: {formatDuration(selectedSession.learnerConnectionDurationMs)}</p>
+                                        )}
+                                      </div>
                                     )}
                                     {selectedSession.mentorLeftAt && (
                                       <p>⏹️ Mentor left: {format(new Date(selectedSession.mentorLeftAt), "HH:mm:ss")}</p>

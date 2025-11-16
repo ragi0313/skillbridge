@@ -33,6 +33,7 @@ export async function GET(req: NextRequest) {
     // Build filters
     const filters = []
 
+    // Search filter - will work now that we have proper joins
     if (search) {
       filters.push(
         or(
@@ -43,8 +44,20 @@ export async function GET(req: NextRequest) {
       )
     }
 
+    // Status filter - CRITICAL: Handle no-shows correctly
     if (status !== "all") {
-      filters.push(eq(bookingSessions.status, status))
+      // Handle "no shows" filter - should include all no-show statuses
+      if (status === "both_no_show") {
+        filters.push(
+          or(
+            eq(bookingSessions.status, "both_no_show"),
+            eq(bookingSessions.status, "learner_no_show"),
+            eq(bookingSessions.status, "mentor_no_show")
+          )
+        )
+      } else {
+        filters.push(eq(bookingSessions.status, status))
+      }
     }
 
     // Date filter
@@ -57,6 +70,10 @@ export async function GET(req: NextRequest) {
     const whereClause = filters.length > 0 ? and(...filters) : undefined
 
     // Get sessions with basic data first
+    // We need to join mentor and learner users for search to work
+    const mentorUsers = usersTable
+    const learnerUsers = usersTable
+
     const sessions = await db
       .select({
         id: bookingSessions.id,
@@ -85,8 +102,16 @@ export async function GET(req: NextRequest) {
         refundReason: refundRequests.requestReason,
         refundAmount: refundRequests.refundedAmount,
         refundRequestedAt: refundRequests.createdAt,
+        mentorFirstName: sql<string>`mentor_users.first_name`,
+        mentorLastName: sql<string>`mentor_users.last_name`,
+        learnerFirstName: sql<string>`learner_users.first_name`,
+        learnerLastName: sql<string>`learner_users.last_name`,
       })
       .from(bookingSessions)
+      .leftJoin(mentors, eq(bookingSessions.mentorId, mentors.id))
+      .leftJoin(learners, eq(bookingSessions.learnerId, learners.id))
+      .leftJoin(sql`${usersTable} as mentor_users`, sql`${mentors.userId} = mentor_users.id`)
+      .leftJoin(sql`${usersTable} as learner_users`, sql`${learners.userId} = learner_users.id`)
       .leftJoin(mentorSkills, eq(bookingSessions.mentorSkillId, mentorSkills.id))
       .leftJoin(sessionFeedback, eq(sessionFeedback.sessionId, bookingSessions.id))
       .leftJoin(refundRequests, eq(refundRequests.sessionId, bookingSessions.id))
@@ -95,37 +120,15 @@ export async function GET(req: NextRequest) {
       .limit(isExport ? 1000 : limit)
       .offset(isExport ? 0 : offset)
 
-    // Get mentor and learner names separately
-    const mentorIds = [...new Set(sessions.map(s => s.mentorId).filter(Boolean))]
-    const learnerIds = [...new Set(sessions.map(s => s.learnerId).filter(Boolean))]
-
-    const mentorNames = mentorIds.length > 0 ? await db
-      .select({
-        mentorId: mentors.id,
-        name: sql<string>`concat(${usersTable.firstName}, ' ', ${usersTable.lastName})`
-      })
-      .from(mentors)
-      .leftJoin(usersTable, eq(mentors.userId, usersTable.id))
-      .where(inArray(mentors.id, mentorIds)) : []
-
-    const learnerNames = learnerIds.length > 0 ? await db
-      .select({
-        learnerId: learners.id,
-        name: sql<string>`concat(${usersTable.firstName}, ' ', ${usersTable.lastName})`
-      })
-      .from(learners)
-      .leftJoin(usersTable, eq(learners.userId, usersTable.id))
-      .where(inArray(learners.id, learnerIds)) : []
-
-    // Create lookup maps
-    const mentorNameMap = new Map(mentorNames.map(m => [m.mentorId, m.name]))
-    const learnerNameMap = new Map(learnerNames.map(l => [l.learnerId, l.name]))
-
-    // Combine the data
+    // Names are now directly in the query, just format them
     const sessionsWithNames = sessions.map(session => ({
       ...session,
-      mentorName: mentorNameMap.get(session.mentorId) || 'Unknown',
-      learnerName: learnerNameMap.get(session.learnerId) || 'Unknown'
+      mentorName: session.mentorFirstName && session.mentorLastName
+        ? `${session.mentorFirstName} ${session.mentorLastName}`
+        : 'Unknown',
+      learnerName: session.learnerFirstName && session.learnerLastName
+        ? `${session.learnerFirstName} ${session.learnerLastName}`
+        : 'Unknown'
     }))
 
     if (isExport) {
@@ -173,10 +176,14 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    // Get total count for pagination
+    // Get total count for pagination - must have same joins as main query for filters to work
     const countResult = await db
       .select({ count: sql<number>`count(*)` })
       .from(bookingSessions)
+      .leftJoin(mentors, eq(bookingSessions.mentorId, mentors.id))
+      .leftJoin(learners, eq(bookingSessions.learnerId, learners.id))
+      .leftJoin(sql`${usersTable} as mentor_users`, sql`${mentors.userId} = mentor_users.id`)
+      .leftJoin(sql`${usersTable} as learner_users`, sql`${learners.userId} = learner_users.id`)
       .leftJoin(mentorSkills, eq(bookingSessions.mentorSkillId, mentorSkills.id))
       .leftJoin(sessionFeedback, eq(sessionFeedback.sessionId, bookingSessions.id))
       .where(whereClause)

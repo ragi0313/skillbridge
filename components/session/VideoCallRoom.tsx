@@ -393,34 +393,28 @@ export function VideoCallRoom({
       return
     }
 
-    try {
-      console.log("[VIDEO_CALL] ===== STARTING CHAT INITIALIZATION (POLLING MODE) =====")
-      console.log("[VIDEO_CALL] Session ID:", sessionId)
+    console.log("[VIDEO_CALL] ===== STARTING CHAT INITIALIZATION (POLLING MODE) =====")
+    console.log("[VIDEO_CALL] Session ID:", sessionId)
 
-      // Mark as initialized FIRST to prevent multiple init attempts
-      setIsChatInitialized(true)
-      chatInitializedRef.current = true
-      console.log("[VIDEO_CALL] Chat state marked as initialized")
+    // CRITICAL: Mark as initialized IMMEDIATELY to enable chat UI
+    setIsChatInitialized(true)
+    chatInitializedRef.current = true
+    console.log("[VIDEO_CALL] Chat enabled - users can now send messages")
 
-      // Fetch initial messages
-      console.log("[VIDEO_CALL] Fetching initial session messages...")
-      await fetchSessionMessages()
-      console.log("[VIDEO_CALL] Initial messages fetched successfully")
+    // Fetch initial messages (non-blocking)
+    fetchSessionMessages()
+      .then(() => {
+        console.log("[VIDEO_CALL] Initial messages loaded")
+      })
+      .catch((error) => {
+        console.warn("[VIDEO_CALL] Failed to fetch initial messages, but chat still enabled:", error)
+      })
 
-      // Start polling for new messages (supports text, files, and images)
-      console.log("[VIDEO_CALL] Starting chat polling for real-time updates...")
-      startChatPolling()
+    // Start polling for new messages (supports text, files, and images)
+    console.log("[VIDEO_CALL] Starting chat polling...")
+    startChatPolling()
 
-      console.log("[VIDEO_CALL] ===== SESSION CHAT INITIALIZED SUCCESSFULLY (POLLING) =====")
-    } catch (error) {
-      console.error("[VIDEO_CALL] CRITICAL: Chat initialization failed:", error)
-      // Still enable chat even if initial fetch fails
-      setIsChatInitialized(true)
-      chatInitializedRef.current = true
-      console.log("[VIDEO_CALL] Fallback: Enabling chat with polling...")
-      // Start polling as fallback
-      startChatPolling()
-    }
+    console.log("[VIDEO_CALL] ===== CHAT READY =====")
   }, [sessionId, fetchSessionMessages, startChatPolling])
 
   // Cleanup session chat

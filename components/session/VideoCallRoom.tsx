@@ -394,34 +394,50 @@ export function VideoCallRoom({
     }
 
     try {
-      console.log("[VIDEO_CALL] Initializing session chat with Pusher real-time messaging")
+      console.log("[VIDEO_CALL] ===== STARTING CHAT INITIALIZATION =====")
+      console.log("[VIDEO_CALL] Session ID:", sessionId)
+      console.log("[VIDEO_CALL] Chat initialized ref:", chatInitializedRef.current)
+      console.log("[VIDEO_CALL] Is cleaning up:", isCleaningUpRef.current)
 
-      // Mark as initialized
+      // Mark as initialized FIRST to prevent multiple init attempts
       setIsChatInitialized(true)
       chatInitializedRef.current = true
+      console.log("[VIDEO_CALL] Chat state marked as initialized")
 
       // Fetch initial messages
+      console.log("[VIDEO_CALL] Fetching initial session messages...")
       await fetchSessionMessages()
+      console.log("[VIDEO_CALL] Initial messages fetched successfully")
 
       // Initialize Pusher for real-time messages
+      console.log("[VIDEO_CALL] Getting Pusher config...")
       const pusherConfig = getPusherConfig()
+      console.log("[VIDEO_CALL] Pusher config available:", !!pusherConfig)
+
       if (pusherConfig && typeof window !== 'undefined') {
         try {
           // Dynamically import Pusher JS
+          console.log("[VIDEO_CALL] Importing Pusher JS library...")
           const PusherJS = (await import('pusher-js')).default
+          console.log("[VIDEO_CALL] Pusher JS library imported successfully")
 
           // Create Pusher client if not already created
           if (!pusherClientRef.current) {
+            console.log("[VIDEO_CALL] Creating new Pusher client...")
             pusherClientRef.current = new PusherJS(pusherConfig.key, {
               cluster: pusherConfig.cluster,
               forceTLS: true,
             })
-            console.log("[VIDEO_CALL] Pusher client initialized for session chat")
+            console.log("[VIDEO_CALL] Pusher client created successfully")
+          } else {
+            console.log("[VIDEO_CALL] Using existing Pusher client")
           }
 
           // Subscribe to session channel
           const channelName = getSessionChannel(sessionId)
+          console.log("[VIDEO_CALL] Subscribing to channel:", channelName)
           sessionChannelRef.current = pusherClientRef.current.subscribe(channelName)
+          console.log("[VIDEO_CALL] Successfully subscribed to channel")
 
           // Listen for new messages
           sessionChannelRef.current.bind(PUSHER_EVENTS.SESSION_CHAT_MESSAGE, (message: ChatMessage) => {
@@ -447,22 +463,29 @@ export function VideoCallRoom({
             }
           })
 
-          console.log("[VIDEO_CALL] Session chat initialized successfully with Pusher on channel:", channelName)
+          console.log("[VIDEO_CALL] ===== SESSION CHAT INITIALIZED SUCCESSFULLY =====")
+          console.log("[VIDEO_CALL] Using Pusher real-time messaging on channel:", channelName)
         } catch (pusherError) {
-          console.error("[VIDEO_CALL] Failed to initialize Pusher, falling back to polling:", pusherError)
+          console.error("[VIDEO_CALL] Pusher initialization failed:", pusherError)
+          console.log("[VIDEO_CALL] Falling back to polling mode...")
           // Fallback to polling if Pusher fails
           startChatPolling()
         }
       } else {
-        console.warn("[VIDEO_CALL] Pusher config not available, falling back to polling")
+        console.warn("[VIDEO_CALL] Pusher config not available (missing key or cluster)")
+        console.log("[VIDEO_CALL] Falling back to polling mode...")
         // Fallback to polling if Pusher not configured
         startChatPolling()
       }
+
+      console.log("[VIDEO_CALL] ===== CHAT INITIALIZATION COMPLETED =====")
     } catch (error) {
-      console.error("[VIDEO_CALL] Failed to initialize session chat:", error)
+      console.error("[VIDEO_CALL] CRITICAL: Chat initialization failed:", error)
+      console.error("[VIDEO_CALL] Error details:", error)
       // Still enable chat even if initial fetch fails
       setIsChatInitialized(true)
       chatInitializedRef.current = true
+      console.log("[VIDEO_CALL] Fallback: Enabling chat with polling...")
       // Fallback to polling
       startChatPolling()
     }
@@ -947,13 +970,21 @@ export function VideoCallRoom({
         console.log("[VIDEO_CALL] Agora initialization completed successfully")
 
         // Initialize chat immediately after connecting (don't wait for remote user)
+        // Initialize chat immediately after successful Agora connection
         if (!chatInitializedRef.current && !isCleaningUpRef.current && !isCallEnding) {
+          console.log("[VIDEO_CALL] Triggering chat initialization after successful Agora connection")
+          // Use immediate timeout to ensure Agora state is fully settled
           setTimeout(() => {
             if (!chatInitializedRef.current && !isCleaningUpRef.current && !isCallEnding) {
-              console.log("[VIDEO_CALL] Initializing chat after successful connection")
-              initializeSessionChat()
+              console.log("[VIDEO_CALL] Initializing chat now...")
+              initializeSessionChat().catch((error) => {
+                console.error("[VIDEO_CALL] Chat initialization error:", error)
+                // Still mark as initialized to prevent infinite retry
+                setIsChatInitialized(true)
+                chatInitializedRef.current = true
+              })
             }
-          }, 100)
+          }, 500)
         }
 
         // Start session tracking with proper cleanup handling
@@ -1101,6 +1132,15 @@ export function VideoCallRoom({
   const toggleScreenShare = useCallback(async () => {
     if (!agoraClientRef.current) {
       console.warn("[VIDEO_CALL] No Agora client available for screen sharing")
+      setMediaError("Unable to start screen sharing. Please wait for the video call to fully initialize.")
+      setTimeout(() => setMediaError(null), 3000)
+      return
+    }
+
+    if (isInitializingRef.current) {
+      console.warn("[VIDEO_CALL] Agora still initializing, cannot start screen share yet")
+      setMediaError("Video call is still connecting. Please wait a moment and try again.")
+      setTimeout(() => setMediaError(null), 3000)
       return
     }
 

@@ -18,6 +18,7 @@ export interface SessionCompletionOptions {
   reason: 'completed' | 'cancelled' | 'technical_issues' | 'time_expired' | 'user_ended'
   completedBy: 'user' | 'system_timer' | 'admin'
   userId?: number
+  cancellationReason?: string
 }
 
 export interface SessionCompletionResult {
@@ -37,7 +38,7 @@ class SessionCompletionService {
   private readonly CREDITS_TO_PHP_RATE = 11.2 // 1 credit = ₱11.2
 
   async completeSession(options: SessionCompletionOptions): Promise<SessionCompletionResult> {
-    const { sessionId, reason, completedBy } = options
+    const { sessionId, reason, completedBy, cancellationReason } = options
 
     return await db.transaction(async (tx) => {
       // Get session with row lock to prevent concurrent completion
@@ -117,17 +118,22 @@ class SessionCompletionService {
 
       // Determine final status and payment logic
       const { finalStatus, shouldProcessPayment, shouldRefundLearner, refundReason } =
-        this.determineCompletionOutcome(reason, learnerDuration, mentorDuration)
+        this.determineCompletionOutcome(reason, learnerDuration, mentorDuration, cancellationReason)
 
       // SECURITY: Validate state transition
       validateTransitionOrThrow(sessionRecord.status, finalStatus)
 
       // Update session status and metadata
-      const updateData = {
+      const updateData: any = {
         status: finalStatus,
         agoraCallEndedAt: completionTime,
         learnerConnectionDurationMs: Math.max(learnerDuration, sessionRecord.learnerConnectionDurationMs || 0),
         mentorConnectionDurationMs: Math.max(mentorDuration, sessionRecord.mentorConnectionDurationMs || 0),
+      }
+
+      // Add cancellationReason if provided and session is being cancelled
+      if (cancellationReason && (finalStatus === 'cancelled' || reason === 'cancelled')) {
+        updateData.cancellationReason = cancellationReason
       }
 
       await tx
@@ -402,9 +408,10 @@ class SessionCompletionService {
   }
 
   private determineCompletionOutcome(
-    reason: string, 
-    learnerDuration: number, 
-    mentorDuration: number
+    reason: string,
+    learnerDuration: number,
+    mentorDuration: number,
+    cancellationReason?: string
   ): {
     finalStatus: string
     shouldProcessPayment: boolean
@@ -420,7 +427,7 @@ class SessionCompletionService {
           finalStatus: 'cancelled',
           shouldProcessPayment: false,
           shouldRefundLearner: true,
-          refundReason: 'Session cancelled by user'
+          refundReason: cancellationReason || 'Session cancelled by user'
         }
 
       case 'technical_issues':

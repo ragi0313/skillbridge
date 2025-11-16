@@ -414,7 +414,7 @@ export function VideoCallRoom({
           if (!pusherClientRef.current) {
             pusherClientRef.current = new PusherJS(pusherConfig.key, {
               cluster: pusherConfig.cluster,
-              encrypted: true,
+              forceTLS: true,
             })
             console.log("[VIDEO_CALL] Pusher client initialized for session chat")
           }

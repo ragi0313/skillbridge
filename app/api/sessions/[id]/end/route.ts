@@ -23,7 +23,7 @@ export async function POST(
       return NextResponse.json({ error: 'Invalid session ID' }, { status: 400 })
     }
 
-    const { reason = 'completed' } = await request.json()
+    const { reason = 'completed', cancellationReason } = await request.json()
 
     // Verify user authorization first
     const sessionQuery = await db
@@ -58,7 +58,8 @@ export async function POST(
       sessionId,
       reason: reason as 'completed' | 'cancelled' | 'technical_issues',
       completedBy: 'user',
-      userId
+      userId,
+      cancellationReason: cancellationReason
     })
 
     // End Agora call if exists and session was actually completed (not already completed)

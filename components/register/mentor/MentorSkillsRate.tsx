@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ArrowLeft, Plus, X, DollarSign, Star, Zap, Info, Coins } from "lucide-react"
+import { CreditsIcon } from "@/components/ui/credits-icon"
 
 type Props = {
   formData: any
@@ -150,7 +151,7 @@ export default function MentorSkillsRates({ formData, setFormData, nextStep, pre
                     <h4 className="font-semibold text-gray-900 text-lg">{skill.name}</h4>
                     <div className="flex items-center space-x-4 text-sm text-gray-600 mt-1">
                       <span className="flex items-center">
-                        <Zap className="w-4 h-4 mr-1 text-blue-500" />
+                        <CreditsIcon />
                         {skill.rate} credits/hour
                       </span>
                     </div>
@@ -175,9 +176,6 @@ export default function MentorSkillsRates({ formData, setFormData, nextStep, pre
       <Card className="bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200">
         <CardContent className="p-6">
           <div className="flex items-start space-x-3">
-            <div className="w-8 h-8 bg-amber-100 rounded-full flex items-center justify-center flex-shrink-0">
-              <DollarSign className="w-4 h-4 text-amber-600" />
-            </div>
             <div>
               <h3 className="font-semibold text-amber-900 mb-2">Payment Information</h3>
               <p className="text-amber-800 text-sm leading-relaxed">

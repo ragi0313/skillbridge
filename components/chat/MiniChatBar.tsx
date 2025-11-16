@@ -513,9 +513,9 @@ export function MiniChatBar({ user, className }: MiniChatBarProps) {
                     {otherParticipant.firstName[0]}{otherParticipant.lastName[0]}
                   </AvatarFallback>
                 </Avatar>
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0 overflow-hidden">
                   <div className="flex items-center justify-between">
-                    <p className={`font-semibold text-base truncate ${isUnread ? 'text-gray-900' : 'text-gray-700'}`}>
+                    <p className={`font-semibold text-base truncate break-all ${isUnread ? 'text-gray-900' : 'text-gray-700'}`}>
                       {otherParticipant.firstName} {otherParticipant.lastName}
                     </p>
                     <div className="flex items-center space-x-2">
@@ -530,7 +530,7 @@ export function MiniChatBar({ user, className }: MiniChatBarProps) {
                     </div>
                   </div>
                   {conversation.lastMessage ? (
-                    <p className="text-sm text-gray-600 truncate mt-1">
+                    <p className="text-sm text-gray-600 truncate mt-1 break-all overflow-hidden">
                       {(() => {
                         // Determine if current user sent the message
                         const isCurrentUserSender = user && conversation.lastMessage.senderId === user.id
@@ -612,7 +612,7 @@ export function MiniChatBar({ user, className }: MiniChatBarProps) {
                 >
                   <div className="relative max-w-[85%]">
                     <div
-                      className={`p-3 rounded-2xl shadow-sm ${
+                      className={`p-3 rounded-2xl shadow-sm break-words overflow-wrap-anywhere ${
                         isOwnMessage
                           ? 'bg-blue-500 text-white'
                           : 'bg-gray-100 text-gray-900 border border-gray-200'
@@ -633,7 +633,7 @@ export function MiniChatBar({ user, className }: MiniChatBarProps) {
                                   <img
                                     src={attachment.fileUrl}
                                     alt={attachment.originalFilename}
-                                    className="max-w-full rounded cursor-pointer hover:opacity-90 transition-opacity"
+                                    className="max-w-full w-full rounded cursor-pointer hover:opacity-90 transition-opacity object-contain"
                                     style={{ maxHeight: '200px' }}
                                   />
                                 </a>
@@ -641,8 +641,8 @@ export function MiniChatBar({ user, className }: MiniChatBarProps) {
                                 <div className="border rounded p-2 bg-white/10 mb-1">
                                   <div className="flex items-center space-x-2">
                                     <FileText className="w-4 h-4 flex-shrink-0" />
-                                    <div className="flex-1 min-w-0">
-                                      <p className="text-xs font-medium truncate">
+                                    <div className="flex-1 min-w-0 overflow-hidden">
+                                      <p className="text-xs font-medium truncate break-all">
                                         {attachment.originalFilename}
                                       </p>
                                       <p className="text-xs opacity-75">
@@ -664,7 +664,7 @@ export function MiniChatBar({ user, className }: MiniChatBarProps) {
                       )}
 
                       {message.content && (
-                        <p className="text-sm leading-relaxed break-words">{message.content}</p>
+                        <p className="text-sm leading-relaxed break-words overflow-wrap-anywhere whitespace-pre-wrap">{message.content}</p>
                       )}
 
                       <p className={`text-xs mt-1 ${
@@ -733,8 +733,8 @@ export function MiniChatBar({ user, className }: MiniChatBarProps) {
                     ) : (
                       <FileText className="w-5 h-5 text-gray-500" />
                     )}
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium truncate">{attachment.file.name}</p>
+                    <div className="flex-1 min-w-0 overflow-hidden">
+                      <p className="font-medium truncate break-all">{attachment.file.name}</p>
                       <p className="text-gray-500">
                         {(attachment.file.size / 1024 / 1024).toFixed(1)} MB
                       </p>

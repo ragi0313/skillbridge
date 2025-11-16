@@ -86,26 +86,29 @@ export default async function MentorProfilePage({
       <section className="bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 py-55"></section>
 
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-10 z-20 py-6 sm:py-10">
-        <div className="flex-shrink-0 relative">
-          <div className="absolute w-24 h-24 sm:w-32 sm:h-32 md:w-40 md:h-40 lg:w-50 lg:h-50 rounded-full overflow-hidden border-4 border-white shadow-2xl -top-24 sm:-top-28 md:-top-35">
-            <img
-              src={mentor.profilePictureUrl || "/placeholder.svg"}
-              alt={`${mentor.firstName} ${mentor.lastName}`}
-              className="w-full h-full object-cover"
-            />
-          </div>
-        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Left Section - Profile Info */}
+          <div className="lg:col-span-2">
+            <div className="flex-shrink-0 relative">
+              <div className="absolute w-24 h-24 sm:w-32 sm:h-32 md:w-40 md:h-40 lg:w-50 lg:h-50 rounded-full overflow-hidden border-4 border-white shadow-2xl -top-24 sm:-top-28 md:-top-35">
+                <img
+                  src={mentor.profilePictureUrl || "/placeholder.svg"}
+                  alt={`${mentor.firstName} ${mentor.lastName}`}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            </div>
 
-        <div className="flex-1 flex-col mt-2 sm:mt-8 md:mt-12 lg:mt-20">
-          <h1 className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-semibold mb-2">
-            {mentor.firstName} {mentor.lastName}
-          </h1>
-          <p className="text-sm sm:text-md md:text-lg text-gray-700 mb-4 sm:mb-6 font-medium">
-            {mentor.professionalTitle}
-          </p>
+            <div className="flex-1 flex-col mt-2 sm:mt-8 md:mt-12 lg:mt-20">
+              <h1 className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-semibold mb-2">
+                {mentor.firstName} {mentor.lastName}
+              </h1>
+              <p className="text-sm sm:text-md md:text-lg text-gray-700 mb-4 sm:mb-6 font-medium">
+                {mentor.professionalTitle}
+              </p>
 
-          {/* Grouped Grid Section */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 lg:gap-x-8 gap-y-4 sm:gap-y-6 mb-8 sm:mb-12 lg:mb-15 text-gray-700">
+              {/* Grouped Grid Section */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 sm:gap-y-6 mb-8 sm:mb-12 lg:mb-15 text-gray-700">
             {/* Column 1 */}
             <div className="space-y-2 sm:space-y-3">
               <div className="flex items-center gap-2">
@@ -136,7 +139,7 @@ export default async function MentorProfilePage({
               <SkillsDisplay skills={parsedSkills} />
 
               {/* LinkedIn + Social Links */}
-              <div className="flex items-center gap-3 sm:gap-4 ml-0 sm:ml-2">
+              <div className="flex items-center gap-3 sm:gap-4">
                 {mentor.linkedInUrl && (
                   <a
                     href={mentor.linkedInUrl}
@@ -170,15 +173,27 @@ export default async function MentorProfilePage({
               </div>
             </div>
           </div>
+
+              {/* About Section - Moved Higher */}
+              <div className="mt-6 sm:mt-8">
+                <AboutSection bio={mentor.bio} />
+              </div>
+            </div>
+          </div>
+
+          {/* Booking Widget - Desktop Only, Sticky on Right Side */}
+          <div className="hidden lg:block lg:col-span-1">
+            <div className="sticky top-20">
+              <BookingWidget mentor={mentor} averageRate={averageRate} />
+            </div>
+          </div>
         </div>
 
-        {/* Content Grid */}
+        {/* Other Content Section */}
         <div className="mx-auto py-6">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Main Content - Left Column */}
-            <div className="lg:col-span-2 space-y-8 lg:space-y-12">
-              {/* About Section */}
-              <AboutSection bio={mentor.bio} />
+          <div className="max-w-5xl">
+            {/* Main Content */}
+            <div className="space-y-8 lg:space-y-12">
 
               {/* Open to Inquiries */}
               <Card className="bg-gray-50 border-0">
@@ -211,11 +226,11 @@ export default async function MentorProfilePage({
 
               {/* Reviews Section */}
               <ReviewsSection reviews={reviews} />
-            </div>
 
-            {/* Booking Widget - Right Column on Large Screens, Below on Mobile */}
-            <div className="lg:col-span-1 lg:sticky lg:top-4 lg:self-start">
-              <BookingWidget mentor={mentor} averageRate={averageRate} />
+              {/* Booking Widget - Mobile Only, Below Content */}
+              <div className="lg:hidden">
+                <BookingWidget mentor={mentor} averageRate={averageRate} />
+              </div>
             </div>
           </div>
         </div>

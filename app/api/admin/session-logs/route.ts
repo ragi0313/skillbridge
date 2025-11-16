@@ -44,20 +44,9 @@ export async function GET(req: NextRequest) {
       )
     }
 
-    // Status filter - CRITICAL: Handle no-shows correctly
+    // Status filter - only show exact status match
     if (status !== "all") {
-      // Handle "no shows" filter - should include all no-show statuses
-      if (status === "both_no_show") {
-        filters.push(
-          or(
-            eq(bookingSessions.status, "both_no_show"),
-            eq(bookingSessions.status, "learner_no_show"),
-            eq(bookingSessions.status, "mentor_no_show")
-          )
-        )
-      } else {
-        filters.push(eq(bookingSessions.status, status))
-      }
+      filters.push(eq(bookingSessions.status, status))
     }
 
     // Date filter

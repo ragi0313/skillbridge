@@ -85,7 +85,7 @@ export function MentorSessionsClient({ sessions }: MentorSessionsClientProps) {
   const [compactView, setCompactView] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   const [showArchived, setShowArchived] = useState(false)
-  const sessionsPerPage = 10
+  const sessionsPerPage = 6
 
   // Archive functionality - sessions older than 6 months are eligible for archiving
   const [archivedSessions, setArchivedSessions] = useState<Set<number>>(new Set())
@@ -162,11 +162,43 @@ export function MentorSessionsClient({ sessions }: MentorSessionsClientProps) {
       })
     }
 
-    // Sort by date (newest first)
+    // Sort by status priority first, then by date
     filtered.sort((a, b) => {
+      // Define status priority (lower number = higher priority)
+      const statusPriority: Record<string, number> = {
+        'upcoming': 1,
+        'pending': 2,
+        'ongoing': 3,
+        'confirmed': 4,
+        'completed': 5,
+        'cancelled': 6,
+        'rejected': 7,
+        'mentor_no_response': 7,
+        'both_no_show': 8,
+        'learner_no_show': 8,
+        'mentor_no_show': 8,
+        'technical_issues': 9,
+      }
+
+      const aPriority = statusPriority[a.status] || 10
+      const bPriority = statusPriority[b.status] || 10
+
+      // First sort by priority
+      if (aPriority !== bPriority) {
+        return aPriority - bPriority
+      }
+
+      // Then sort by date (for same priority, upcoming sessions show earliest first, others show newest first)
       const aDate = new Date(a.startTime || a.scheduledDate)
       const bDate = new Date(b.startTime || b.scheduledDate)
-      return bDate.getTime() - aDate.getTime()
+
+      if (aPriority <= 3) {
+        // For upcoming/pending/ongoing, show earliest first
+        return aDate.getTime() - bDate.getTime()
+      } else {
+        // For completed/cancelled, show newest first
+        return bDate.getTime() - aDate.getTime()
+      }
     })
 
     return filtered

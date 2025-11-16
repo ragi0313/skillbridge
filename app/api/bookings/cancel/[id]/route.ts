@@ -1,8 +1,9 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getSession } from "@/lib/auth/getSession"
 import { db } from "@/db"
-import { bookingSessions, mentors, learners, notifications, creditTransactions } from "@/db/schema"
+import { bookingSessions, mentors, learners, creditTransactions } from "@/db/schema"
 import { eq } from "drizzle-orm"
+import { notificationService } from "@/lib/notifications/notification-service"
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -142,57 +143,83 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         })
       }
 
-      // Send notifications to both parties
-      if (cancelledBy !== "learner") {
-        await tx.insert(notifications).values({
-          userId: booking.learnerUserId,
-          type: "booking_cancelled",
-          title: "Session Cancelled",
-          message: `Your session has been cancelled by the ${cancelledBy}. ${refundAmount > 0 ? `${refundAmount} credits have been refunded.` : "No refund applicable."} Reason: ${reason.trim()}`,
-          relatedEntityType: "session",
-          relatedEntityId: sessionId,
-          createdAt: now,
-        })
-      }
-
-      if (cancelledBy !== "mentor") {
-        await tx.insert(notifications).values({
-          userId: booking.mentorUserId,
-          type: "booking_cancelled",
-          title: "Session Cancelled",
-          message: `A session has been cancelled by the ${cancelledBy}. Reason: ${reason.trim()}`,
-          relatedEntityType: "session",
-          relatedEntityId: sessionId,
-          createdAt: now,
-        })
-      }
-
-      // Broadcast the cancellation update to connected clients
-      try {
-        const { broadcastSessionUpdate } = await import("@/app/api/sse/session-updates/route")
-        await broadcastSessionUpdate(sessionId, "cancellation", {
-          sessionId,
-          status: "cancelled",
-          cancelledBy,
-          refundAmount,
-          refundType,
-          reason: reason.trim()
-        })
-      } catch (broadcastError) {
-        console.error("Failed to broadcast cancellation update:", broadcastError)
-        // Don't throw - broadcasting failure shouldn't fail the cancellation
-      }
-
+      // Store data for notifications (send after transaction completes)
       return {
         success: true,
         message: "Booking cancelled successfully",
         refundAmount,
         refundType,
         cancelledBy,
+        learnerUserId: booking.learnerUserId,
+        mentorUserId: booking.mentorUserId,
+        reason: reason.trim(),
       }
+
     })
 
-    return NextResponse.json(result)
+    // Send notifications after transaction completes (outside transaction for better performance)
+    try {
+      const notificationType = result.refundType === 'none' && cancelledBy === 'learner'
+        ? 'session_cancelled_late'
+        : 'session_cancelled'
+
+      // Send notification to learner
+      if (cancelledBy !== "learner") {
+        await notificationService.createSessionStatusNotification(
+          result.learnerUserId,
+          sessionId,
+          notificationType,
+          {
+            isLearner: true,
+            refundAmount: result.refundAmount,
+            cancelledBy: result.cancelledBy,
+            cancellationReason: result.reason,
+          }
+        )
+      }
+
+      // Send notification to mentor
+      if (cancelledBy !== "mentor") {
+        await notificationService.createSessionStatusNotification(
+          result.mentorUserId,
+          sessionId,
+          notificationType,
+          {
+            isLearner: false,
+            refundAmount: result.refundAmount,
+            cancelledBy: result.cancelledBy,
+            cancellationReason: result.reason,
+          }
+        )
+      }
+    } catch (notificationError) {
+      console.error("Failed to send cancellation notifications:", notificationError)
+      // Don't fail the cancellation if notifications fail
+    }
+
+    // Broadcast the cancellation update to connected clients
+    try {
+      const { broadcastSessionUpdate } = await import("@/app/api/sse/session-updates/route")
+      await broadcastSessionUpdate(sessionId, "cancellation", {
+        sessionId,
+        status: "cancelled",
+        cancelledBy: result.cancelledBy,
+        refundAmount: result.refundAmount,
+        refundType: result.refundType,
+        reason: result.reason
+      })
+    } catch (broadcastError) {
+      console.error("Failed to broadcast cancellation update:", broadcastError)
+      // Don't throw - broadcasting failure shouldn't fail the cancellation
+    }
+
+    return NextResponse.json({
+      success: result.success,
+      message: result.message,
+      refundAmount: result.refundAmount,
+      refundType: result.refundType,
+      cancelledBy: result.cancelledBy,
+    })
   } catch (error: any) {
     console.error("Error cancelling booking:", error)
     return NextResponse.json({ error: error.message || "Failed to cancel booking" }, { status: 500 })

@@ -5,6 +5,7 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { useRealTimeTimer } from "@/lib/hooks/useRealTimeTimer"
 import { getPusherConfig, getSessionChannel, PUSHER_EVENTS } from "@/lib/pusher/config"
+import { Video, VideoOff, Mic, MicOff, PhoneOff, Monitor, MessageCircle, Edit3 } from "lucide-react"
 
 import { Whiteboard } from "../whiteboard/Whiteboard"
 import Logo from "../ui/logo"
@@ -1941,23 +1942,9 @@ export function VideoCallRoom({
             title={isVideoEnabled && localTracksRef.current.videoTrack ? "Turn off camera" : "Turn on camera"}
           >
             {isVideoEnabled && localTracksRef.current.videoTrack ? (
-              <svg className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-                />
-              </svg>
+              <Video className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6" />
             ) : (
-              <svg className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2zM3 3l18 18"
-                />
-              </svg>
+              <VideoOff className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6" />
             )}
             <div className="absolute -top-8 sm:-top-12 left-1/2 transform -translate-x-1/2 bg-black/80 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
               {isVideoEnabled && localTracksRef.current.videoTrack ? "Turn off camera" : "Turn on camera"}
@@ -1968,7 +1955,7 @@ export function VideoCallRoom({
           <button
             onClick={toggleAudio}
             disabled={isCallEnding}
-            className={`group relative p-4 rounded-2xl transition-all duration-300 hover:scale-110 hover:shadow-2xl border backdrop-blur-sm ${
+            className={`group relative p-2 sm:p-3 lg:p-4 rounded-xl sm:rounded-2xl transition-all duration-300 hover:scale-110 hover:shadow-2xl border backdrop-blur-sm ${
               isAudioEnabled
                 ? "bg-gray-700/80 hover:bg-gray-600/80 border-gray-600/50 text-white"
                 : "bg-red-600/90 hover:bg-red-700/90 border-red-500/50 text-white"
@@ -1976,31 +1963,11 @@ export function VideoCallRoom({
             title={isAudioEnabled ? "Mute" : "Unmute"}
           >
             {isAudioEnabled ? (
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"
-                />
-              </svg>
+              <Mic className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6" />
             ) : (
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
-                />
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"
-                />
-              </svg>
+              <MicOff className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6" />
             )}
-            <div className="absolute -top-12 left-1/2 transform -translate-x-1/2 bg-black/80 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+            <div className="absolute -top-8 sm:-top-12 left-1/2 transform -translate-x-1/2 bg-black/80 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
               {isAudioEnabled ? "Mute" : "Unmute"}
             </div>
           </button>
@@ -2009,7 +1976,7 @@ export function VideoCallRoom({
           <button
             onClick={toggleScreenShare}
             disabled={isCallEnding || isRemoteScreenSharing}
-            className={`group relative p-4 rounded-2xl transition-all duration-300 border backdrop-blur-sm ${
+            className={`group relative p-2 sm:p-3 lg:p-4 rounded-xl sm:rounded-2xl transition-all duration-300 border backdrop-blur-sm ${
               isScreenSharing
                 ? "bg-orange-600/90 hover:bg-orange-700/90 border-orange-500/50 text-white hover:scale-110 hover:shadow-2xl"
                 : isRemoteScreenSharing
@@ -2018,20 +1985,13 @@ export function VideoCallRoom({
             }`}
             title={isScreenSharing ? "Stop sharing" : isRemoteScreenSharing ? "Other is sharing" : "Share screen"}
           >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-              />
-            </svg>
+            <Monitor className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6" />
             {isScreenSharing && (
               <div className="absolute -top-1 -right-1 w-3 h-3 bg-orange-400 rounded-full animate-pulse">
                 <div className="absolute inset-0 bg-orange-400 rounded-full animate-ping"></div>
               </div>
             )}
-            <div className="absolute -top-12 left-1/2 transform -translate-x-1/2 bg-black/80 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+            <div className="absolute -top-8 sm:-top-12 left-1/2 transform -translate-x-1/2 bg-black/80 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
               {isScreenSharing ? "Stop sharing" : isRemoteScreenSharing ? "Other is sharing" : "Share screen"}
             </div>
           </button>
@@ -2039,27 +1999,20 @@ export function VideoCallRoom({
           {/* Chat Control */}
           <button
             onClick={() => setShowSidebar(!showSidebar)}
-            className={`group relative p-4 rounded-2xl transition-all duration-300 hover:scale-110 hover:shadow-2xl border backdrop-blur-sm ${
+            className={`group relative p-2 sm:p-3 lg:p-4 rounded-xl sm:rounded-2xl transition-all duration-300 hover:scale-110 hover:shadow-2xl border backdrop-blur-sm ${
               showSidebar
                 ? "bg-blue-600/90 hover:bg-blue-700/90 border-blue-500/50 text-white"
                 : "bg-gray-700/80 hover:bg-gray-600/80 border-gray-600/50 text-white backdrop-blur-sm"
             }`}
             title={showSidebar ? "Hide chat" : "Show chat"}
           >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
-              />
-            </svg>
+            <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6" />
             {unreadCount > 0 && !showSidebar && (
               <div className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold animate-pulse">
                 {unreadCount > 99 ? "99+" : unreadCount}
               </div>
             )}
-            <div className="absolute -top-12 left-1/2 transform -translate-x-1/2 bg-black/80 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+            <div className="absolute -top-8 sm:-top-12 left-1/2 transform -translate-x-1/2 bg-black/80 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
               {showSidebar ? "Hide chat" : "Show chat"}
             </div>
           </button>
@@ -2067,27 +2020,20 @@ export function VideoCallRoom({
           {/* Whiteboard Control */}
           <button
             onClick={() => setShowWhiteboard(!showWhiteboard)}
-            className={`group relative p-4 rounded-2xl transition-all duration-300 hover:scale-110 hover:shadow-2xl border backdrop-blur-sm ${
+            className={`group relative p-2 sm:p-3 lg:p-4 rounded-xl sm:rounded-2xl transition-all duration-300 hover:scale-110 hover:shadow-2xl border backdrop-blur-sm ${
               showWhiteboard
                 ? "bg-purple-600/90 hover:bg-purple-700/90 border-purple-500/50 text-white"
                 : "bg-gray-700/80 hover:bg-gray-600/80 border-gray-600/50 text-white backdrop-blur-sm"
             }`}
             title={showWhiteboard ? "Hide whiteboard" : "Show whiteboard"}
           >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-              />
-            </svg>
+            <Edit3 className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6" />
             {showWhiteboard && (
               <div className="absolute -top-1 -right-1 w-3 h-3 bg-purple-400 rounded-full animate-pulse">
                 <div className="absolute inset-0 bg-purple-400 rounded-full animate-ping"></div>
               </div>
             )}
-            <div className="absolute -top-12 left-1/2 transform -translate-x-1/2 bg-black/80 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+            <div className="absolute -top-8 sm:-top-12 left-1/2 transform -translate-x-1/2 bg-black/80 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
               {showWhiteboard ? "Hide whiteboard" : "Show whiteboard"}
             </div>
           </button>
@@ -2099,13 +2045,11 @@ export function VideoCallRoom({
           <button
             onClick={() => handleLeaveCall("user_action")}
             disabled={isCallEnding}
-            className="group relative p-4 rounded-2xl bg-red-600/90 hover:bg-red-700/90 border border-red-500/50 text-white transition-all duration-300 hover:scale-110 hover:shadow-2xl backdrop-blur-sm"
+            className="group relative p-2 sm:p-3 lg:p-4 rounded-xl sm:rounded-2xl bg-red-600/90 hover:bg-red-700/90 border border-red-500/50 text-white transition-all duration-300 hover:scale-110 hover:shadow-2xl backdrop-blur-sm"
             title="End call"
           >
-            <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M20.487 17.14l-4.065-3.696a1.2 1.2 0 00-1.391-.207l-2.608 1.517a1 1 0 01-1.207-.175l-2.762-2.762a1 1 0 01-.175-1.207l1.517-2.608a1.2 1.2 0 00-.207-1.391L6.86 3.513a1.2 1.2 0 00-1.571-.066L3.114 5.272a3 3 0 00-.65 3.477l.847 1.588a19.5 19.5 0 005.453 6.798 19.5 19.5 0 006.798 5.453l1.588.847a3 3 0 003.477-.65l1.825-2.175a1.2 1.2 0 00-.066-1.571z"/>
-            </svg>
-            <div className="absolute -top-12 left-1/2 transform -translate-x-1/2 bg-black/80 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+            <PhoneOff className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6" />
+            <div className="absolute -top-8 sm:-top-12 left-1/2 transform -translate-x-1/2 bg-black/80 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
               End call
             </div>
           </button>

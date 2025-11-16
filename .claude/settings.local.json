@@ -12,7 +12,8 @@
       "WebSearch",
       "Bash(cat:*)",
       "Bash(nul)",
-      "Bash(python fix_session_logs.py:*)"
+      "Bash(python fix_session_logs.py:*)",
+      "Bash(find:*)"
     ],
     "deny": [],
     "ask": []

@@ -537,14 +537,14 @@ export function WaitingRoom({
     }
 
     return (
-      <Button 
-        disabled 
+      <Button
+        disabled
         className="w-full max-w-md px-8 py-4 bg-gray-600/50 hover:bg-gray-600/50 text-gray-300 font-semibold rounded-2xl border-2 border-gray-500/30"
         size="lg"
       >
         <div className="flex items-center space-x-3">
           <CheckCircle className="h-5 w-5" />
-          <span>Waiting for session...</span>
+          <span>Waiting for session time to start...</span>
         </div>
       </Button>
     )
@@ -552,8 +552,8 @@ export function WaitingRoom({
 
   const getJoinStatusText = (status: JoinStatus) => {
     switch (status) {
-      case "waiting": return "Ready to join"
-      case "joining": return "Joining session..."
+      case "waiting": return "Waiting for session time to start..."
+      case "joining": return "Connecting to session..."
       case "joined": return "Joined session"
       case "ready": return "Ready for video call"
       case "error": return "Join failed - retry needed"

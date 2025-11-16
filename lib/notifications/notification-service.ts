@@ -141,7 +141,7 @@ export class NotificationService {
   async createSessionStatusNotification(
     userId: number,
     sessionId: number,
-    notificationType: 'session_upcoming' | 'session_started' | 'session_completed' | 'learner_no_show' | 'mentor_no_show' | 'both_no_show' | 'session_ended',
+    notificationType: 'session_upcoming' | 'session_started' | 'session_completed' | 'learner_no_show' | 'mentor_no_show' | 'both_no_show' | 'session_ended' | 'session_cancelled' | 'session_cancelled_late',
     data: {
       isLearner?: boolean;
       mentorName?: string;
@@ -150,12 +150,36 @@ export class NotificationService {
       refundAmount?: number;
       payoutAmount?: number;
       skillName?: string;
+      cancelledBy?: string;
+      cancellationReason?: string;
     } = {}
   ): Promise<{ success: boolean }> {
     let title: string
     let message: string
-    
+
     switch (notificationType) {
+      case 'session_cancelled':
+        title = data.isLearner ? "Session Cancelled" : "Session Cancelled"
+        if (data.cancelledBy === 'mentor') {
+          message = data.isLearner
+            ? `Your session has been cancelled by the mentor. ${data.refundAmount ? `You've received a full refund of ${data.refundAmount} credits.` : ''} ${data.cancellationReason ? `Reason: ${data.cancellationReason}` : ''}`
+            : `You cancelled this session. ${data.cancellationReason ? `Reason: ${data.cancellationReason}` : ''}`
+        } else if (data.cancelledBy === 'learner') {
+          message = data.isLearner
+            ? `You cancelled this session. ${data.refundAmount ? `You've received a refund of ${data.refundAmount} credits.` : 'No refund was issued.'} ${data.cancellationReason ? `Reason: ${data.cancellationReason}` : ''}`
+            : `The learner cancelled this session. ${data.cancellationReason ? `Reason: ${data.cancellationReason}` : ''}`
+        } else {
+          message = `This session has been cancelled. ${data.refundAmount ? `Refund: ${data.refundAmount} credits.` : ''}`
+        }
+        break
+
+      case 'session_cancelled_late':
+        title = "Session Cancelled - No Refund"
+        message = data.isLearner
+          ? `You cancelled this session less than 1 hour before it was scheduled to start. As per our policy, no refund has been issued. ${data.cancellationReason ? `Reason: ${data.cancellationReason}` : ''}`
+          : `The learner cancelled this session less than 1 hour before start time. ${data.cancellationReason ? `Reason: ${data.cancellationReason}` : ''}`
+        break
+
       case 'session_upcoming':
         title = data.isLearner ? "Session Available to Join! 🎯" : "Session Ready - Learner May Join 🎯"
         message = data.isLearner 

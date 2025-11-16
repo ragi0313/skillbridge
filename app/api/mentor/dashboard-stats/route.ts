@@ -40,6 +40,7 @@ export async function GET() {
       totalSessions: 0,
       monthlySessions: 0,
       totalEarnings: 0,
+      upcomingEarnings: 0,
       averageRating: 0,
       upcomingCount: 0,
       completionRate: 0,
@@ -89,6 +90,13 @@ export async function GET() {
       stats.upcomingCount = upcomingSessions.length
       stats.totalEarnings = Math.floor(
         completedSessions.reduce((sum, session) => {
+          return sum + (Number(session.totalCostCredits) || 0)
+        }, 0) * 0.8 // 80% after platform fee
+      )
+
+      // Calculate upcoming earnings from confirmed/upcoming sessions
+      stats.upcomingEarnings = Math.floor(
+        upcomingSessions.reduce((sum, session) => {
           return sum + (Number(session.totalCostCredits) || 0)
         }, 0) * 0.8 // 80% after platform fee
       )
@@ -198,36 +206,31 @@ export async function GET() {
 
       stats.averageRating = Math.round((Number(ratingResult[0]?.avgRating) || 0) * 10) / 10
 
-      // Get recent reviews with learner info (limit to 10)
-      const reviewsData = await db.query.mentorReviews.findMany({
-        where: eq(mentorReviews.mentorId, mentor.id),
-        orderBy: [desc(mentorReviews.createdAt)],
-        limit: 10,
-        with: {
-          learner: {
-            columns: {
-              userId: true,
-              profilePictureUrl: true,
-            },
-            with: {
-              user: {
-                columns: {
-                  firstName: true,
-                  lastName: true,
-                }
-              }
-            }
-          }
-        }
-      })
+      // Get recent reviews with learner info using explicit joins (limit to 10)
+      const reviewsData = await db
+        .select({
+          id: mentorReviews.id,
+          rating: mentorReviews.rating,
+          reviewText: mentorReviews.reviewText,
+          createdAt: mentorReviews.createdAt,
+          learnerProfilePictureUrl: learners.profilePictureUrl,
+          learnerFirstName: users.firstName,
+          learnerLastName: users.lastName,
+        })
+        .from(mentorReviews)
+        .innerJoin(learners, eq(mentorReviews.learnerId, learners.id))
+        .innerJoin(users, eq(learners.userId, users.id))
+        .where(eq(mentorReviews.mentorId, mentor.id))
+        .orderBy(desc(mentorReviews.createdAt))
+        .limit(10)
 
       stats.recentReviews = reviewsData.map(review => ({
         id: review.id,
         rating: review.rating,
         reviewText: review.reviewText,
         createdAt: review.createdAt,
-        learnerName: `${review.learner.user.firstName} ${review.learner.user.lastName}`,
-        learnerProfilePicture: review.learner.profilePictureUrl,
+        learnerName: `${review.learnerFirstName} ${review.learnerLastName}`,
+        learnerProfilePicture: review.learnerProfilePictureUrl,
       }))
       } catch (ratingError) {
       console.error("Dashboard stats: Error fetching ratings:", ratingError)

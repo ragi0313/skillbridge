@@ -310,7 +310,9 @@ export default function SessionLogs() {
               <SelectItem value="completed">Completed</SelectItem>
               <SelectItem value="cancelled">Cancelled</SelectItem>
               <SelectItem value="pending">Pending</SelectItem>
-              <SelectItem value="both_no_show">No Shows</SelectItem>
+              <SelectItem value="both_no_show">Both No Show</SelectItem>
+              <SelectItem value="learner_no_show">Learner No Show</SelectItem>
+              <SelectItem value="mentor_no_show">Mentor No Show</SelectItem>
             </SelectContent>
           </Select>
 
@@ -386,7 +388,7 @@ export default function SessionLogs() {
                         </DialogTrigger>
                         <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
                           <DialogHeader>
-                            <DialogTitle>Session Details - #{session.id}</DialogTitle>
+                            <DialogTitle>Session Details</DialogTitle>
                           </DialogHeader>
                           {selectedSession && (
                             <div className="space-y-6">
@@ -400,7 +402,7 @@ export default function SessionLogs() {
                                 <div>
                                   <h4 className="font-semibold mb-2">Session Info</h4>
                                   <p><strong>Status:</strong> {getStatusBadge(selectedSession.status)}</p>
-                                  <p><strong>Scheduled:</strong> {format(new Date(selectedSession.scheduledDate), "MMM dd, yyyy HH:mm")}</p>
+                                  <p><strong>Scheduled:</strong> {format(new Date(selectedSession.scheduledDate), "MMM dd, yyyy h:mm a")}</p>
                                   <p><strong>Duration:</strong> {formatDuration(selectedSession.actualDurationMs, selectedSession.durationMinutes)}</p>
                                   <p><strong>Cost:</strong> {selectedSession.totalCostCredits} credits</p>
                                 </div>
@@ -412,7 +414,7 @@ export default function SessionLogs() {
                                   <div className="space-y-2 text-sm">
                                     {selectedSession.mentorJoinedAt && (
                                       <div>
-                                        <p>✅ Mentor joined: {format(new Date(selectedSession.mentorJoinedAt), "HH:mm:ss")}</p>
+                                        <p>✅ Mentor joined: {format(new Date(selectedSession.mentorJoinedAt), "MMM dd, h:mm:ss a")}</p>
                                         {selectedSession.mentorConnectionDurationMs && (
                                           <p className="ml-6 text-gray-600">Duration in session: {formatDuration(selectedSession.mentorConnectionDurationMs)}</p>
                                         )}
@@ -420,17 +422,17 @@ export default function SessionLogs() {
                                     )}
                                     {selectedSession.learnerJoinedAt && (
                                       <div>
-                                        <p>✅ Learner joined: {format(new Date(selectedSession.learnerJoinedAt), "HH:mm:ss")}</p>
+                                        <p>✅ Learner joined: {format(new Date(selectedSession.learnerJoinedAt), "MMM dd, h:mm:ss a")}</p>
                                         {selectedSession.learnerConnectionDurationMs && (
                                           <p className="ml-6 text-gray-600">Duration in session: {formatDuration(selectedSession.learnerConnectionDurationMs)}</p>
                                         )}
                                       </div>
                                     )}
                                     {selectedSession.mentorLeftAt && (
-                                      <p>⏹️ Mentor left: {format(new Date(selectedSession.mentorLeftAt), "HH:mm:ss")}</p>
+                                      <p>⏹️ Mentor left: {format(new Date(selectedSession.mentorLeftAt), "MMM dd, h:mm:ss a")}</p>
                                     )}
                                     {selectedSession.learnerLeftAt && (
-                                      <p>⏹️ Learner left: {format(new Date(selectedSession.learnerLeftAt), "HH:mm:ss")}</p>
+                                      <p>⏹️ Learner left: {format(new Date(selectedSession.learnerLeftAt), "MMM dd, h:mm:ss a")}</p>
                                     )}
                                   </div>
                                 </div>
@@ -486,7 +488,7 @@ export default function SessionLogs() {
                                     <div>
                                       <span className="text-sm font-medium">Requested At:</span>
                                       <p className="text-sm text-gray-700">
-                                        {selectedSession.refundRequestedAt && format(new Date(selectedSession.refundRequestedAt), "MMM dd, yyyy HH:mm")}
+                                        {selectedSession.refundRequestedAt && format(new Date(selectedSession.refundRequestedAt), "MMM dd, yyyy h:mm a")}
                                       </p>
                                     </div>
                                     {selectedSession.refundStatus === 'pending' && (
@@ -536,7 +538,7 @@ export default function SessionLogs() {
                     <div>
                       <span className="font-medium">Scheduled:</span>
                       <br />
-                      {format(new Date(session.scheduledDate), "MMM dd, HH:mm")}
+                      {format(new Date(session.scheduledDate), "MMM dd, h:mm a")}
                     </div>
                     <div>
                       <span className="font-medium">Duration:</span>

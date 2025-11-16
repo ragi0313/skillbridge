@@ -93,8 +93,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         } else if (hoursUntilSession >= 2) {
           refundAmount = Math.floor(booking.escrowCredits * 0.5) // 50% refund
           refundType = "partial"
+        } else if (hoursUntilSession >= 1) {
+          // Between 1-2 hours: 25% refund
+          refundAmount = Math.floor(booking.escrowCredits * 0.25)
+          refundType = "minimal"
         } else {
-          refundAmount = 0 // No refund
+          // Less than 1 hour: No refund
+          refundAmount = 0
           refundType = "none"
         }
       }

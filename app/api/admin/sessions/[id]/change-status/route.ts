@@ -1,0 +1,229 @@
+import { NextRequest, NextResponse } from "next/server"
+import { getSession } from "@/lib/auth/getSession"
+import { db } from "@/db"
+import { bookingSessions, learners, mentors, notifications, creditTransactions } from "@/db/schema"
+import { eq } from "drizzle-orm"
+
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const session = await getSession()
+    if (!session || session.role !== "admin") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const { id } = await params
+    const sessionId = parseInt(id)
+    if (isNaN(sessionId)) {
+      return NextResponse.json({ error: "Invalid session ID" }, { status: 400 })
+    }
+
+    const body = await request.json()
+    const { newStatus, reason } = body
+
+    if (!newStatus || !reason || reason.trim().length === 0) {
+      return NextResponse.json(
+        { error: "New status and reason are required" },
+        { status: 400 }
+      )
+    }
+
+    // Valid statuses that admin can set
+    const validStatuses = [
+      "pending",
+      "confirmed",
+      "cancelled",
+      "completed",
+      "both_no_show",
+      "learner_no_show",
+      "mentor_no_show",
+      "rejected"
+    ]
+
+    if (!validStatuses.includes(newStatus)) {
+      return NextResponse.json({ error: "Invalid status" }, { status: 400 })
+    }
+
+    const result = await db.transaction(async (tx) => {
+      // Get booking session details
+      const [booking] = await tx
+        .select({
+          id: bookingSessions.id,
+          mentorId: bookingSessions.mentorId,
+          learnerId: bookingSessions.learnerId,
+          status: bookingSessions.status,
+          totalCostCredits: bookingSessions.totalCostCredits,
+          escrowCredits: bookingSessions.escrowCredits,
+          learnerUserId: learners.userId,
+          mentorUserId: mentors.userId,
+          learnerCreditsBalance: learners.creditsBalance,
+          mentorCreditsBalance: mentors.creditsBalance,
+        })
+        .from(bookingSessions)
+        .innerJoin(learners, eq(bookingSessions.learnerId, learners.id))
+        .innerJoin(mentors, eq(bookingSessions.mentorId, mentors.id))
+        .where(eq(bookingSessions.id, sessionId))
+
+      if (!booking) {
+        throw new Error("Booking session not found")
+      }
+
+      const oldStatus = booking.status
+      if (oldStatus === newStatus) {
+        throw new Error("Session already has this status")
+      }
+
+      const now = new Date()
+
+      // Determine credit handling based on status change
+      let refundToLearner = 0
+      let paymentToMentor = 0
+      let notificationTitle = ""
+      let learnerMessage = ""
+      let mentorMessage = ""
+
+      // Status-specific logic
+      if (newStatus === "cancelled") {
+        // Full refund to learner for admin cancellation
+        refundToLearner = booking.escrowCredits
+        notificationTitle = "Session Cancelled by Admin"
+        learnerMessage = `Your session has been cancelled by an administrator. ${refundToLearner} credits have been refunded. Reason: ${reason}`
+        mentorMessage = `A session has been cancelled by an administrator. Reason: ${reason}`
+      } else if (newStatus === "completed") {
+        // Pay mentor for completed session
+        paymentToMentor = booking.escrowCredits
+        notificationTitle = "Session Marked as Completed"
+        learnerMessage = `Your session has been marked as completed by an administrator. ${booking.escrowCredits} credits were paid to the mentor. Reason: ${reason}`
+        mentorMessage = `A session has been marked as completed by an administrator. You have received ${paymentToMentor} credits. Reason: ${reason}`
+      } else if (newStatus === "both_no_show") {
+        // Full refund to learner (both didn't show)
+        refundToLearner = booking.escrowCredits
+        notificationTitle = "Session Status Changed: No Show"
+        learnerMessage = `Your session status has been changed to "Both No Show" by an administrator. ${refundToLearner} credits have been refunded. Reason: ${reason}`
+        mentorMessage = `A session status has been changed to "Both No Show" by an administrator. Reason: ${reason}`
+      } else if (newStatus === "learner_no_show") {
+        // Pay mentor (learner didn't show)
+        paymentToMentor = booking.escrowCredits
+        notificationTitle = "Session Status Changed: Learner No Show"
+        learnerMessage = `Your session status has been changed to "Learner No Show" by an administrator. No refund applicable. Reason: ${reason}`
+        mentorMessage = `A session status has been changed to "Learner No Show" by an administrator. You have received ${paymentToMentor} credits. Reason: ${reason}`
+      } else if (newStatus === "mentor_no_show") {
+        // Full refund to learner (mentor didn't show)
+        refundToLearner = booking.escrowCredits
+        notificationTitle = "Session Status Changed: Mentor No Show"
+        learnerMessage = `Your session status has been changed to "Mentor No Show" by an administrator. ${refundToLearner} credits have been refunded. Reason: ${reason}`
+        mentorMessage = `A session status has been changed to "Mentor No Show" by an administrator. Reason: ${reason}`
+      } else if (newStatus === "rejected") {
+        // Full refund to learner
+        refundToLearner = booking.escrowCredits
+        notificationTitle = "Session Rejected by Admin"
+        learnerMessage = `Your session has been rejected by an administrator. ${refundToLearner} credits have been refunded. Reason: ${reason}`
+        mentorMessage = `A session has been rejected by an administrator. Reason: ${reason}`
+      } else if (newStatus === "pending" || newStatus === "confirmed") {
+        // No credit changes for these statuses
+        notificationTitle = `Session Status Changed to ${newStatus}`
+        learnerMessage = `Your session status has been changed to "${newStatus}" by an administrator. Reason: ${reason}`
+        mentorMessage = `A session status has been changed to "${newStatus}" by an administrator. Reason: ${reason}`
+      }
+
+      // Update session status
+      await tx
+        .update(bookingSessions)
+        .set({
+          status: newStatus,
+          updatedAt: now,
+        })
+        .where(eq(bookingSessions.id, sessionId))
+
+      // Process refund to learner if applicable
+      if (refundToLearner > 0) {
+        const newLearnerBalance = booking.learnerCreditsBalance + refundToLearner
+        await tx
+          .update(learners)
+          .set({
+            creditsBalance: newLearnerBalance,
+            updatedAt: now,
+          })
+          .where(eq(learners.id, booking.learnerId))
+
+        // Record refund transaction
+        await tx.insert(creditTransactions).values({
+          userId: booking.learnerUserId,
+          type: "admin_refund",
+          direction: "credit",
+          amount: refundToLearner,
+          balanceBefore: booking.learnerCreditsBalance,
+          balanceAfter: newLearnerBalance,
+          relatedSessionId: sessionId,
+          description: `Admin refund - Status changed to ${newStatus}: ${reason.trim()}`,
+          createdAt: now,
+        })
+      }
+
+      // Process payment to mentor if applicable
+      if (paymentToMentor > 0) {
+        const newMentorBalance = booking.mentorCreditsBalance + paymentToMentor
+        await tx
+          .update(mentors)
+          .set({
+            creditsBalance: newMentorBalance,
+            updatedAt: now,
+          })
+          .where(eq(mentors.id, booking.mentorId))
+
+        // Record payment transaction
+        await tx.insert(creditTransactions).values({
+          userId: booking.mentorUserId,
+          type: "session_payment",
+          direction: "credit",
+          amount: paymentToMentor,
+          balanceBefore: booking.mentorCreditsBalance,
+          balanceAfter: newMentorBalance,
+          relatedSessionId: sessionId,
+          description: `Admin payment - Status changed to ${newStatus}: ${reason.trim()}`,
+          createdAt: now,
+        })
+      }
+
+      // Send notifications to both parties
+      await tx.insert(notifications).values({
+        userId: booking.learnerUserId,
+        type: "session_status_changed",
+        title: notificationTitle,
+        message: learnerMessage,
+        relatedEntityType: "session",
+        relatedEntityId: sessionId,
+        createdAt: now,
+      })
+
+      await tx.insert(notifications).values({
+        userId: booking.mentorUserId,
+        type: "session_status_changed",
+        title: notificationTitle,
+        message: mentorMessage,
+        relatedEntityType: "session",
+        relatedEntityId: sessionId,
+        createdAt: now,
+      })
+
+      return {
+        success: true,
+        message: "Session status updated successfully",
+        oldStatus,
+        newStatus,
+        refundToLearner,
+        paymentToMentor,
+      }
+    })
+
+    return NextResponse.json(result)
+  } catch (error: any) {
+    console.error("Error changing session status:", error)
+    return NextResponse.json(
+      { error: error.message || "Failed to change session status" },
+      { status: 500 }
+    )
+  }
+}

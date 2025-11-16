@@ -7,6 +7,9 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Textarea } from "@/components/ui/textarea"
+import { Label } from "@/components/ui/label"
+import { useToast } from "@/hooks/use-toast"
 import {
   Video,
   Search,
@@ -21,7 +24,8 @@ import {
   Play,
   Pause,
   StopCircle,
-  Download
+  Download,
+  Edit
 } from "lucide-react"
 import { format } from "date-fns"
 
@@ -64,6 +68,11 @@ export default function SessionLogs() {
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [selectedSession, setSelectedSession] = useState<SessionLog | null>(null)
+  const [showStatusChangeDialog, setShowStatusChangeDialog] = useState(false)
+  const [newStatus, setNewStatus] = useState("")
+  const [statusChangeReason, setStatusChangeReason] = useState("")
+  const [changingStatus, setChangingStatus] = useState(false)
+  const { toast } = useToast()
 
   useEffect(() => {
     fetchSessionLogs()
@@ -133,6 +142,59 @@ export default function SessionLogs() {
       }
     } catch (error) {
       console.error("Failed to export sessions:", error)
+    }
+  }
+
+  const changeSessionStatus = async () => {
+    if (!selectedSession || !newStatus || !statusChangeReason.trim()) {
+      toast({
+        title: "Error",
+        description: "Please select a status and provide a reason",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      setChangingStatus(true)
+      const response = await fetch(`/api/admin/sessions/${selectedSession.id}/change-status`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          newStatus,
+          reason: statusChangeReason,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        toast({
+          title: "Success",
+          description: `Session status changed from ${data.oldStatus} to ${data.newStatus}`,
+        })
+        setShowStatusChangeDialog(false)
+        setNewStatus("")
+        setStatusChangeReason("")
+        fetchSessionLogs() // Refresh the list
+      } else {
+        toast({
+          title: "Error",
+          description: data.error || "Failed to change session status",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Failed to change session status:", error)
+      toast({
+        title: "Error",
+        description: "Failed to change session status",
+        variant: "destructive",
+      })
+    } finally {
+      setChangingStatus(false)
     }
   }
 
@@ -442,8 +504,17 @@ export default function SessionLogs() {
                                 </div>
                               )}
 
-                              {selectedSession.status === "ongoing" && (
-                                <div className="flex justify-end">
+                              {/* Admin Actions */}
+                              <div className="flex justify-end gap-3 pt-4 border-t">
+                                <Button
+                                  onClick={() => setShowStatusChangeDialog(true)}
+                                  variant="outline"
+                                  className="flex items-center space-x-2"
+                                >
+                                  <Edit className="w-4 h-4" />
+                                  <span>Change Status</span>
+                                </Button>
+                                {selectedSession.status === "ongoing" && (
                                   <Button
                                     onClick={() => forceEndSession(selectedSession.id)}
                                     variant="destructive"
@@ -452,8 +523,8 @@ export default function SessionLogs() {
                                     <StopCircle className="w-4 h-4" />
                                     <span>Force End Session</span>
                                   </Button>
-                                </div>
-                              )}
+                                )}
+                              </div>
                             </div>
                           )}
                         </DialogContent>
@@ -529,6 +600,85 @@ export default function SessionLogs() {
           )}
         </CardContent>
       </Card>
+
+      {/* Status Change Dialog */}
+      <Dialog open={showStatusChangeDialog} onOpenChange={setShowStatusChangeDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Change Session Status</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="current-status">Current Status</Label>
+              <Input
+                id="current-status"
+                value={selectedSession?.status || ""}
+                disabled
+                className="mt-1 bg-gray-100"
+              />
+            </div>
+            <div>
+              <Label htmlFor="new-status">New Status</Label>
+              <Select value={newStatus} onValueChange={setNewStatus}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Select new status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="confirmed">Confirmed</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="cancelled">Cancelled</SelectItem>
+                  <SelectItem value="both_no_show">Both No Show</SelectItem>
+                  <SelectItem value="learner_no_show">Learner No Show</SelectItem>
+                  <SelectItem value="mentor_no_show">Mentor No Show</SelectItem>
+                  <SelectItem value="rejected">Rejected</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="reason">Reason for Change</Label>
+              <Textarea
+                id="reason"
+                placeholder="Provide a detailed reason for changing the status..."
+                value={statusChangeReason}
+                onChange={(e) => setStatusChangeReason(e.target.value)}
+                rows={4}
+                className="mt-1"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                This reason will be sent to both the mentor and learner.
+              </p>
+            </div>
+            <div className="bg-blue-50 border border-blue-200 p-3 rounded-lg text-sm">
+              <p className="font-semibold text-blue-900 mb-1">Credit Handling:</p>
+              <ul className="text-blue-800 space-y-1 text-xs">
+                <li>• <strong>Cancelled/Rejected/Both No Show/Mentor No Show:</strong> Full refund to learner</li>
+                <li>• <strong>Completed/Learner No Show:</strong> Full payment to mentor</li>
+                <li>• <strong>Pending/Confirmed:</strong> No credit changes</li>
+              </ul>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowStatusChangeDialog(false)
+                  setNewStatus("")
+                  setStatusChangeReason("")
+                }}
+                disabled={changingStatus}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={changeSessionStatus}
+                disabled={changingStatus || !newStatus || !statusChangeReason.trim()}
+              >
+                {changingStatus ? "Changing..." : "Change Status"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -133,6 +133,7 @@ export default function SessionPage() {
     if (!sessionId || hasJoinedSession) return hasJoinedSession
 
     try {
+      console.log("[SESSION_PAGE] Joining session via /join API...")
       const response = await fetch(`/api/sessions/${sessionId}/join`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
@@ -144,7 +145,30 @@ export default function SessionPage() {
       }
 
       const data = await response.json()
+      console.log("[SESSION_PAGE] Successfully joined session via /join API")
       setHasJoinedSession(true)
+
+      // CRITICAL: Record join timestamp immediately when user joins waiting room
+      console.log("[SESSION_PAGE] Recording join timestamp via /enter-video API...")
+      try {
+        const enterVideoResponse = await fetch(`/api/sessions/${sessionId}/enter-video`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        })
+
+        if (enterVideoResponse.ok) {
+          const enterVideoData = await enterVideoResponse.json()
+          console.log("[SESSION_PAGE] Join timestamp recorded successfully:", enterVideoData)
+        } else {
+          const errorText = await enterVideoResponse.text()
+          console.error("[SESSION_PAGE] Failed to record join timestamp:", enterVideoResponse.status, errorText)
+          // Don't fail the whole join process if this fails
+        }
+      } catch (enterVideoError) {
+        console.error("[SESSION_PAGE] Error recording join timestamp:", enterVideoError)
+        // Don't fail the whole join process if this fails
+      }
+
       return true
     } catch (error) {
       console.error("[SESSION_PAGE] Error joining session:", error)

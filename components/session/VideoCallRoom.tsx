@@ -386,7 +386,7 @@ export function VideoCallRoom({
     }
   }, [])
 
-  // Initialize session chat (using Pusher with separate session channels)
+  // Initialize session chat (using polling for real-time updates)
   const initializeSessionChat = useCallback(async () => {
     if (chatInitializedRef.current || isCleaningUpRef.current) {
       console.log("[VIDEO_CALL] Chat already initialized or cleaning up, skipping...")
@@ -394,10 +394,8 @@ export function VideoCallRoom({
     }
 
     try {
-      console.log("[VIDEO_CALL] ===== STARTING CHAT INITIALIZATION =====")
+      console.log("[VIDEO_CALL] ===== STARTING CHAT INITIALIZATION (POLLING MODE) =====")
       console.log("[VIDEO_CALL] Session ID:", sessionId)
-      console.log("[VIDEO_CALL] Chat initialized ref:", chatInitializedRef.current)
-      console.log("[VIDEO_CALL] Is cleaning up:", isCleaningUpRef.current)
 
       // Mark as initialized FIRST to prevent multiple init attempts
       setIsChatInitialized(true)
@@ -409,117 +407,28 @@ export function VideoCallRoom({
       await fetchSessionMessages()
       console.log("[VIDEO_CALL] Initial messages fetched successfully")
 
-      // Initialize Pusher for real-time messages
-      console.log("[VIDEO_CALL] Getting Pusher config...")
-      const pusherConfig = getPusherConfig()
-      console.log("[VIDEO_CALL] Pusher config available:", !!pusherConfig)
+      // Start polling for new messages (supports text, files, and images)
+      console.log("[VIDEO_CALL] Starting chat polling for real-time updates...")
+      startChatPolling()
 
-      if (pusherConfig && typeof window !== 'undefined') {
-        try {
-          // Dynamically import Pusher JS
-          console.log("[VIDEO_CALL] Importing Pusher JS library...")
-          const PusherJS = (await import('pusher-js')).default
-          console.log("[VIDEO_CALL] Pusher JS library imported successfully")
-
-          // Create Pusher client if not already created
-          if (!pusherClientRef.current) {
-            console.log("[VIDEO_CALL] Creating new Pusher client...")
-            pusherClientRef.current = new PusherJS(pusherConfig.key, {
-              cluster: pusherConfig.cluster,
-              forceTLS: true,
-            })
-            console.log("[VIDEO_CALL] Pusher client created successfully")
-          } else {
-            console.log("[VIDEO_CALL] Using existing Pusher client")
-          }
-
-          // Subscribe to session channel
-          const channelName = getSessionChannel(sessionId)
-          console.log("[VIDEO_CALL] Subscribing to channel:", channelName)
-          sessionChannelRef.current = pusherClientRef.current.subscribe(channelName)
-          console.log("[VIDEO_CALL] Successfully subscribed to channel")
-
-          // Listen for new messages
-          sessionChannelRef.current.bind(PUSHER_EVENTS.SESSION_CHAT_MESSAGE, (message: ChatMessage) => {
-            console.log("[VIDEO_CALL] Received real-time session chat message:", message.id)
-
-            // Only add if we haven't seen this message yet
-            if (message.timestamp > lastMessageTimestampRef.current) {
-              setChatMessages((prev: ChatMessage[]) => {
-                // Check if message already exists
-                const exists = prev.some(m => m.id === message.id)
-                if (exists) return prev
-
-                const updated = [...prev, message]
-                return updated.sort((a, b) => a.timestamp - b.timestamp)
-              })
-
-              lastMessageTimestampRef.current = message.timestamp
-
-              // Update unread count if sidebar is closed
-              if (!showSidebar) {
-                setUnreadCount((prev: number) => prev + 1)
-              }
-            }
-          })
-
-          console.log("[VIDEO_CALL] ===== SESSION CHAT INITIALIZED SUCCESSFULLY =====")
-          console.log("[VIDEO_CALL] Using Pusher real-time messaging on channel:", channelName)
-        } catch (pusherError) {
-          console.error("[VIDEO_CALL] Pusher initialization failed:", pusherError)
-          console.log("[VIDEO_CALL] Falling back to polling mode...")
-          // Fallback to polling if Pusher fails
-          startChatPolling()
-        }
-      } else {
-        console.warn("[VIDEO_CALL] Pusher config not available (missing key or cluster)")
-        console.log("[VIDEO_CALL] Falling back to polling mode...")
-        // Fallback to polling if Pusher not configured
-        startChatPolling()
-      }
-
-      console.log("[VIDEO_CALL] ===== CHAT INITIALIZATION COMPLETED =====")
+      console.log("[VIDEO_CALL] ===== SESSION CHAT INITIALIZED SUCCESSFULLY (POLLING) =====")
     } catch (error) {
       console.error("[VIDEO_CALL] CRITICAL: Chat initialization failed:", error)
-      console.error("[VIDEO_CALL] Error details:", error)
       // Still enable chat even if initial fetch fails
       setIsChatInitialized(true)
       chatInitializedRef.current = true
       console.log("[VIDEO_CALL] Fallback: Enabling chat with polling...")
-      // Fallback to polling
+      // Start polling as fallback
       startChatPolling()
     }
-  }, [sessionId, fetchSessionMessages, startChatPolling, showSidebar])
+  }, [sessionId, fetchSessionMessages, startChatPolling])
 
   // Cleanup session chat
   const cleanupSessionChat = useCallback(() => {
     console.log("[VIDEO_CALL] Cleaning up session chat...")
 
     try {
-      // Unsubscribe from Pusher channel
-      if (sessionChannelRef.current) {
-        try {
-          sessionChannelRef.current.unbind_all()
-          pusherClientRef.current?.unsubscribe(getSessionChannel(sessionId))
-          console.log("[VIDEO_CALL] Unsubscribed from Pusher session channel")
-        } catch (error) {
-          console.error("[VIDEO_CALL] Error unsubscribing from Pusher:", error)
-        }
-        sessionChannelRef.current = null
-      }
-
-      // Disconnect Pusher client
-      if (pusherClientRef.current) {
-        try {
-          pusherClientRef.current.disconnect()
-          console.log("[VIDEO_CALL] Disconnected Pusher client")
-        } catch (error) {
-          console.error("[VIDEO_CALL] Error disconnecting Pusher:", error)
-        }
-        pusherClientRef.current = null
-      }
-
-      // Stop polling (fallback cleanup)
+      // Stop polling
       stopChatPolling()
 
       // Reset state
@@ -534,7 +443,7 @@ export function VideoCallRoom({
     } catch (error) {
       console.error("[VIDEO_CALL] Error during session chat cleanup:", error)
     }
-  }, [stopChatPolling, sessionId])
+  }, [stopChatPolling])
 
   // Comprehensive cleanup function
   const performCleanup = useCallback(
@@ -724,31 +633,7 @@ export function VideoCallRoom({
 
       try {
         console.log("[VIDEO_CALL] Initializing Agora SDK...")
-
-        // Track video call entry (critical for session status management)
-        console.log("[VIDEO_CALL] Calling enter-video API for session:", sessionId)
-        fetch(`/api/sessions/${sessionId}/enter-video`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-        })
-          .then(async (response) => {
-            console.log("[VIDEO_CALL] enter-video response status:", response.status)
-            if (response.ok) {
-              return response.json()
-            } else {
-              const errorText = await response.text()
-              console.error("[VIDEO_CALL] enter-video failed:", response.status, errorText)
-              throw new Error(`Failed to track video entry: ${errorText}`)
-            }
-          })
-          .then((data) => {
-            console.log("[VIDEO_CALL] Video call entry tracked successfully:", data)
-            console.log("[VIDEO_CALL] Both users joined:", data.bothJoined)
-            console.log("[VIDEO_CALL] Session status:", data.sessionStatus)
-          })
-          .catch((error) => {
-            console.error("[VIDEO_CALL] Video call entry tracking error:", error)
-          })
+        console.log("[VIDEO_CALL] Note: Join timestamp was already recorded when entering waiting room")
 
         // Validate config before proceeding
         if (!agoraConfig.appId || !agoraConfig.channel || !agoraConfig.token || !agoraConfig.uid) {

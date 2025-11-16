@@ -10,17 +10,22 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    console.log('[ENTER_VIDEO] API called')
     const session = await getSession()
-    
+
     if (!session?.id) {
+      console.log('[ENTER_VIDEO] Unauthorized - no session')
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     const { id } = await params
     const sessionId = parseInt(id)
     if (isNaN(sessionId)) {
+      console.log('[ENTER_VIDEO] Invalid session ID:', id)
       return NextResponse.json({ error: 'Invalid session ID' }, { status: 400 })
     }
+
+    console.log('[ENTER_VIDEO] Processing for session:', sessionId, 'user:', session.id)
 
     // Get session and verify user authorization
     const sessionQuery = await db
@@ -70,6 +75,8 @@ export async function POST(
 
     // Update join tracking with atomic transaction
     await db.transaction(async (tx) => {
+      console.log('[ENTER_VIDEO] Starting transaction for session:', sessionId)
+
       // Re-fetch session data within transaction with FOR UPDATE lock
       const sessionRecords = await tx
         .select({
@@ -92,6 +99,14 @@ export async function POST(
       }
 
       const sessionRecord = sessionRecords[0]
+      console.log('[ENTER_VIDEO] Session record:', {
+        id: sessionRecord.id,
+        status: sessionRecord.status,
+        learnerJoinedAt: sessionRecord.learnerJoinedAt,
+        mentorJoinedAt: sessionRecord.mentorJoinedAt,
+        learnerLeftAt: sessionRecord.learnerLeftAt,
+        mentorLeftAt: sessionRecord.mentorLeftAt
+      })
 
       // Determine current user's video call join state
       const userJoinedAt = isLearner ? sessionRecord.learnerJoinedAt : sessionRecord.mentorJoinedAt
@@ -99,12 +114,27 @@ export async function POST(
       const otherUserJoinedAt = isLearner ? sessionRecord.mentorJoinedAt : sessionRecord.learnerJoinedAt
       const otherUserLeftAt = isLearner ? sessionRecord.mentorLeftAt : sessionRecord.learnerLeftAt
 
+      console.log('[ENTER_VIDEO] User state:', {
+        userRole: isLearner ? 'learner' : 'mentor',
+        userJoinedAt,
+        userLeftAt,
+        otherUserJoinedAt,
+        otherUserLeftAt
+      })
+
       const hasAlreadyJoinedVideo = userJoinedAt !== null
       const isRejoinningVideo = hasAlreadyJoinedVideo && userLeftAt !== null
       const otherUserCurrentlyInVideo = otherUserJoinedAt !== null && otherUserLeftAt === null
 
+      console.log('[ENTER_VIDEO] Computed state:', {
+        hasAlreadyJoinedVideo,
+        isRejoinningVideo,
+        otherUserCurrentlyInVideo
+      })
+
       if (hasAlreadyJoinedVideo && !userLeftAt) {
         // User is already in video call and hasn't left - no action needed
+        console.log('[ENTER_VIDEO] User already in video, skipping update')
         entryResult.wasAlreadyInVideo = true
         return
       }
@@ -116,24 +146,26 @@ export async function POST(
 
       if (!hasAlreadyJoinedVideo) {
         // First time entering video call - set joined timestamp
-        updateData[isLearner ? 'learnerJoinedAt' : 'mentorJoinedAt'] = now
-        } else if (isRejoinningVideo) {
+        const joinedAtField = isLearner ? 'learnerJoinedAt' : 'mentorJoinedAt'
+        updateData[joinedAtField] = now
+        console.log('[ENTER_VIDEO] Setting', joinedAtField, 'to', now)
+      } else if (isRejoinningVideo) {
         // Re-entering video call after leaving - clear left timestamp
-        updateData[isLearner ? 'learnerLeftAt' : 'mentorLeftAt'] = null
-        }
+        const leftAtField = isLearner ? 'learnerLeftAt' : 'mentorLeftAt'
+        updateData[leftAtField] = null
+        console.log('[ENTER_VIDEO] Clearing', leftAtField)
+      }
 
       // Update last active timestamp for session monitoring
-      if (!hasAlreadyJoinedVideo) {
-        // First time entering video call - set last active timestamp
-        updateData[isLearner ? 'learnerLastActiveAt' : 'mentorLastActiveAt'] = now
-        } else if (isRejoinningVideo) {
-        // Re-entering video call after leaving - update last active timestamp
-        updateData[isLearner ? 'learnerLastActiveAt' : 'mentorLastActiveAt'] = now
-        }
+      if (!hasAlreadyJoinedVideo || isRejoinningVideo) {
+        const lastActiveField = isLearner ? 'learnerLastActiveAt' : 'mentorLastActiveAt'
+        updateData[lastActiveField] = now
+        console.log('[ENTER_VIDEO] Setting', lastActiveField, 'to', now)
+      }
 
       // Determine if both users will be in video call after this update
       let bothUsersWillBeInVideo = false
-      
+
       if (!hasAlreadyJoinedVideo) {
         // Current user is joining for first time - check if other user is already in video
         bothUsersWillBeInVideo = otherUserJoinedAt !== null && otherUserLeftAt === null
@@ -144,7 +176,14 @@ export async function POST(
         // Current user was already in video - check if other user is also in video
         bothUsersWillBeInVideo = otherUserJoinedAt !== null && otherUserLeftAt === null
       }
-      
+
+      console.log('[ENTER_VIDEO] Both users will be in video:', bothUsersWillBeInVideo)
+      console.log('[ENTER_VIDEO] Current time vs session start:', {
+        now: now.toISOString(),
+        sessionStart: sessionStart.toISOString(),
+        isPastStart: now >= sessionStart
+      })
+
       // Only change status if we're not already in a terminal state
       const terminalStatuses = ['completed', 'cancelled', 'both_no_show', 'mentor_no_show', 'learner_no_show']
       if (!terminalStatuses.includes(sessionRecord.status || '')) {
@@ -152,22 +191,32 @@ export async function POST(
           // Both users in video call and it's session time - mark as ongoing with call started
           updateData.status = 'ongoing'
           updateData.agoraCallStartedAt = now
-          } else if (bothUsersWillBeInVideo && now < sessionStart) {
+          console.log('[ENTER_VIDEO] Setting status to ONGOING - both users joined and session time started')
+        } else if (bothUsersWillBeInVideo && now < sessionStart) {
           // Both users entered video early - keep as upcoming until session time
           updateData.status = 'upcoming'
-          } else if (!bothUsersWillBeInVideo) {
+          console.log('[ENTER_VIDEO] Keeping status as UPCOMING - both users joined but session hasnt started')
+        } else if (!bothUsersWillBeInVideo) {
           // First user entering video call or only one user currently in video
           updateData.status = 'upcoming'
-          }
-      } else {
+          console.log('[ENTER_VIDEO] Setting status to UPCOMING - waiting for other user')
         }
+      } else {
+        console.log('[ENTER_VIDEO] Session in terminal status, not updating status:', sessionRecord.status)
+      }
+
+      console.log('[ENTER_VIDEO] Final updateData:', updateData)
 
       // Only update if we have changes
       if (Object.keys(updateData).length > 0) {
+        console.log('[ENTER_VIDEO] Executing database update...')
         await tx
           .update(bookingSessions)
           .set(updateData)
           .where(eq(bookingSessions.id, sessionId))
+        console.log('[ENTER_VIDEO] Database update completed successfully')
+      } else {
+        console.log('[ENTER_VIDEO] No changes to update')
       }
 
       // Log the connection event
@@ -215,7 +264,14 @@ export async function POST(
       .where(eq(bookingSessions.id, sessionId))
       .limit(1)
 
-    return NextResponse.json({
+    console.log('[ENTER_VIDEO] Updated session state from DB:', {
+      status: updatedSession[0]?.status,
+      learnerJoinedAt: updatedSession[0]?.learnerJoinedAt,
+      mentorJoinedAt: updatedSession[0]?.mentorJoinedAt,
+      agoraCallStartedAt: updatedSession[0]?.agoraCallStartedAt
+    })
+
+    const responseData = {
       success: true,
       message: responseMessage,
       isRejoining: entryResult.isRejoining,
@@ -225,7 +281,10 @@ export async function POST(
       mentorJoined: updatedSession[0]?.mentorJoinedAt !== null,
       bothJoined: updatedSession[0]?.learnerJoinedAt !== null && updatedSession[0]?.mentorJoinedAt !== null,
       callStarted: updatedSession[0]?.agoraCallStartedAt !== null
-    })
+    }
+
+    console.log('[ENTER_VIDEO] Returning response:', responseData)
+    return NextResponse.json(responseData)
 
   } catch (error) {
     console.error('Error entering video call:', error)

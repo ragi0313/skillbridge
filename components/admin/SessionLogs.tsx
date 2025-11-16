@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
-import { useToast } from "@/hooks/use-toast"
+import { toast } from "sonner"
 import {
   Video,
   Search,
@@ -72,7 +72,6 @@ export default function SessionLogs() {
   const [newStatus, setNewStatus] = useState("")
   const [statusChangeReason, setStatusChangeReason] = useState("")
   const [changingStatus, setChangingStatus] = useState(false)
-  const { toast } = useToast()
 
   useEffect(() => {
     fetchSessionLogs()
@@ -147,11 +146,7 @@ export default function SessionLogs() {
 
   const changeSessionStatus = async () => {
     if (!selectedSession || !newStatus || !statusChangeReason.trim()) {
-      toast({
-        title: "Error",
-        description: "Please select a status and provide a reason",
-        variant: "destructive",
-      })
+      toast.error("Please select a status and provide a reason")
       return
     }
 
@@ -171,28 +166,17 @@ export default function SessionLogs() {
       const data = await response.json()
 
       if (response.ok) {
-        toast({
-          title: "Success",
-          description: `Session status changed from ${data.oldStatus} to ${data.newStatus}`,
-        })
+        toast.success(`Session status changed from ${data.oldStatus} to ${data.newStatus}`)
         setShowStatusChangeDialog(false)
         setNewStatus("")
         setStatusChangeReason("")
         fetchSessionLogs() // Refresh the list
       } else {
-        toast({
-          title: "Error",
-          description: data.error || "Failed to change session status",
-          variant: "destructive",
-        })
+        toast.error(data.error || "Failed to change session status")
       }
     } catch (error) {
       console.error("Failed to change session status:", error)
-      toast({
-        title: "Error",
-        description: "Failed to change session status",
-        variant: "destructive",
-      })
+      toast.error("Failed to change session status")
     } finally {
       setChangingStatus(false)
     }

@@ -653,7 +653,8 @@ export default function SessionLogs() {
               <p className="font-semibold text-blue-900 mb-1">Credit Handling:</p>
               <ul className="text-blue-800 space-y-1 text-xs">
                 <li>• <strong>Cancelled/Rejected/Both No Show/Mentor No Show:</strong> Full refund to learner</li>
-                <li>• <strong>Completed/Learner No Show:</strong> Full payment to mentor</li>
+                <li>• <strong>Completed:</strong> 80% to mentor, 20% platform fee</li>
+                <li>• <strong>Learner No Show:</strong> 100% to mentor (no platform fee)</li>
                 <li>• <strong>Pending/Confirmed:</strong> No credit changes</li>
               </ul>
             </div>

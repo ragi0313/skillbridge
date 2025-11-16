@@ -74,10 +74,10 @@ export async function GET() {
 
       // Calculate stats from the retrieved sessions
       const completedSessions = allSessions.filter(s => s.status === "completed")
-      const recentSessions = allSessions.filter(s => {
-        const sessionDate = new Date(s.createdAt || s.scheduledDate)
+      const recentSessions = completedSessions.filter(s => {
+        const sessionDate = new Date(s.scheduledDate)
         return sessionDate >= thirtyDaysAgo
-      }).filter(s => s.status === "completed")
+      })
 
       const upcomingSessions = allSessions.filter(s => {
         const sessionDate = new Date(s.scheduledDate)

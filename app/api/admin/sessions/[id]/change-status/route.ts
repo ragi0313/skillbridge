@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getSession } from "@/lib/auth/getSession"
 import { db } from "@/db"
-import { bookingSessions, learners, mentors, notifications, creditTransactions } from "@/db/schema"
+import { bookingSessions, learners, mentors, notifications, creditTransactions, mentorPayouts } from "@/db/schema"
 import { eq } from "drizzle-orm"
 
 export async function POST(
@@ -77,14 +77,18 @@ export async function POST(
 
       const now = new Date()
 
+      // Platform fee configuration (must match SessionCompletionService)
+      const MENTOR_FEE_PERCENTAGE = 0.8 // 80% to mentor, 20% platform fee
+
       // Determine credit handling based on status change
       let refundToLearner = 0
       let paymentToMentor = 0
+      let platformFeeCredits = 0
       let notificationTitle = ""
       let learnerMessage = ""
       let mentorMessage = ""
 
-      // Status-specific logic
+      // Status-specific logic (matching SessionCompletionService and SessionMonitorService)
       if (newStatus === "cancelled") {
         // Full refund to learner for admin cancellation
         refundToLearner = booking.escrowCredits
@@ -92,10 +96,11 @@ export async function POST(
         learnerMessage = `Your session has been cancelled by an administrator. ${refundToLearner} credits have been refunded. Reason: ${reason}`
         mentorMessage = `A session has been cancelled by an administrator. Reason: ${reason}`
       } else if (newStatus === "completed") {
-        // Pay mentor for completed session
-        paymentToMentor = booking.escrowCredits
+        // Pay mentor 80%, platform keeps 20% (matching SessionCompletionService)
+        paymentToMentor = Math.floor(booking.totalCostCredits * MENTOR_FEE_PERCENTAGE)
+        platformFeeCredits = booking.totalCostCredits - paymentToMentor
         notificationTitle = "Session Marked as Completed"
-        learnerMessage = `Your session has been marked as completed by an administrator. ${booking.escrowCredits} credits were paid to the mentor. Reason: ${reason}`
+        learnerMessage = `Your session has been marked as completed by an administrator. ${booking.totalCostCredits} credits were processed (${paymentToMentor} to mentor, ${platformFeeCredits} platform fee). Reason: ${reason}`
         mentorMessage = `A session has been marked as completed by an administrator. You have received ${paymentToMentor} credits. Reason: ${reason}`
       } else if (newStatus === "both_no_show") {
         // Full refund to learner (both didn't show)
@@ -104,11 +109,12 @@ export async function POST(
         learnerMessage = `Your session status has been changed to "Both No Show" by an administrator. ${refundToLearner} credits have been refunded. Reason: ${reason}`
         mentorMessage = `A session status has been changed to "Both No Show" by an administrator. Reason: ${reason}`
       } else if (newStatus === "learner_no_show") {
-        // Pay mentor (learner didn't show)
-        paymentToMentor = booking.escrowCredits
+        // Pay mentor 100% as compensation (no platform fee for no-shows)
+        paymentToMentor = booking.totalCostCredits
+        platformFeeCredits = 0
         notificationTitle = "Session Status Changed: Learner No Show"
         learnerMessage = `Your session status has been changed to "Learner No Show" by an administrator. No refund applicable. Reason: ${reason}`
-        mentorMessage = `A session status has been changed to "Learner No Show" by an administrator. You have received ${paymentToMentor} credits. Reason: ${reason}`
+        mentorMessage = `A session status has been changed to "Learner No Show" by an administrator. You have received ${paymentToMentor} credits as compensation. Reason: ${reason}`
       } else if (newStatus === "mentor_no_show") {
         // Full refund to learner (mentor didn't show)
         refundToLearner = booking.escrowCredits
@@ -173,6 +179,17 @@ export async function POST(
           })
           .where(eq(mentors.id, booking.mentorId))
 
+        // Record mentor payout (matching SessionCompletionService)
+        await tx.insert(mentorPayouts).values({
+          mentorId: booking.mentorId,
+          sessionId: sessionId,
+          earnedCredits: paymentToMentor,
+          platformFeeCredits: platformFeeCredits,
+          feePercentage: platformFeeCredits > 0 ? 20 : 0,
+          status: "released",
+          releasedAt: now,
+        })
+
         // Record payment transaction
         await tx.insert(creditTransactions).values({
           userId: booking.mentorUserId,
@@ -183,8 +200,35 @@ export async function POST(
           balanceAfter: newMentorBalance,
           relatedSessionId: sessionId,
           description: `Admin payment - Status changed to ${newStatus}: ${reason.trim()}`,
+          metadata: {
+            platformFeeCredits,
+            originalAmount: booking.totalCostCredits,
+            adminReason: reason.trim()
+          },
           createdAt: now,
         })
+
+        // Record platform fee if applicable (matching SessionCompletionService)
+        if (platformFeeCredits > 0) {
+          await tx.insert(creditTransactions).values({
+            userId: 1, // Platform/admin user ID
+            type: "platform_fee_collected",
+            direction: "debit",
+            amount: platformFeeCredits,
+            balanceBefore: 0,
+            balanceAfter: 0,
+            relatedSessionId: sessionId,
+            description: `Platform fee collected from admin status change to ${newStatus}`,
+            metadata: {
+              platformFeePhp: platformFeeCredits * 11.2, // 1 credit = ₱11.2
+              mentorEarnings: paymentToMentor,
+              originalAmount: booking.totalCostCredits,
+              feePercentage: 20,
+              adminReason: reason.trim()
+            },
+            createdAt: now,
+          })
+        }
       }
 
       // Send notifications to both parties

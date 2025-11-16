@@ -120,7 +120,7 @@ export function XenditCreditWithdrawal() {
       const result = await response.json()
 
       if (response.ok) {
-        toast.success("Withdrawal request submitted successfully!")
+        toast.success("Credits withdrawn successfully!")
         setCreditsAmount("")
         setBankCode("")
         setAccountHolderName("")

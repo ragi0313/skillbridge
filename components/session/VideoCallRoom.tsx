@@ -1950,12 +1950,12 @@ export function VideoCallRoom({
                 />
               </svg>
             ) : (
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth={2}
-                  d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728L5.636 5.636m12.728 12.728L18.364 5.636M5.636 18.364l12.728-12.728"
+                  d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2zM3 3l18 18"
                 />
               </svg>
             )}
@@ -2102,13 +2102,8 @@ export function VideoCallRoom({
             className="group relative p-4 rounded-2xl bg-red-600/90 hover:bg-red-700/90 border border-red-500/50 text-white transition-all duration-300 hover:scale-110 hover:shadow-2xl backdrop-blur-sm"
             title="End call"
           >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M16 8l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M3 3l18 18"
-              />
+            <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M20.487 17.14l-4.065-3.696a1.2 1.2 0 00-1.391-.207l-2.608 1.517a1 1 0 01-1.207-.175l-2.762-2.762a1 1 0 01-.175-1.207l1.517-2.608a1.2 1.2 0 00-.207-1.391L6.86 3.513a1.2 1.2 0 00-1.571-.066L3.114 5.272a3 3 0 00-.65 3.477l.847 1.588a19.5 19.5 0 005.453 6.798 19.5 19.5 0 006.798 5.453l1.588.847a3 3 0 003.477-.65l1.825-2.175a1.2 1.2 0 00-.066-1.571z"/>
             </svg>
             <div className="absolute -top-12 left-1/2 transform -translate-x-1/2 bg-black/80 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
               End call

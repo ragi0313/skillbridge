@@ -35,18 +35,19 @@ export async function GET() {
     const now = new Date()
     const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
 
-    const totalSessions = allSessions.filter(s => s.status === 'completed').length
-    const monthlySessions = allSessions.filter(
-      s => s.status === 'completed' && new Date(s.createdAt) >= firstDayOfMonth
+    const completedSessions = allSessions.filter(s => s.status === 'completed')
+
+    const totalSessions = completedSessions.length
+    const monthlySessions = completedSessions.filter(
+      s => new Date(s.scheduledDate) >= firstDayOfMonth
     ).length
 
-    const totalCreditsSpent = allSessions
-      .filter(s => s.status === 'completed')
+    const totalCreditsSpent = completedSessions
       .reduce((sum, s) => sum + (s.totalCostCredits || 0), 0)
 
-    const totalHours = allSessions
-      .filter(s => s.status === 'completed')
-      .reduce((sum, s) => sum + ((s.durationMinutes || 0) / 60), 0)
+    // Use actual connection duration (learnerConnectionDurationMs) instead of scheduled duration
+    const totalHours = completedSessions
+      .reduce((sum, s) => sum + ((s.learnerConnectionDurationMs || 0) / (1000 * 60 * 60)), 0)
 
     // Get upcoming sessions
     const upcomingSessions = await db

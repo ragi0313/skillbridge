@@ -188,11 +188,11 @@ export default function LearnerDashboard() {
                   <div className="absolute top-0 right-0 w-32 h-32 bg-green-500/10 rounded-full -mr-16 -mt-16 group-hover:scale-150 transition-transform duration-500"></div>
                   <div className="relative z-10">
                     <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center mb-4">
-                      <TrendingUp className="w-6 h-6 text-green-600" />
+                      <Calendar className="w-6 h-6 text-green-600" />
                     </div>
-                    <div className="text-5xl font-bold text-gray-900 mb-2">{stats.stats.monthlySessions}</div>
-                    <div className="text-gray-600 font-medium">This Month</div>
-                    <div className="mt-3 text-sm text-green-600 font-semibold">Current Progress</div>
+                    <div className="text-5xl font-bold text-gray-900 mb-2">{stats.stats.upcomingCount || 0}</div>
+                    <div className="text-gray-600 font-medium">Upcoming Sessions</div>
+                    <div className="mt-3 text-sm text-green-600 font-semibold">Scheduled Soon</div>
                   </div>
                 </motion.div>
 

@@ -24,9 +24,17 @@ export async function GET() {
       return NextResponse.json({ error: "Learner not found" }, { status: 404 })
     }
 
-    // Get all sessions
+    // Get all sessions with duration fields
     const allSessions = await db
-      .select()
+      .select({
+        id: bookingSessions.id,
+        status: bookingSessions.status,
+        scheduledDate: bookingSessions.scheduledDate,
+        totalCostCredits: bookingSessions.totalCostCredits,
+        durationMinutes: bookingSessions.durationMinutes,
+        learnerConnectionDurationMs: bookingSessions.learnerConnectionDurationMs,
+        createdAt: bookingSessions.createdAt,
+      })
       .from(bookingSessions)
       .where(eq(bookingSessions.learnerId, learner.id))
       .orderBy(desc(bookingSessions.createdAt))
@@ -47,9 +55,18 @@ export async function GET() {
     const totalCreditsSpent = completedSessions
       .reduce((sum, s) => sum + (s.totalCostCredits || 0), 0)
 
-    // Use actual connection duration (learnerConnectionDurationMs) instead of scheduled duration
-    const totalHours = completedSessions
-      .reduce((sum, s) => sum + ((s.learnerConnectionDurationMs || 0) / (1000 * 60 * 60)), 0)
+    // Use actual connection duration if available, otherwise use scheduled duration
+    const totalHours = completedSessions.reduce((sum, s) => {
+      // Prefer actual connection duration
+      if (s.learnerConnectionDurationMs && s.learnerConnectionDurationMs > 0) {
+        return sum + (s.learnerConnectionDurationMs / (1000 * 60 * 60))
+      }
+      // Fallback to scheduled duration
+      if (s.durationMinutes && s.durationMinutes > 0) {
+        return sum + (s.durationMinutes / 60)
+      }
+      return sum
+    }, 0)
 
     // Get upcoming sessions
     const upcomingSessions = await db

@@ -849,22 +849,16 @@ export function VideoCallRoom({
         setConnectionState("connected")
         console.log("[VIDEO_CALL] Agora initialization completed successfully")
 
-        // Initialize chat immediately after connecting (don't wait for remote user)
         // Initialize chat immediately after successful Agora connection
         if (!chatInitializedRef.current && !isCleaningUpRef.current && !isCallEnding) {
-          console.log("[VIDEO_CALL] Triggering chat initialization after successful Agora connection")
-          // Use immediate timeout to ensure Agora state is fully settled
-          setTimeout(() => {
-            if (!chatInitializedRef.current && !isCleaningUpRef.current && !isCallEnding) {
-              console.log("[VIDEO_CALL] Initializing chat now...")
-              initializeSessionChat().catch((error) => {
-                console.error("[VIDEO_CALL] Chat initialization error:", error)
-                // Still mark as initialized to prevent infinite retry
-                setIsChatInitialized(true)
-                chatInitializedRef.current = true
-              })
-            }
-          }, 500)
+          console.log("[VIDEO_CALL] Initializing chat immediately after Agora connection")
+          // Initialize chat immediately without delay
+          initializeSessionChat().catch((error) => {
+            console.error("[VIDEO_CALL] Chat initialization error:", error)
+            // Still mark as initialized to prevent users from being blocked
+            setIsChatInitialized(true)
+            chatInitializedRef.current = true
+          })
         }
 
         // Start session tracking with proper cleanup handling
@@ -1322,8 +1316,12 @@ export function VideoCallRoom({
       if (!message.trim() && !file) return
 
       if (!isChatInitialized) {
-        console.warn("[VIDEO_CALL] Chat not initialized yet")
-        setMediaError("Chat is still initializing...")
+        console.warn("[VIDEO_CALL] Chat not initialized yet, attempting to initialize now")
+        // Try to initialize chat immediately if not already done
+        if (!chatInitializedRef.current) {
+          initializeSessionChat().catch(console.error)
+        }
+        setMediaError("Chat is initializing, please try again in a moment...")
         return
       }
 
@@ -1420,7 +1418,7 @@ export function VideoCallRoom({
         setIsUploading(false)
       }
     },
-    [userRole, currentUser, sessionId],
+    [userRole, currentUser, sessionId, isChatInitialized, initializeSessionChat],
   )
 
   const handleSendMessage = useCallback(() => {

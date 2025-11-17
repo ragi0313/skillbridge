@@ -36,6 +36,8 @@ export async function GET() {
     const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
 
     const completedSessions = allSessions.filter(s => s.status === 'completed')
+    const pendingSessions = allSessions.filter(s => s.status === 'pending')
+    const confirmedSessions = allSessions.filter(s => ['confirmed', 'upcoming'].includes(s.status))
 
     const totalSessions = completedSessions.length
     const monthlySessions = completedSessions.filter(
@@ -129,6 +131,9 @@ export async function GET() {
         totalHours: Math.round(totalHours * 10) / 10, // Round to 1 decimal
         creditsBalance: learner.creditsBalance || 0,
         upcomingCount: upcomingSessions.length,
+        pendingCount: pendingSessions.length,
+        confirmedCount: confirmedSessions.length,
+        totalBookedSessions: allSessions.length, // Total sessions regardless of status
       },
       upcomingSessions,
       recentSessions,

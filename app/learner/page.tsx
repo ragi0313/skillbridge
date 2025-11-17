@@ -34,6 +34,9 @@ interface DashboardStats {
     totalHours: number
     creditsBalance: number
     upcomingCount: number
+    pendingCount?: number
+    confirmedCount?: number
+    totalBookedSessions?: number
   }
   upcomingSessions: any[]
   recentSessions: any[]
@@ -153,9 +156,9 @@ export default function LearnerDashboard() {
                     <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center mb-4">
                       <Calendar className="w-6 h-6 text-purple-600" />
                     </div>
-                    <div className="text-5xl font-bold text-gray-900 mb-2">{stats.stats.totalSessions}</div>
-                    <div className="text-gray-600 font-medium">Sessions Completed</div>
-                    <div className="mt-3 text-sm text-purple-600 font-semibold">Total Learning</div>
+                    <div className="text-5xl font-bold text-gray-900 mb-2">{stats.stats.totalBookedSessions || stats.stats.totalSessions}</div>
+                    <div className="text-gray-600 font-medium">Total Sessions Booked</div>
+                    <div className="mt-3 text-sm text-purple-600 font-semibold">{stats.stats.totalSessions} Completed, {(stats.stats.pendingCount || 0) + (stats.stats.confirmedCount || 0)} Active</div>
                   </div>
                 </motion.div>
 

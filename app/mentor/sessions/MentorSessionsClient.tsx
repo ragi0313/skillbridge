@@ -94,7 +94,18 @@ export function MentorSessionsClient({ sessions }: MentorSessionsClientProps) {
     const sessionDate = new Date(session.startTime || session.scheduledDate)
     const sixMonthsAgo = new Date()
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6)
-    return sessionDate < sixMonthsAgo && ['completed', 'cancelled', 'rejected', 'mentor_no_response'].includes(session.status)
+    // Allow archiving for all non-active sessions older than 6 months
+    const archivableStatuses = [
+      'completed',
+      'cancelled',
+      'rejected',
+      'mentor_no_response',
+      'both_no_show',
+      'learner_no_show',
+      'mentor_no_show',
+      'technical_issues'
+    ]
+    return sessionDate < sixMonthsAgo && archivableStatuses.includes(session.status)
   }
 
   const handleArchiveSession = (sessionId: number) => {

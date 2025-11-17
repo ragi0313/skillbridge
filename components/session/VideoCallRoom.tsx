@@ -1313,7 +1313,8 @@ export function VideoCallRoom({
     }
   }, [isScreenSharing, isVideoEnabled, isRetryingMedia])
 
-  // Session chat messaging - Pusher-based with polling fallback
+  // Session chat messaging - SSE-based real-time delivery
+  // Supports text messages, images, and file attachments (up to 5MB)
   const sendMessage = useCallback(
     async (message: string, file?: File) => {
       if (!message.trim() && !file) return
@@ -1337,7 +1338,7 @@ export function VideoCallRoom({
 
         let attachment = undefined
         if (file) {
-          // For file sharing, convert to base64
+          // For file sharing (images and documents), convert to base64
           const reader = new FileReader()
           const fileData = await new Promise<string>((resolve) => {
             reader.onload = () => resolve(reader.result as string)
@@ -1380,7 +1381,7 @@ export function VideoCallRoom({
           return [...prev, sessionMessage].sort((a, b) => a.timestamp - b.timestamp)
         })
 
-        // Send via the session chat API (stored in-memory, broadcasted via Pusher)
+        // Send via the session chat API (stored in-memory, broadcasted via SSE)
         try {
           const response = await fetch(`/api/sessions/${sessionId}/chat`, {
             method: 'POST',
@@ -1401,9 +1402,9 @@ export function VideoCallRoom({
           }
 
           const result = await response.json()
-          console.log("[VIDEO_CALL] Message sent successfully, stored in-memory and broadcasted via Pusher:", result)
+          console.log("[VIDEO_CALL] Message sent successfully, stored and broadcasted via SSE:", result)
 
-          // Update last message timestamp to prevent duplicates from Pusher or polling
+          // Update last message timestamp to prevent duplicates from SSE
           lastMessageTimestampRef.current = sessionMessage.timestamp
         } catch (apiError) {
           console.warn("[VIDEO_CALL] Session chat API failed, message only visible locally:", apiError)

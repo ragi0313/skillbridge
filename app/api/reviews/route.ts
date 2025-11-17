@@ -143,6 +143,8 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(url.searchParams.get("limit") || "20")
     const offset = parseInt(url.searchParams.get("offset") || "0")
 
+    console.log(`[REVIEWS_API] GET request - mentorId: ${mentorId}, sessionId: ${sessionId}, limit: ${limit}`)
+
     if (!mentorId && !sessionId) {
       return NextResponse.json(
         { error: "Either mentorId or sessionId is required" },
@@ -157,12 +159,12 @@ export async function GET(request: NextRequest) {
         reviewText: mentorReviews.reviewText,
         rating: mentorReviews.rating,
         createdAt: mentorReviews.createdAt,
-        learnerName: users.firstName + " " + users.lastName,
+        learnerName: sql<string>`concat(${users.firstName}, ' ', ${users.lastName})`,
         learnerProfilePicture: learners.profilePictureUrl,
       })
       .from(mentorReviews)
-      .leftJoin(learners, eq(mentorReviews.learnerId, learners.id))
-      .leftJoin(users, eq(learners.userId, users.id))
+      .innerJoin(learners, eq(mentorReviews.learnerId, learners.id))
+      .innerJoin(users, eq(learners.userId, users.id))
       .limit(limit)
       .offset(offset)
 
@@ -173,6 +175,7 @@ export async function GET(request: NextRequest) {
     }
 
     const reviews = await query
+    console.log(`[REVIEWS_API] Found ${reviews.length} reviews for mentorId ${mentorId}`)
 
     // If getting reviews for a mentor, also calculate average rating
     let averageRating = null
@@ -187,20 +190,24 @@ export async function GET(request: NextRequest) {
         .from(mentorReviews)
         .where(eq(mentorReviews.mentorId, parseInt(mentorId)))
 
+      console.log(`[REVIEWS_API] Stats:`, stats)
+
       if (stats.length > 0 && stats[0].count > 0) {
         averageRating = Math.round(stats[0].avgRating * 10) / 10 // Round to 1 decimal place
         totalReviews = stats[0].count
       }
     }
 
-    return NextResponse.json({ 
+    console.log(`[REVIEWS_API] Returning ${reviews.length} reviews, avgRating: ${averageRating}, total: ${totalReviews}`)
+
+    return NextResponse.json({
       reviews,
       averageRating,
       totalReviews
     })
 
   } catch (error) {
-    console.error("Error fetching reviews:", error)
+    console.error("[REVIEWS_API] Error fetching reviews:", error)
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

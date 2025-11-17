@@ -30,23 +30,37 @@ export function MentorReviewsSection({ mentorId }: MentorReviewsSectionProps) {
   useEffect(() => {
     const fetchReviews = async () => {
       try {
+        console.log(`[MentorReviews] Fetching reviews for mentorId: ${mentorId}`)
         const response = await fetch(`/api/reviews?mentorId=${mentorId}&limit=50`)
+        console.log(`[MentorReviews] Response status: ${response.status}`)
+
         if (!response.ok) {
+          const errorText = await response.text()
+          console.error(`[MentorReviews] Error response:`, errorText)
           throw new Error("Failed to fetch reviews")
         }
+
         const data = await response.json()
+        console.log(`[MentorReviews] Received data:`, data)
+        console.log(`[MentorReviews] Reviews count: ${data.reviews?.length || 0}`)
+        console.log(`[MentorReviews] Total reviews: ${data.totalReviews}`)
+        console.log(`[MentorReviews] Average rating: ${data.averageRating}`)
+
         setReviews(data.reviews || [])
         setAverageRating(data.averageRating)
         setTotalReviews(data.totalReviews || 0)
       } catch (error) {
-        console.error("Error fetching reviews:", error)
+        console.error("[MentorReviews] Error fetching reviews:", error)
       } finally {
         setLoading(false)
       }
     }
 
     if (mentorId) {
+      console.log(`[MentorReviews] Component mounted with mentorId: ${mentorId}`)
       fetchReviews()
+    } else {
+      console.warn(`[MentorReviews] No mentorId provided`)
     }
   }, [mentorId])
 

@@ -52,7 +52,10 @@ export async function GET() {
       s => new Date(s.scheduledDate) >= firstDayOfMonth
     ).length
 
-    const totalCreditsSpent = completedSessions
+    // Credits invested should count ALL booked sessions, not just completed
+    // This includes pending, confirmed, completed - any session where credits were allocated
+    const totalCreditsSpent = allSessions
+      .filter(s => !['cancelled', 'rejected', 'mentor_no_response'].includes(s.status)) // Exclude cancelled/rejected (refunded)
       .reduce((sum, s) => sum + (s.totalCostCredits || 0), 0)
 
     // Use actual connection duration if available, otherwise use scheduled duration

@@ -209,7 +209,7 @@ export default function LearnerDashboard() {
                     </div>
                     <div className="text-5xl font-bold text-gray-900 mb-2">{stats.stats.totalCreditsSpent}</div>
                     <div className="text-gray-600 font-medium">Credits Invested</div>
-                    <div className="mt-3 text-sm text-orange-600 font-semibold">Total Spent</div>
+                    <div className="mt-3 text-sm text-orange-600 font-semibold">In All Sessions</div>
                   </div>
                 </motion.div>
               </div>

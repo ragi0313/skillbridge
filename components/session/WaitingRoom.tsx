@@ -198,48 +198,45 @@ export function WaitingRoom({
           } catch (permError) {
           }
         
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-          video: { 
-            width: { ideal: 640, min: 320, max: 1280 }, 
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            width: { ideal: 640, min: 320, max: 1280 },
             height: { ideal: 480, min: 240, max: 720 },
             facingMode: 'user',
             frameRate: { ideal: 15, max: 30 }
-          }, 
-          audio: false 
+          },
+          audio: false
         })
-        
+
         cameraStreamRef.current = stream
+        setCameraEnabled(true)
 
         if (videoRef.current) {
           videoRef.current.srcObject = stream
+          videoRef.current.muted = true // Ensure muted for autoplay
 
-          // Try to play immediately
-          try {
-            await videoRef.current.play()
-          } catch (playError: any) {
-            console.log("Initial play failed, waiting for metadata:", playError.message)
-
-            // If autoplay fails, try again when metadata loads
-            videoRef.current.onloadedmetadata = async () => {
-              if (videoRef.current) {
-                try {
-                  await videoRef.current.play()
-                } catch (metadataPlayError: any) {
-                  if (metadataPlayError.name === 'NotAllowedError') {
-                    videoRef.current.muted = true
-                    try {
-                      await videoRef.current.play()
-                    } catch (retryError) {
-                      console.error("Failed to play video after retry:", retryError)
-                    }
-                  }
-                }
+          // Setup onloadedmetadata handler before attempting play
+          videoRef.current.onloadedmetadata = async () => {
+            if (videoRef.current && cameraStreamRef.current) {
+              try {
+                await videoRef.current.play()
+                console.log("Camera video playing successfully")
+              } catch (playError: any) {
+                console.error("Failed to play video:", playError)
               }
             }
           }
-        }
 
-        setCameraEnabled(true)
+          // Try to play immediately if metadata already loaded
+          if (videoRef.current.readyState >= 2) {
+            try {
+              await videoRef.current.play()
+              console.log("Camera video playing immediately")
+            } catch (playError: any) {
+              console.log("Waiting for onloadedmetadata event:", playError.message)
+            }
+          }
+        }
       }
     } catch (error: any) {
       console.error("Camera error:", error)
@@ -687,7 +684,8 @@ export function WaitingRoom({
                       autoPlay
                       muted
                       playsInline
-                      className="w-full h-48 object-cover"
+                      webkit-playsinline="true"
+                      className="w-full h-48 object-cover transform scale-x-[-1]"
                       style={{ filter: 'brightness(1.05) contrast(1.1)' }}
                     />
                     <div className="absolute top-2 right-2 bg-emerald-600/90 backdrop-blur-sm px-2 py-1 rounded-full">

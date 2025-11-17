@@ -152,3 +152,32 @@ export async function broadcastBookingUpdate(
   }
 
   }
+
+// Export function to broadcast chat messages
+export async function broadcastChatMessage(
+  sessionId: number,
+  message: any,
+  targetUserIds: number[]
+) {
+  const data = `data: ${JSON.stringify({
+    type: 'chat_message',
+    sessionId,
+    message,
+    timestamp: new Date().toISOString()
+  })}\n\n`
+
+  const encodedMessage = new TextEncoder().encode(data)
+
+  // Send to specific users
+  for (const userId of targetUserIds) {
+    const connection = connections.get(userId.toString())
+    if (connection) {
+      try {
+        connection.enqueue(encodedMessage)
+      } catch (error) {
+        console.error(`Failed to send chat message to user ${userId}:`, error)
+        connections.delete(userId.toString())
+      }
+    }
+  }
+}

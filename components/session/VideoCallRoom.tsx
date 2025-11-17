@@ -4,7 +4,6 @@
 
 import { useState, useEffect, useRef, useCallback } from "react"
 import { useRealTimeTimer } from "@/lib/hooks/useRealTimeTimer"
-import { getPusherConfig, getSessionChannel, PUSHER_EVENTS } from "@/lib/pusher/config"
 import { Video, VideoOff, Mic, MicOff, PhoneOff, Monitor, MessageCircle, Edit3 } from "lucide-react"
 
 import { Whiteboard } from "../whiteboard/Whiteboard"
@@ -131,12 +130,10 @@ export function VideoCallRoom({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const chatEndRef = useRef<HTMLDivElement>(null)
 
-  // Chat refs for session chat (now using Pusher with separate session channels)
+  // Chat refs for session chat (now using SSE)
   const chatInitializedRef = useRef<boolean>(false)
-  const chatPollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const sseConnectionRef = useRef<EventSource | null>(null)
   const lastMessageTimestampRef = useRef<number>(0)
-  const pusherClientRef = useRef<any>(null)
-  const sessionChannelRef = useRef<any>(null)
 
   const sessionStart = new Date(sessionData.startTime)
   const sessionEnd = new Date(sessionData.endTime)
@@ -327,74 +324,80 @@ export function VideoCallRoom({
     }
   }, [sessionId])
 
-  // Polling for chat messages (fallback if Pusher fails)
-  const startChatPolling = useCallback(() => {
-    // Only start polling if not already polling
-    if (chatPollingIntervalRef.current) {
+  // Connect to SSE for real-time chat messages
+  const connectToSSE = useCallback(() => {
+    if (sseConnectionRef.current) {
+      console.log("[VIDEO_CALL] SSE already connected")
       return
     }
 
-    console.log("[VIDEO_CALL] Starting chat polling as fallback (Pusher not available)...")
-    chatPollingIntervalRef.current = setInterval(async () => {
-      if (isCleaningUpRef.current || isCallEnding) {
-        return
+    console.log("[VIDEO_CALL] Connecting to SSE for real-time chat...")
+
+    try {
+      const eventSource = new EventSource('/api/sse/session-updates')
+      sseConnectionRef.current = eventSource
+
+      eventSource.onopen = () => {
+        console.log("[VIDEO_CALL] SSE connection opened")
       }
 
-      try {
-        const response = await fetch(`/api/sessions/${sessionId}/chat`)
-        if (response.ok) {
-          const data = await response.json()
-          if (data.messages && Array.isArray(data.messages)) {
-            // Only add new messages that we haven't seen yet
-            const newMessages = data.messages.filter((m: ChatMessage) =>
-              m.timestamp > lastMessageTimestampRef.current
-            )
+      eventSource.addEventListener('message', (event) => {
+        try {
+          const data = JSON.parse(event.data)
 
-            if (newMessages.length > 0) {
-              console.log(`[VIDEO_CALL] Polling found ${newMessages.length} new messages`)
-              setChatMessages((prev: ChatMessage[]) => {
-                const combined = [...prev, ...newMessages]
-                // Remove duplicates by id
-                const unique = combined.filter((msg, index, self) =>
-                  index === self.findIndex((m) => m.id === msg.id)
-                )
-                return unique.sort((a, b) => a.timestamp - b.timestamp)
-              })
+          // Handle chat messages for this session
+          if (data.type === 'chat_message' && data.sessionId === parseInt(sessionId)) {
+            console.log("[VIDEO_CALL] Received chat message via SSE:", data.message)
 
-              // Update last message timestamp
-              const latestTimestamp = Math.max(...newMessages.map((m: ChatMessage) => m.timestamp))
-              lastMessageTimestampRef.current = latestTimestamp
+            const newMessage = data.message
 
-              // Update unread count if sidebar is closed
-              if (!showSidebar) {
-                setUnreadCount((prev: number) => prev + newMessages.length)
+            setChatMessages((prev: ChatMessage[]) => {
+              // Check if message already exists
+              if (prev.find(m => m.id === newMessage.id)) {
+                return prev
               }
+              return [...prev, newMessage].sort((a, b) => a.timestamp - b.timestamp)
+            })
+
+            // Update last message timestamp
+            lastMessageTimestampRef.current = newMessage.timestamp
+
+            // Update unread count if sidebar is closed
+            if (!showSidebar) {
+              setUnreadCount((prev: number) => prev + 1)
             }
           }
+        } catch (error) {
+          console.error("[VIDEO_CALL] Error parsing SSE message:", error)
         }
-      } catch (error) {
-        console.warn("[VIDEO_CALL] Chat polling error:", error)
-      }
-    }, 3000) // Poll every 3 seconds
-  }, [sessionId, isCallEnding, showSidebar])
+      })
 
-  // Stop chat polling
-  const stopChatPolling = useCallback(() => {
-    if (chatPollingIntervalRef.current) {
-      console.log("[VIDEO_CALL] Stopping chat polling")
-      clearInterval(chatPollingIntervalRef.current)
-      chatPollingIntervalRef.current = null
+      eventSource.onerror = (error) => {
+        console.error("[VIDEO_CALL] SSE connection error:", error)
+        // SSE will automatically reconnect
+      }
+    } catch (error) {
+      console.error("[VIDEO_CALL] Failed to connect to SSE:", error)
+    }
+  }, [sessionId, showSidebar])
+
+  // Disconnect from SSE
+  const disconnectFromSSE = useCallback(() => {
+    if (sseConnectionRef.current) {
+      console.log("[VIDEO_CALL] Disconnecting from SSE")
+      sseConnectionRef.current.close()
+      sseConnectionRef.current = null
     }
   }, [])
 
-  // Initialize session chat (using polling for real-time updates)
+  // Initialize session chat (using SSE for real-time updates)
   const initializeSessionChat = useCallback(async () => {
     if (chatInitializedRef.current || isCleaningUpRef.current) {
       console.log("[VIDEO_CALL] Chat already initialized or cleaning up, skipping...")
       return
     }
 
-    console.log("[VIDEO_CALL] ===== STARTING CHAT INITIALIZATION (POLLING MODE) =====")
+    console.log("[VIDEO_CALL] ===== STARTING CHAT INITIALIZATION (SSE MODE) =====")
     console.log("[VIDEO_CALL] Session ID:", sessionId)
 
     // CRITICAL: Mark as initialized IMMEDIATELY to enable chat UI
@@ -411,20 +414,20 @@ export function VideoCallRoom({
         console.warn("[VIDEO_CALL] Failed to fetch initial messages, but chat still enabled:", error)
       })
 
-    // Start polling for new messages (supports text, files, and images)
-    console.log("[VIDEO_CALL] Starting chat polling...")
-    startChatPolling()
+    // Connect to SSE for real-time messages
+    console.log("[VIDEO_CALL] Connecting to SSE for real-time chat...")
+    connectToSSE()
 
     console.log("[VIDEO_CALL] ===== CHAT READY =====")
-  }, [sessionId, fetchSessionMessages, startChatPolling])
+  }, [sessionId, fetchSessionMessages, connectToSSE])
 
   // Cleanup session chat
   const cleanupSessionChat = useCallback(() => {
     console.log("[VIDEO_CALL] Cleaning up session chat...")
 
     try {
-      // Stop polling
-      stopChatPolling()
+      // Disconnect from SSE
+      disconnectFromSSE()
 
       // Reset state
       setIsChatInitialized(false)
@@ -438,7 +441,7 @@ export function VideoCallRoom({
     } catch (error) {
       console.error("[VIDEO_CALL] Error during session chat cleanup:", error)
     }
-  }, [stopChatPolling])
+  }, [disconnectFromSSE])
 
   // Comprehensive cleanup function
   const performCleanup = useCallback(
@@ -1637,7 +1640,11 @@ export function VideoCallRoom({
             <div className="absolute top-3 left-3 sm:top-6 sm:left-6">
               <div className="flex items-center space-x-2 sm:space-x-3 bg-black/40 backdrop-blur-xl rounded-xl sm:rounded-2xl px-2 sm:px-4 py-1.5 sm:py-2 border border-white/20">
                 <div className="flex items-center space-x-1 sm:space-x-2">
-                  <div className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${isRemoteAudioEnabled ? "bg-green-400" : "bg-red-400"}`}></div>
+                  {isRemoteAudioEnabled ? (
+                    <Mic className="w-3 h-3 sm:w-4 sm:h-4 text-green-400" />
+                  ) : (
+                    <MicOff className="w-3 h-3 sm:w-4 sm:h-4 text-slate-400" />
+                  )}
                   <span className="text-white/90 text-xs sm:text-sm font-medium">
                     {isRemoteAudioEnabled ? "Audio On" : "Muted"}
                   </span>

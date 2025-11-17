@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server"
 import { getSession } from "@/lib/auth/getSession"
 import { withRateLimit } from "@/lib/middleware/rate-limit"
 import { db } from "@/db"
-import { users } from "@/db/schema"
+import { users, bookingSessions, learners, mentors } from "@/db/schema"
 import { eq } from "drizzle-orm"
-import { triggerPusherEvent, getSessionChannel, PUSHER_EVENTS } from "@/lib/pusher/config"
+import { broadcastChatMessage } from "@/app/api/sse/session-updates/route"
 import { sessionChatService } from "@/lib/services/SessionChatService"
 
 async function handleGetChatMessages(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -130,17 +130,35 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     console.log(`[SESSION_CHAT] Message stored for session ${sessionId}`)
 
-    // Broadcast message via Pusher for real-time delivery
-    // Using separate session channels to avoid conflicts with regular chat
+    // Broadcast message via SSE for real-time delivery
     try {
-      await triggerPusherEvent(
-        getSessionChannel(sessionId),
-        PUSHER_EVENTS.SESSION_CHAT_MESSAGE,
-        newMessage
-      )
-      console.log(`[SESSION_CHAT] Message broadcasted via Pusher for session ${sessionId}`)
+      // Get learner and mentor user IDs for this session
+      const sessionData = await db
+        .select({
+          learner: {
+            userId: learners.userId
+          },
+          mentor: {
+            userId: mentors.userId
+          }
+        })
+        .from(bookingSessions)
+        .leftJoin(learners, eq(bookingSessions.learnerId, learners.id))
+        .leftJoin(mentors, eq(bookingSessions.mentorId, mentors.id))
+        .where(eq(bookingSessions.id, sessionIdInt))
+        .limit(1)
+
+      if (sessionData.length > 0 && sessionData[0].learner && sessionData[0].mentor) {
+        const targetUserIds = [
+          sessionData[0].learner.userId,
+          sessionData[0].mentor.userId
+        ]
+
+        await broadcastChatMessage(sessionIdInt, newMessage, targetUserIds)
+        console.log(`[SESSION_CHAT] Message broadcasted via SSE for session ${sessionId}`)
+      }
     } catch (error) {
-      console.error(`[SESSION_CHAT] Failed to broadcast message via Pusher:`, error)
+      console.error(`[SESSION_CHAT] Failed to broadcast message via SSE:`, error)
       // Continue - client can still poll as fallback
     }
 

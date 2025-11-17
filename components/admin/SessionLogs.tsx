@@ -150,9 +150,28 @@ export default function SessionLogs() {
       return
     }
 
+    const oldStatus = selectedSession.status
+    const sessionId = selectedSession.id
+
     try {
       setChangingStatus(true)
-      const response = await fetch(`/api/admin/sessions/${selectedSession.id}/change-status`, {
+
+      // Optimistic update - update UI immediately
+      setSessions(prevSessions =>
+        prevSessions.map(session =>
+          session.id === sessionId
+            ? { ...session, status: newStatus }
+            : session
+        )
+      )
+
+      // Update selected session
+      setSelectedSession(prev => prev ? { ...prev, status: newStatus } : null)
+
+      // Show loading toast
+      const loadingToast = toast.loading("Changing session status...")
+
+      const response = await fetch(`/api/admin/sessions/${sessionId}/change-status`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -165,17 +184,52 @@ export default function SessionLogs() {
 
       const data = await response.json()
 
-      if (response.ok) {
-        toast.success(`Session status changed from ${data.oldStatus} to ${data.newStatus}`)
+      // Dismiss loading toast
+      toast.dismiss(loadingToast)
+
+      if (response.ok && data.success) {
+        toast.success(`✅ Status changed from ${oldStatus} to ${data.newStatus}`)
         setShowStatusChangeDialog(false)
         setNewStatus("")
         setStatusChangeReason("")
-        fetchSessionLogs() // Refresh the list
+
+        // Confirm the optimistic update with server response
+        setSessions(prevSessions =>
+          prevSessions.map(session =>
+            session.id === sessionId
+              ? { ...session, status: data.newStatus }
+              : session
+          )
+        )
+
+        // Update selected session to reflect new status
+        if (setSelectedSession && selectedSession?.id === sessionId) {
+          setSelectedSession({ ...selectedSession, status: data.newStatus })
+        }
       } else {
+        // Revert optimistic update on error
+        setSessions(prevSessions =>
+          prevSessions.map(session =>
+            session.id === sessionId
+              ? { ...session, status: oldStatus }
+              : session
+          )
+        )
+        setSelectedSession(prev => prev ? { ...prev, status: oldStatus } : null)
         toast.error(data.error || "Failed to change session status")
       }
     } catch (error) {
       console.error("Failed to change session status:", error)
+
+      // Revert optimistic update on error
+      setSessions(prevSessions =>
+        prevSessions.map(session =>
+          session.id === sessionId
+            ? { ...session, status: oldStatus }
+            : session
+        )
+      )
+      setSelectedSession(prev => prev ? { ...prev, status: oldStatus } : null)
       toast.error("Failed to change session status")
     } finally {
       setChangingStatus(false)

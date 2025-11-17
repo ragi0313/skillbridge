@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
@@ -153,24 +153,11 @@ export default function SessionLogs() {
     const oldStatus = selectedSession.status
     const sessionId = selectedSession.id
 
+    console.log(`[ADMIN] Changing session ${sessionId} status from ${oldStatus} to ${newStatus}`)
+
+    setChangingStatus(true)
+
     try {
-      setChangingStatus(true)
-
-      // Optimistic update - update UI immediately
-      setSessions(prevSessions =>
-        prevSessions.map(session =>
-          session.id === sessionId
-            ? { ...session, status: newStatus }
-            : session
-        )
-      )
-
-      // Update selected session
-      setSelectedSession(prev => prev ? { ...prev, status: newStatus } : null)
-
-      // Show loading toast
-      const loadingToast = toast.loading("Changing session status...")
-
       const response = await fetch(`/api/admin/sessions/${sessionId}/change-status`, {
         method: "POST",
         headers: {
@@ -182,18 +169,23 @@ export default function SessionLogs() {
         }),
       })
 
+      console.log(`[ADMIN] Response status: ${response.status}`)
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        console.error(`[ADMIN] Error response:`, errorData)
+        toast.error(errorData.error || "Failed to change session status")
+        setChangingStatus(false)
+        return
+      }
+
       const data = await response.json()
+      console.log(`[ADMIN] Success response:`, data)
 
-      // Dismiss loading toast
-      toast.dismiss(loadingToast)
-
-      if (response.ok && data.success) {
+      if (data.success) {
         toast.success(`✅ Status changed from ${oldStatus} to ${data.newStatus}`)
-        setShowStatusChangeDialog(false)
-        setNewStatus("")
-        setStatusChangeReason("")
 
-        // Confirm the optimistic update with server response
+        // Update sessions list
         setSessions(prevSessions =>
           prevSessions.map(session =>
             session.id === sessionId
@@ -202,36 +194,25 @@ export default function SessionLogs() {
           )
         )
 
-        // Update selected session to reflect new status
-        if (setSelectedSession && selectedSession?.id === sessionId) {
-          setSelectedSession({ ...selectedSession, status: data.newStatus })
-        }
-      } else {
-        // Revert optimistic update on error
-        setSessions(prevSessions =>
-          prevSessions.map(session =>
-            session.id === sessionId
-              ? { ...session, status: oldStatus }
-              : session
-          )
+        // Update selected session
+        setSelectedSession(prev =>
+          prev && prev.id === sessionId
+            ? { ...prev, status: data.newStatus }
+            : prev
         )
-        setSelectedSession(prev => prev ? { ...prev, status: oldStatus } : null)
+
+        // Close dialog and reset form
+        setShowStatusChangeDialog(false)
+        setNewStatus("")
+        setStatusChangeReason("")
+      } else {
         toast.error(data.error || "Failed to change session status")
       }
-    } catch (error) {
-      console.error("Failed to change session status:", error)
-
-      // Revert optimistic update on error
-      setSessions(prevSessions =>
-        prevSessions.map(session =>
-          session.id === sessionId
-            ? { ...session, status: oldStatus }
-            : session
-        )
-      )
-      setSelectedSession(prev => prev ? { ...prev, status: oldStatus } : null)
-      toast.error("Failed to change session status")
+    } catch (error: any) {
+      console.error("[ADMIN] Exception during status change:", error)
+      toast.error(`Error: ${error.message || "Failed to change session status"}`)
     } finally {
+      console.log(`[ADMIN] Setting changingStatus to false`)
       setChangingStatus(false)
     }
   }
@@ -427,6 +408,9 @@ export default function SessionLogs() {
                         <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
                           <DialogHeader>
                             <DialogTitle>Session Details</DialogTitle>
+                            <DialogDescription>
+                              View comprehensive information about this session, including participants, timeline, and admin actions.
+                            </DialogDescription>
                           </DialogHeader>
                           {selectedSession && (
                             <div className="space-y-6">
@@ -646,6 +630,9 @@ export default function SessionLogs() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Change Session Status</DialogTitle>
+            <DialogDescription>
+              Update the session status and provide a reason for the change. Both parties will be notified.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>

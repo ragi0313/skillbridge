@@ -42,6 +42,7 @@ export default function LearnerBasicInfo({ formData, setFormData, nextStep }: Pr
 
   useEffect(() => {
     // Auto-set Philippines as default country and timezone since platform is Philippines-only
+    // These values are automatically set and not shown to the user
     const updates: any = {}
 
     if (!formData.country) {
@@ -210,51 +211,6 @@ export default function LearnerBasicInfo({ formData, setFormData, nextStep }: Pr
         )}
       </div>
 
-      {/* Country & Timezone */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <Label htmlFor="country" className="mb-2">Country*</Label>
-          <Select
-            value={formData.country || ""}
-            onValueChange={(value) => setFormData({ ...formData, country: value })}
-          >
-            <SelectTrigger className={`w-full h-14 rounded-sm ${
-              formData.country === "" ? "text-gray-400" : ""
-            }`}>
-              <SelectValue placeholder="Select your country" />
-            </SelectTrigger>
-            <SelectContent className="max-h-60 overflow-y-auto">
-              {countryOptions.map((country) => (
-                <SelectItem key={country.value} value={country.value}>
-                  {country.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div>
-          <Label htmlFor="timezone" className="mb-2">Timezone*</Label>
-          <Select 
-            value={formData.timezone || ""} 
-            onValueChange={(value) => setFormData({ ...formData, timezone: value })}
-          >
-            <SelectTrigger className={`w-full h-14 rounded-sm ${
-              formData.timezone === "" ? "text-gray-400" : ""
-            }`}>
-              <SelectValue placeholder="Select your timezone" />
-            </SelectTrigger>
-            <SelectContent className="max-h-60">
-              {commonTimeZones.map((tz) => (
-                <SelectItem key={tz.value} value={tz.value}>
-                  {tz.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
       {/* Password */}
       <div>
         <Label htmlFor="password" className="mb-2">Password*</Label>
@@ -359,12 +315,6 @@ export default function LearnerBasicInfo({ formData, setFormData, nextStep }: Pr
                 )}
                 {emailValid && isChecking && (
                   <li>Checking if email is available...</li>
-                )}
-                {!countryValid && (
-                  <li>Select your country</li>
-                )}
-                {!timezoneValid && (
-                  <li>Select your timezone</li>
                 )}
                 {!passwordValid && formData.password && (
                   <li>Password must include uppercase, lowercase, number, and special character (min 8 chars)</li>

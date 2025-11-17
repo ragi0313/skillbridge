@@ -173,59 +173,112 @@ export function XenditCreditWithdrawal() {
   }
 
   if (loading) {
-    return <div className="p-6">Loading withdrawal data...</div>
+    return (
+      <div className="max-w-4xl mx-auto p-6 space-y-6 min-h-[calc(100vh-200px)]">
+        <div className="grid gap-6 md:grid-cols-3">
+          {[1, 2, 3].map((i) => (
+            <Card key={i} className="animate-pulse">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <div className="h-4 w-24 bg-gray-200 rounded"></div>
+                <div className="h-4 w-4 bg-gray-200 rounded"></div>
+              </CardHeader>
+              <CardContent>
+                <div className="h-8 w-20 bg-gray-200 rounded"></div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+        <Card className="animate-pulse">
+          <CardHeader>
+            <div className="h-6 w-40 bg-gray-200 rounded"></div>
+            <div className="h-4 w-64 bg-gray-200 rounded mt-2"></div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="h-10 bg-gray-200 rounded"></div>
+              <div className="h-10 bg-gray-200 rounded"></div>
+              <div className="h-10 bg-gray-200 rounded"></div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   if (!data) {
-    return <div className="p-6 text-red-500">Failed to load withdrawal data</div>
+    return (
+      <div className="max-w-4xl mx-auto p-6 min-h-[calc(100vh-200px)] flex items-center justify-center">
+        <Alert className="max-w-md">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription className="text-red-600">Failed to load withdrawal data. Please try again.</AlertDescription>
+        </Alert>
+      </div>
+    )
   }
 
   const credits = parseInt(creditsAmount) || 0
   const { php, fee, net } = calculateAmounts(credits)
 
   return (
-    <div className="max-w-4xl mx-auto p-6 space-y-6">
+    <div className="max-w-5xl mx-auto p-6 space-y-8 min-h-[calc(100vh-200px)]">
+      {/* Page Header */}
+      <div className="space-y-2">
+        <h1 className="text-3xl font-bold text-gray-900">Withdrawals</h1>
+        <p className="text-gray-600">Manage your earnings and request withdrawals to your bank account</p>
+      </div>
+
+      {/* Stats Cards */}
       <div className="grid gap-6 md:grid-cols-3">
-        <Card>
+        <Card className="border-l-4 border-l-blue-500 hover:shadow-lg transition-shadow">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Credits</CardTitle>
-            <CreditCard className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium text-gray-700">Total Credits</CardTitle>
+            <div className="p-2 bg-blue-100 rounded-lg">
+              <CreditCard className="h-5 w-5 text-blue-600" />
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{data.totalCredits.toLocaleString()}</div>
+            <div className="text-3xl font-bold text-gray-900">{data.totalCredits.toLocaleString()}</div>
+            <p className="text-xs text-gray-500 mt-1">All-time earnings</p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-l-4 border-l-green-500 hover:shadow-lg transition-shadow">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Available for Withdrawal</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium text-gray-700">Available for Withdrawal</CardTitle>
+            <div className="p-2 bg-green-100 rounded-lg">
+              <DollarSign className="h-5 w-5 text-green-600" />
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{data.availableCredits.toLocaleString()}</div>
+            <div className="text-3xl font-bold text-green-600">{data.availableCredits.toLocaleString()}</div>
+            <p className="text-xs text-gray-500 mt-1">Ready to withdraw</p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-l-4 border-l-yellow-500 hover:shadow-lg transition-shadow">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pending Withdrawals</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium text-gray-700">Pending Withdrawals</CardTitle>
+            <div className="p-2 bg-yellow-100 rounded-lg">
+              <Clock className="h-5 w-5 text-yellow-600" />
+            </div>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-yellow-600">{data.pendingWithdrawalCredits.toLocaleString()}</div>
+            <div className="text-3xl font-bold text-yellow-600">{data.pendingWithdrawalCredits.toLocaleString()}</div>
+            <p className="text-xs text-gray-500 mt-1">Being processed</p>
           </CardContent>
         </Card>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Request Withdrawal</CardTitle>
+      {/* Withdrawal Form */}
+      <Card className="shadow-md">
+        <CardHeader className="border-b bg-gray-50">
+          <CardTitle className="text-xl">Request Withdrawal</CardTitle>
           <CardDescription>
             Withdraw your earned credits to your Philippine bank account via Xendit
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <form onSubmit={handleWithdraw} className="space-y-4">
+        <CardContent className="pt-6">
+          <form onSubmit={handleWithdraw} className="space-y-6">
             <div className="grid gap-4 md:grid-cols-2">
               <div>
                 <Label htmlFor="credits">Credits Amount</Label>
@@ -239,8 +292,11 @@ export function XenditCreditWithdrawal() {
                   max={data.availableCredits}
                 />
                 {credits > 0 && (
-                  <div className="mt-2 text-sm text-muted-foreground">
-                    ₱{php.toFixed(2)} PHP - ₱{fee.toFixed(2)} fee = ₱{net.toFixed(2)} net
+                  <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                    <div className="text-sm font-medium text-blue-900">
+                      ₱{php.toFixed(2)} - ₱{fee.toFixed(2)} fee = <span className="font-bold">₱{net.toFixed(2)}</span>
+                    </div>
+                    <div className="text-xs text-blue-700 mt-1">You will receive this amount</div>
                   </div>
                 )}
               </div>
@@ -292,51 +348,73 @@ export function XenditCreditWithdrawal() {
             <Button
               type="submit"
               disabled={withdrawing || !credits || credits < data.minimumWithdrawal || credits > data.availableCredits}
-              className="w-full"
+              className="w-full h-12 text-base font-semibold bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800"
             >
-              {withdrawing ? "Processing..." : `Withdraw ${credits} Credits`}
+              {withdrawing ? "Processing Withdrawal..." : credits > 0 ? `Withdraw ${credits} Credits (₱${net.toFixed(2)})` : "Withdraw Credits"}
             </Button>
 
-            <div className="text-xs text-muted-foreground">
-              • Processing fee: {data.withdrawalFeePercentage}%<br />
-              • Processing time: 1-3 business days<br />
-              • Minimum withdrawal: {data.minimumWithdrawal} credits
+            <div className="bg-gray-50 border rounded-lg p-4 text-sm text-gray-700 space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+                <span>Processing fee: {data.withdrawalFeePercentage}%</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+                <span>Processing time: 1-3 business days</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+                <span>Minimum withdrawal: {data.minimumWithdrawal} credits</span>
+              </div>
             </div>
           </form>
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Withdrawal History</CardTitle>
+      {/* Withdrawal History */}
+      <Card className="shadow-md">
+        <CardHeader className="border-b bg-gray-50">
+          <CardTitle className="text-xl">Withdrawal History</CardTitle>
           <CardDescription>Your recent withdrawal transactions</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-6">
           {data.withdrawals.length === 0 ? (
-            <p className="text-muted-foreground text-center py-4">No withdrawals yet</p>
+            <div className="text-center py-12">
+              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Clock className="h-8 w-8 text-gray-400" />
+              </div>
+              <p className="text-gray-500 font-medium">No withdrawals yet</p>
+              <p className="text-sm text-gray-400 mt-1">Your withdrawal history will appear here</p>
+            </div>
           ) : (
-            <div className="space-y-4">
+            <div className="space-y-3">
               {data.withdrawals.map((withdrawal) => (
                 <div
                   key={withdrawal.id}
-                  className="flex items-center justify-between p-4 border rounded-lg"
+                  className="flex items-center justify-between p-5 border rounded-lg hover:shadow-md transition-shadow bg-white"
                 >
                   <div className="flex items-center space-x-4">
-                    {getStatusIcon(withdrawal.status)}
+                    <div className="flex-shrink-0">
+                      {getStatusIcon(withdrawal.status)}
+                    </div>
                     <div>
-                      <div className="font-medium">
+                      <div className="font-semibold text-gray-900">
                         {withdrawal.creditsAmount} Credits → ₱{withdrawal.netAmount}
                       </div>
-                      <div className="text-sm text-muted-foreground">
-                        {new Date(withdrawal.createdAt).toLocaleDateString()}
+                      <div className="text-sm text-gray-600 mt-1">
+                        {new Date(withdrawal.createdAt).toLocaleDateString('en-US', {
+                          year: 'numeric',
+                          month: 'long',
+                          day: 'numeric'
+                        })}
                         {withdrawal.failureReason && (
-                          <span className="text-red-500 ml-2">• {withdrawal.failureReason}</span>
+                          <span className="text-red-600 ml-2 font-medium">• {withdrawal.failureReason}</span>
                         )}
                       </div>
                     </div>
                   </div>
-                  <span className={`px-2 py-1 rounded text-xs font-medium ${getStatusColor(withdrawal.status)}`}>
-                    {withdrawal.status.toUpperCase()}
+                  <span className={`px-3 py-1.5 rounded-md text-xs font-semibold uppercase tracking-wide ${getStatusColor(withdrawal.status)}`}>
+                    {withdrawal.status}
                   </span>
                 </div>
               ))}

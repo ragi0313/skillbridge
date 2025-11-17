@@ -919,6 +919,12 @@ export function MentorSessionsClient({ sessions }: MentorSessionsClientProps) {
               </div>
               <div className="text-sm text-gray-600">No-Show Compensation</div>
             </div>
+            <div>
+              <div className="text-2xl font-bold text-purple-600">
+                {earnings.sessionCount}
+              </div>
+              <div className="text-sm text-gray-600">Total Paid Sessions</div>
+            </div>
           </div>
         </CardContent>
       </Card>

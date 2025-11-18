@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { useForm } from "react-hook-form"
+import { useForm, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import type { z } from "zod"
 import { Button } from "@/components/ui/button"
@@ -48,8 +48,7 @@ export function ProfileSection({ initialData }: ProfileSectionProps) {
   const {
     register,
     handleSubmit,
-    setValue,
-    watch,
+    control,
     formState: { errors },
   } = useForm<LearnerProfileUpdateFormValues>({
     resolver: zodResolver(learnerProfileUpdateSchema),
@@ -99,10 +98,6 @@ export function ProfileSection({ initialData }: ProfileSectionProps) {
     }
   }
 
-  const watchedCountry = watch("country")
-  const watchedTimezone = watch("timezone")
-  const watchedExperienceLevel = watch("experienceLevel")
-
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
       {/* Personal Information */}
@@ -144,42 +139,47 @@ export function ProfileSection({ initialData }: ProfileSectionProps) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <Label htmlFor="country">Country</Label>
-              <Select
-                value={watchedCountry || "PH"}
-                onValueChange={(value) => setValue("country", value)}
-                disabled
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Philippines" />
-                </SelectTrigger>
-                <SelectContent>
-                  {countryOptions.map((country) => (
-                    <SelectItem key={country.value} value={country.value}>
-                      {country.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Controller
+                name="country"
+                control={control}
+                render={({ field }) => (
+                  <Select value={field.value} onValueChange={field.onChange} disabled>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Philippines" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {countryOptions.map((country) => (
+                        <SelectItem key={country.value} value={country.value}>
+                          {country.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
               <p className="text-xs text-gray-500 mt-1">Service available in Philippines only</p>
             </div>
 
             <div>
               <Label htmlFor="timezone">Timezone</Label>
-              <Select
-                value={watchedTimezone}
-                onValueChange={(value) => setValue("timezone", value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select timezone" />
-                </SelectTrigger>
-                <SelectContent>
-                  {commonTimeZones.map((tz) => (
-                    <SelectItem key={tz.value} value={tz.value}>
-                      {tz.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Controller
+                name="timezone"
+                control={control}
+                render={({ field }) => (
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select timezone" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {commonTimeZones.map((tz) => (
+                        <SelectItem key={tz.value} value={tz.value}>
+                          {tz.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
               {errors.timezone && (
                 <p className="text-sm text-red-600 mt-1">{errors.timezone.message}</p>
               )}
@@ -199,19 +199,22 @@ export function ProfileSection({ initialData }: ProfileSectionProps) {
         <CardContent className="space-y-4">
           <div>
             <Label htmlFor="experienceLevel">Experience Level</Label>
-            <Select
-              value={watchedExperienceLevel}
-              onValueChange={(value) => setValue("experienceLevel", value)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select your level" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="beginner">Beginner</SelectItem>
-                <SelectItem value="intermediate">Intermediate</SelectItem>
-                <SelectItem value="advanced">Advanced</SelectItem>
-              </SelectContent>
-            </Select>
+            <Controller
+              name="experienceLevel"
+              control={control}
+              render={({ field }) => (
+                <Select value={field.value} onValueChange={field.onChange}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select your level" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="beginner">Beginner</SelectItem>
+                    <SelectItem value="intermediate">Intermediate</SelectItem>
+                    <SelectItem value="advanced">Advanced</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            />
             {errors.experienceLevel && (
               <p className="text-sm text-red-600 mt-1">{errors.experienceLevel.message}</p>
             )}

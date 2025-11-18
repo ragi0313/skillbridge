@@ -40,7 +40,7 @@ class SessionCompletionService {
   async completeSession(options: SessionCompletionOptions): Promise<SessionCompletionResult> {
     const { sessionId, reason, completedBy, cancellationReason } = options
 
-    return await db.transaction(async (tx) => {
+    const result = await db.transaction(async (tx) => {
       // Get session with row lock to prevent concurrent completion
       const sessionData = await tx
         .select()
@@ -377,17 +377,6 @@ class SessionCompletionService {
         await tx.insert(notifications).values(notificationData)
       }
 
-      // Archive chat messages to database (only for successfully completed sessions)
-      // This runs INSIDE the transaction to ensure consistency
-      if (finalStatus === 'completed' && shouldProcessPayment) {
-        try {
-          await sessionChatService.archiveSession(sessionId)
-        } catch (archiveError) {
-          console.error(`[SESSION_COMPLETION] Failed to archive chat for session ${sessionId}:`, archiveError)
-          // Don't fail the transaction - archival is best-effort
-        }
-      }
-
       return {
         success: true,
         status: finalStatus,
@@ -399,6 +388,17 @@ class SessionCompletionService {
         alreadyCompleted: false
       }
     })
+
+    // Archive chat messages AFTER transaction completes (best-effort, non-blocking)
+    // This prevents transaction timeout issues caused by nested DB queries
+    if (result.status === 'completed' && result.paymentProcessed) {
+      // Run asynchronously without awaiting to avoid blocking the response
+      sessionChatService.archiveSession(sessionId).catch(archiveError => {
+        console.error(`[SESSION_COMPLETION] Failed to archive chat for session ${sessionId}:`, archiveError)
+      })
+    }
+
+    return result
   }
 
   private calculateConnectionDuration(joinedAt: Date | null, leftAt: Date | null, completionTime: Date): number {

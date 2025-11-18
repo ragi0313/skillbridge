@@ -282,7 +282,6 @@ export class SessionMonitorService {
         .select({
           sessionId: bookingSessions.id,
           startTime: bookingSessions.startTime,
-          skillName: bookingSessions.skillName,
           learnerUserId: learners.userId,
           mentorUserId: mentors.userId,
         })
@@ -343,7 +342,7 @@ export class SessionMonitorService {
             new Date(session.startTime),
             true, // isLearner
             session.mentorName || 'your mentor',
-            session.skillName || undefined
+            undefined // skillName not needed for reminders
           )
 
           // Send reminder to mentor
@@ -353,7 +352,7 @@ export class SessionMonitorService {
             new Date(session.startTime),
             false, // isLearner
             undefined,
-            session.skillName || undefined
+            undefined // skillName not needed for reminders
           )
         }
       }

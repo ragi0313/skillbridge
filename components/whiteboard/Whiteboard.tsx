@@ -39,6 +39,7 @@ interface DrawingPath {
   strokeWidth: number
   timestamp: number
   userId: string
+  text?: string // For text tool
 }
 
 interface DrawingAction {
@@ -90,6 +91,15 @@ export function Whiteboard({ sessionId, userRole, currentUser, isVisible, onClos
   const [currentPath, setCurrentPath] = useState<DrawingPath | null>(null)
   const [undoStack, setUndoStack] = useState<DrawingPath[][]>([])
   const [redoStack, setRedoStack] = useState<DrawingPath[][]>([])
+
+  // Shape drawing state
+  const [startPoint, setStartPoint] = useState<{ x: number; y: number } | null>(null)
+  const [previewPath, setPreviewPath] = useState<DrawingPath | null>(null)
+
+  // Text tool state
+  const [showTextInput, setShowTextInput] = useState(false)
+  const [textPosition, setTextPosition] = useState<{ x: number; y: number } | null>(null)
+  const [textValue, setTextValue] = useState("")
 
   // Real-time sync
   const syncIntervalRef = useRef<NodeJS.Timeout | null>(null)
@@ -175,8 +185,65 @@ export function Whiteboard({ sessionId, userRole, currentUser, isVisible, onClos
     }
   }, [sessionId])
 
+  // Helper to draw a single path based on tool type
+  const drawPath = useCallback((context: CanvasRenderingContext2D, path: DrawingPath) => {
+    if (path.points.length === 0) return
+
+    context.strokeStyle = path.color
+    context.lineWidth = path.strokeWidth
+    context.globalCompositeOperation = path.tool === "eraser" ? "destination-out" : "source-over"
+
+    if (path.tool === "pen" || path.tool === "eraser") {
+      // Freehand drawing
+      if (path.points.length < 2) return
+      context.beginPath()
+      context.moveTo(path.points[0].x, path.points[0].y)
+      for (let i = 1; i < path.points.length; i++) {
+        context.lineTo(path.points[i].x, path.points[i].y)
+      }
+      context.stroke()
+    } else if (path.tool === "rectangle") {
+      // Rectangle
+      if (path.points.length >= 2) {
+        const start = path.points[0]
+        const end = path.points[path.points.length - 1]
+        const width = end.x - start.x
+        const height = end.y - start.y
+        context.strokeRect(start.x, start.y, width, height)
+      }
+    } else if (path.tool === "circle") {
+      // Circle
+      if (path.points.length >= 2) {
+        const start = path.points[0]
+        const end = path.points[path.points.length - 1]
+        const radius = Math.sqrt(Math.pow(end.x - start.x, 2) + Math.pow(end.y - start.y, 2))
+        context.beginPath()
+        context.arc(start.x, start.y, radius, 0, 2 * Math.PI)
+        context.stroke()
+      }
+    } else if (path.tool === "line") {
+      // Straight line
+      if (path.points.length >= 2) {
+        const start = path.points[0]
+        const end = path.points[path.points.length - 1]
+        context.beginPath()
+        context.moveTo(start.x, start.y)
+        context.lineTo(end.x, end.y)
+        context.stroke()
+      }
+    } else if (path.tool === "text") {
+      // Text
+      if (path.points.length > 0 && path.text) {
+        context.fillStyle = path.color
+        context.font = `${path.strokeWidth * 4}px Arial`
+        context.globalCompositeOperation = "source-over"
+        context.fillText(path.text, path.points[0].x, path.points[0].y)
+      }
+    }
+  }, [])
+
   // Redraw entire canvas
-  const redrawCanvas = useCallback((pathsToRedraw: DrawingPath[]) => {
+  const redrawCanvas = useCallback((pathsToRedraw: DrawingPath[], includePreview = false) => {
     const context = contextRef.current
     const canvas = canvasRef.current
     if (!context || !canvas) return
@@ -186,23 +253,17 @@ export function Whiteboard({ sessionId, userRole, currentUser, isVisible, onClos
 
     // Draw all paths
     pathsToRedraw.forEach((path) => {
-      if (path.points.length < 2) return
-
-      context.beginPath()
-      context.strokeStyle = path.color
-      context.lineWidth = path.strokeWidth
-      context.globalCompositeOperation = path.tool === "eraser" ? "destination-out" : "source-over"
-
-      context.moveTo(path.points[0].x, path.points[0].y)
-      path.points.forEach((point) => {
-        context.lineTo(point.x, point.y)
-      })
-      context.stroke()
+      drawPath(context, path)
     })
+
+    // Draw preview if exists
+    if (includePreview && previewPath) {
+      drawPath(context, previewPath)
+    }
 
     // Reset composite operation
     context.globalCompositeOperation = "source-over"
-  }, [])
+  }, [drawPath, previewPath])
 
   // Save drawing action to API
   const saveDrawingAction = useCallback(
@@ -229,7 +290,21 @@ export function Whiteboard({ sessionId, userRole, currentUser, isVisible, onClos
       const x = event.clientX - rect.left
       const y = event.clientY - rect.top
 
+      // Handle text tool - show input dialog
+      if (currentTool === "text") {
+        setTextPosition({ x, y })
+        setTextValue("")
+        setShowTextInput(true)
+        return
+      }
+
+      // Handle select tool - not implemented yet
+      if (currentTool === "select") {
+        return
+      }
+
       setIsDrawing(true)
+      setStartPoint({ x, y })
 
       const newPath: DrawingPath = {
         id: `${userId}-${Date.now()}`,
@@ -243,58 +318,79 @@ export function Whiteboard({ sessionId, userRole, currentUser, isVisible, onClos
 
       setCurrentPath(newPath)
 
-      // Start drawing
-      const context = contextRef.current
-      context.beginPath()
-      context.strokeStyle = currentColor
-      context.lineWidth = strokeWidth
-      context.globalCompositeOperation = currentTool === "eraser" ? "destination-out" : "source-over"
-      context.moveTo(x, y)
+      // For pen and eraser, start drawing immediately
+      if (currentTool === "pen" || currentTool === "eraser") {
+        const context = contextRef.current
+        context.beginPath()
+        context.strokeStyle = currentColor
+        context.lineWidth = strokeWidth
+        context.globalCompositeOperation = currentTool === "eraser" ? "destination-out" : "source-over"
+        context.moveTo(x, y)
+      }
     },
     [currentTool, currentColor, strokeWidth, userId],
   )
 
   const draw = useCallback(
     (event: React.MouseEvent<HTMLCanvasElement>) => {
-      if (!isDrawing || !contextRef.current || !canvasRef.current || !currentPath) return
+      if (!isDrawing || !contextRef.current || !canvasRef.current || !currentPath || !startPoint) return
 
       const rect = canvasRef.current.getBoundingClientRect()
       const x = event.clientX - rect.left
       const y = event.clientY - rect.top
 
-      // Add point to current path
-      const updatedPath = {
-        ...currentPath,
-        points: [...currentPath.points, { x, y }],
-      }
-      setCurrentPath(updatedPath)
+      if (currentTool === "pen" || currentTool === "eraser") {
+        // Freehand drawing - add point and draw immediately
+        const updatedPath = {
+          ...currentPath,
+          points: [...currentPath.points, { x, y }],
+        }
+        setCurrentPath(updatedPath)
 
-      // Draw line
-      const context = contextRef.current
-      context.lineTo(x, y)
-      context.stroke()
+        const context = contextRef.current
+        context.lineTo(x, y)
+        context.stroke()
+      } else if (currentTool === "rectangle" || currentTool === "circle" || currentTool === "line") {
+        // Shape tools - update preview
+        const updatedPath = {
+          ...currentPath,
+          points: [startPoint, { x, y }],
+        }
+        setPreviewPath(updatedPath)
+
+        // Redraw canvas with preview
+        redrawCanvas(paths, true)
+      }
     },
-    [isDrawing, currentPath],
+    [isDrawing, currentPath, currentTool, startPoint, paths, redrawCanvas],
   )
 
   const stopDrawing = useCallback(() => {
     if (!isDrawing || !currentPath) return
 
     setIsDrawing(false)
+    setStartPoint(null)
+
+    // For shapes, use the preview path if it exists
+    const finalPath = previewPath || currentPath
+    setPreviewPath(null)
 
     // Add completed path to paths array
     setPaths((prevPaths) => {
-      const newPaths = [...prevPaths, currentPath]
+      const newPaths = [...prevPaths, finalPath]
       // Save to history for undo/redo
       setUndoStack((prevUndo) => [...prevUndo, prevPaths])
       setRedoStack([]) // Clear redo stack
+
+      // Redraw without preview
+      redrawCanvas(newPaths, false)
       return newPaths
     })
 
     // Save to API
     saveDrawingAction({
       type: "draw",
-      path: currentPath,
+      path: finalPath,
       timestamp: Date.now(),
       userId: userId,
     })
@@ -305,7 +401,7 @@ export function Whiteboard({ sessionId, userRole, currentUser, isVisible, onClos
     if (contextRef.current) {
       contextRef.current.globalCompositeOperation = "source-over"
     }
-  }, [isDrawing, currentPath, saveDrawingAction, userId])
+  }, [isDrawing, currentPath, previewPath, saveDrawingAction, userId, redrawCanvas])
 
   // Tool handlers
   const handleUndo = useCallback(() => {
@@ -354,6 +450,44 @@ export function Whiteboard({ sessionId, userRole, currentUser, isVisible, onClos
     link.href = canvas.toDataURL()
     link.click()
   }, [sessionId])
+
+  // Handle text input submission
+  const handleTextSubmit = useCallback(() => {
+    if (!textValue.trim() || !textPosition) return
+
+    const newPath: DrawingPath = {
+      id: `${userId}-${Date.now()}`,
+      tool: "text",
+      points: [textPosition],
+      color: currentColor,
+      strokeWidth: strokeWidth,
+      timestamp: Date.now(),
+      userId: userId,
+      text: textValue,
+    }
+
+    // Add to paths
+    setPaths((prevPaths) => {
+      const newPaths = [...prevPaths, newPath]
+      setUndoStack((prevUndo) => [...prevUndo, prevPaths])
+      setRedoStack([])
+      redrawCanvas(newPaths, false)
+      return newPaths
+    })
+
+    // Save to API
+    saveDrawingAction({
+      type: "draw",
+      path: newPath,
+      timestamp: Date.now(),
+      userId: userId,
+    })
+
+    // Close dialog
+    setShowTextInput(false)
+    setTextValue("")
+    setTextPosition(null)
+  }, [textValue, textPosition, currentColor, strokeWidth, userId, saveDrawingAction, redrawCanvas])
 
   if (!isVisible) return null
 
@@ -645,6 +779,50 @@ export function Whiteboard({ sessionId, userRole, currentUser, isVisible, onClos
               <div className="text-center">
                 <div className="w-12 h-12 border-4 border-gray-300 border-t-blue-600 rounded-full animate-spin mx-auto mb-4" />
                 <p className="text-gray-600 font-medium">Loading whiteboard...</p>
+              </div>
+            </div>
+          )}
+
+          {/* Text Input Dialog */}
+          {showTextInput && textPosition && (
+            <div className="absolute inset-0 bg-black/50 flex items-center justify-center rounded-2xl z-10">
+              <div className="bg-white p-6 rounded-xl shadow-2xl w-96">
+                <h3 className="text-lg font-semibold mb-4 text-gray-900">Add Text</h3>
+                <input
+                  type="text"
+                  value={textValue}
+                  onChange={(e) => setTextValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleTextSubmit()
+                    if (e.key === "Escape") {
+                      setShowTextInput(false)
+                      setTextValue("")
+                      setTextPosition(null)
+                    }
+                  }}
+                  placeholder="Enter text..."
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900"
+                  autoFocus
+                />
+                <div className="flex justify-end space-x-2 mt-4">
+                  <Button
+                    onClick={() => {
+                      setShowTextInput(false)
+                      setTextValue("")
+                      setTextPosition(null)
+                    }}
+                    variant="ghost"
+                    className="px-4 py-2"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleTextSubmit}
+                    className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700"
+                  >
+                    Add Text
+                  </Button>
+                </div>
               </div>
             </div>
           )}

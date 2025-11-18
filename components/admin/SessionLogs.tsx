@@ -424,7 +424,13 @@ export default function SessionLogs() {
                                 <div>
                                   <h4 className="font-semibold mb-2">Session Info</h4>
                                   <p><strong>Status:</strong> {getStatusBadge(selectedSession.status)}</p>
-                                  <p><strong>Scheduled:</strong> {format(new Date(selectedSession.scheduledDate), "MMM dd, yyyy h:mm a")}</p>
+                                  <p><strong>Scheduled:</strong> {selectedSession.startTime && selectedSession.endTime ? (
+                                    <>
+                                      {format(new Date(selectedSession.startTime), "MMM dd, yyyy h:mm a")} - {format(new Date(selectedSession.endTime), "h:mm a")}
+                                    </>
+                                  ) : (
+                                    format(new Date(selectedSession.scheduledDate), "MMM dd, yyyy h:mm a")
+                                  )}</p>
                                   <p><strong>Duration:</strong> {formatDuration(selectedSession.actualDurationMs, selectedSession.durationMinutes)}</p>
                                   <p><strong>Cost:</strong> {selectedSession.totalCostCredits} credits</p>
                                 </div>
@@ -560,7 +566,13 @@ export default function SessionLogs() {
                     <div>
                       <span className="font-medium">Scheduled:</span>
                       <br />
-                      {format(new Date(session.scheduledDate), "MMM dd, h:mm a")}
+                      {session.startTime && session.endTime ? (
+                        <>
+                          {format(new Date(session.startTime), "MMM dd, h:mm a")} - {format(new Date(session.endTime), "h:mm a")}
+                        </>
+                      ) : (
+                        format(new Date(session.scheduledDate), "MMM dd, h:mm a")
+                      )}
                     </div>
                     <div>
                       <span className="font-medium">Duration:</span>
@@ -662,7 +674,7 @@ export default function SessionLogs() {
                 </SelectContent>
               </Select>
             </div>
-            <div>
+            <div className="overflow-hidden">
               <Label htmlFor="reason">Reason for Change</Label>
               <Textarea
                 id="reason"

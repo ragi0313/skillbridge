@@ -231,6 +231,28 @@ export async function POST(
         }
       }
 
+      // Send notifications INSIDE the transaction
+      await tx.insert(notifications).values([
+        {
+          userId: booking.learnerUserId,
+          type: "session_status_changed",
+          title: notificationTitle,
+          message: learnerMessage,
+          relatedEntityType: "session",
+          relatedEntityId: sessionId,
+          createdAt: now,
+        },
+        {
+          userId: booking.mentorUserId,
+          type: "session_status_changed",
+          title: notificationTitle,
+          message: mentorMessage,
+          relatedEntityType: "session",
+          relatedEntityId: sessionId,
+          createdAt: now,
+        }
+      ])
+
       return {
         success: true,
         message: "Session status updated successfully",
@@ -242,34 +264,6 @@ export async function POST(
         mentorUserId: booking.mentorUserId,
       }
     })
-
-    // Send notifications OUTSIDE the transaction for better performance
-    // This way the transaction commits faster and UI can update sooner
-    try {
-      await Promise.all([
-        db.insert(notifications).values({
-          userId: result.learnerUserId,
-          type: "session_status_changed",
-          title: notificationTitle,
-          message: learnerMessage,
-          relatedEntityType: "session",
-          relatedEntityId: sessionId,
-          createdAt: now,
-        }),
-        db.insert(notifications).values({
-          userId: result.mentorUserId,
-          type: "session_status_changed",
-          title: notificationTitle,
-          message: mentorMessage,
-          relatedEntityType: "session",
-          relatedEntityId: sessionId,
-          createdAt: now,
-        })
-      ])
-    } catch (notificationError) {
-      // Don't fail the entire operation if notifications fail
-      console.error("Failed to send notifications:", notificationError)
-    }
 
     return NextResponse.json(result)
   } catch (error: any) {

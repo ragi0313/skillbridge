@@ -1038,6 +1038,7 @@ export function LearnerSessionsClient({ sessions }: LearnerSessionsClientProps) 
                 placeholder="Please explain why you need to cancel this session..."
                 rows={4}
                 required
+                className="break-words"
               />
             </div>
           </div>

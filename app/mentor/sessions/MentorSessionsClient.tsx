@@ -1125,6 +1125,7 @@ export function MentorSessionsClient({ sessions }: MentorSessionsClientProps) {
                     onChange={(e) => setResponseMessage(e.target.value)}
                     placeholder="Please explain why you're declining this session request."
                     rows={3}
+                    className="break-words"
                   />
                 </div>
               )}
@@ -1186,7 +1187,7 @@ export function MentorSessionsClient({ sessions }: MentorSessionsClientProps) {
                 placeholder="Please explain why you need to cancel this session. This message will be shared with the learner."
                 rows={4}
                 required
-                className="resize-none"
+                className="resize-none break-words"
               />
               <p className="text-xs text-gray-500 mt-2">
                 {cancellationReason.length}/500 characters

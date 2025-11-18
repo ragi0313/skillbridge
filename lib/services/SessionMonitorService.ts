@@ -50,10 +50,10 @@ export class SessionMonitorService {
     // Run immediately on start
     this.runMonitoring()
 
-    // Then run every 2 minutes
+    // Then run every 30 seconds for faster session completion
     this.intervalId = setInterval(() => {
       this.runMonitoring()
-    }, 2 * 60 * 1000) // 2 minutes
+    }, 30 * 1000) // 30 seconds
   }
 
   stop(): void {
@@ -649,11 +649,14 @@ export class SessionMonitorService {
   private async completeFinishedSessions(): Promise<void> {
     try {
       const now = new Date()
+      // Add small buffer (5 seconds) to ensure we catch sessions right at end time
+      const completionTime = new Date(now.getTime() - 5000)
 
       const sessions = await db
         .select({
           id: bookingSessions.id,
           status: bookingSessions.status,
+          endTime: bookingSessions.endTime,
           learner: {
             userId: learners.userId,
           },
@@ -677,9 +680,14 @@ export class SessionMonitorService {
 
       for (const session of sessions) {
         try {
+          const timePastEnd = now.getTime() - new Date(session.endTime).getTime()
+          const minutesPastEnd = Math.floor(timePastEnd / 60000)
+
           // Log if completing a session that wasn't in 'ongoing' status
           if (session.status !== 'ongoing') {
-            console.log(`[SESSION_MONITOR] Completing session ${session.id} stuck in '${session.status}' status`)
+            console.log(`[SESSION_MONITOR] Completing session ${session.id} stuck in '${session.status}' status (${minutesPastEnd} minutes past end time)`)
+          } else {
+            console.log(`[SESSION_MONITOR] Completing ongoing session ${session.id} (${minutesPastEnd} minutes past end time)`)
           }
 
           const result = await sessionCompletionService.completeSession({
@@ -690,19 +698,26 @@ export class SessionMonitorService {
 
           if (result.success && !result.alreadyCompleted) {
             this.stats.sessionsCompleted++
+            console.log(`[SESSION_MONITOR] Successfully completed session ${session.id}`)
 
             if (session.learner && session.mentor) {
               await broadcastSessionUpdate(
                 session.id,
                 'session_terminated',
-                { reason: 'Session time ended' },
+                { reason: 'Session time ended', minutesPastEnd },
                 [session.learner.userId, session.mentor.userId]
               )
             }
+          } else if (result.alreadyCompleted) {
+            console.log(`[SESSION_MONITOR] Session ${session.id} was already completed`)
           }
         } catch (error) {
           console.error(`[SESSION_MONITOR] Error completing session ${session.id}:`, error)
         }
+      }
+
+      if (sessions.length > 0) {
+        console.log(`[SESSION_MONITOR] Processed ${sessions.length} sessions for completion`)
       }
     } catch (error) {
       console.error('[SESSION_MONITOR] Error completing sessions:', error)

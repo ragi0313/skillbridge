@@ -106,7 +106,7 @@ export function RefundRequestModal({ sessionId, isOpen, onClose, onSuccess }: Re
               value={detailedReason}
               onChange={(e) => setDetailedReason(e.target.value)}
               rows={6}
-              className="resize-none"
+              className="resize-none break-words"
             />
             <p className="text-xs text-gray-500">Minimum 10 characters</p>
           </div>

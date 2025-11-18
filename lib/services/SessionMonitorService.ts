@@ -314,7 +314,10 @@ export class SessionMonitorService {
           ])
 
           return {
-            ...session,
+            sessionId: session.sessionId,
+            startTime: session.startTime,
+            learnerUserId: session.learnerUserId,
+            mentorUserId: session.mentorUserId,
             mentorName: mentorUser[0] ? `${mentorUser[0].firstName} ${mentorUser[0].lastName}` : undefined,
             learnerName: learnerUser[0] ? `${learnerUser[0].firstName} ${learnerUser[0].lastName}` : undefined,
           }

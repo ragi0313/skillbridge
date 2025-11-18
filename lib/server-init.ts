@@ -7,6 +7,12 @@ export async function initializeServer() {
     return
   }
 
+  // Skip initialization during build time
+  if (process.env.NEXT_PHASE === 'phase-production-build' || process.env.NEXT_PHASE === 'phase-development-build') {
+    console.log('[SERVER_INIT] Skipping server initialization during build phase')
+    return
+  }
+
   try {
     // Validate environment variables first
     EnvironmentValidator.logEnvironmentStatus()
@@ -16,7 +22,9 @@ export async function initializeServer() {
     try {
       const { sessionMonitorService } = await import("@/lib/services/SessionMonitorService")
       sessionMonitorService.start()
+      console.log('[SERVER_INIT] SessionMonitorService started successfully')
       } catch (error) {
+        console.error('[SERVER_INIT] Failed to start SessionMonitorService:', error)
       }
 
     // Initialize email worker (if Redis is available)

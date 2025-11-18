@@ -295,6 +295,11 @@ export class SessionMonitorService {
           )
         )
 
+      // Skip if no sessions to update
+      if (!sessionsToUpdate || sessionsToUpdate.length === 0) {
+        return
+      }
+
       // Get mentor and learner names for each session
       const enrichedSessions = await Promise.all(
         sessionsToUpdate.map(async (session) => {

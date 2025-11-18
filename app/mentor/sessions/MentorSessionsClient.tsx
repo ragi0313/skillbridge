@@ -658,7 +658,7 @@ export function MentorSessionsClient({ sessions }: MentorSessionsClientProps) {
               <MessageCircle className="w-4 h-4 text-gray-500" />
               <span className="text-sm font-medium">Learner's Notes:</span>
             </div>
-            <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded-md">
+            <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded-md break-words whitespace-pre-wrap">
               {session.sessionNotes}
             </p>
           </div>
@@ -671,7 +671,7 @@ export function MentorSessionsClient({ sessions }: MentorSessionsClientProps) {
               <MessageCircle className="w-4 h-4 text-blue-500" />
               <span className="text-sm font-medium">Your Response:</span>
             </div>
-            <p className="text-sm text-blue-600 bg-blue-50 p-3 rounded-md">
+            <p className="text-sm text-blue-600 bg-blue-50 p-3 rounded-md break-words whitespace-pre-wrap">
               {session.mentorResponseMessage}
             </p>
           </div>
@@ -736,7 +736,7 @@ export function MentorSessionsClient({ sessions }: MentorSessionsClientProps) {
                 {session.rejectionReason ? "You Declined This Request" : "Session Cancelled"}
               </span>
             </div>
-            <p className="text-sm text-red-700">
+            <p className="text-sm text-red-700 break-words whitespace-pre-wrap">
               <strong>Reason: </strong>
               {session.rejectionReason || session.cancellationReason}
             </p>
@@ -1110,7 +1110,7 @@ export function MentorSessionsClient({ sessions }: MentorSessionsClientProps) {
                 {selectedSession.sessionNotes && (
                   <div className="mt-3 pt-3 border-t">
                     <p className="text-xs font-medium text-gray-700 mb-1">Learner's Notes:</p>
-                    <p className="text-sm text-gray-600 italic">"{selectedSession.sessionNotes}"</p>
+                    <p className="text-sm text-gray-600 italic break-words whitespace-pre-wrap">"{selectedSession.sessionNotes}"</p>
                   </div>
                 )}
               </div>

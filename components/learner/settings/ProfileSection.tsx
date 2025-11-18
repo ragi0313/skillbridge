@@ -28,7 +28,6 @@ interface ProfileSectionProps {
     experienceLevel: string
     learningGoals: string
     profilePictureUrl?: string | null
-    socialLinks?: { github?: string; twitter?: string; website?: string } | null
     timezone?: string | null
   }
 }
@@ -60,7 +59,6 @@ export function ProfileSection({ initialData }: ProfileSectionProps) {
       learningGoals: initialData.learningGoals,
       profilePictureUrl: initialData.profilePictureUrl || undefined,
       timezone: initialData.timezone || undefined,
-      socialLinks: initialData.socialLinks || undefined,
     },
   })
 
@@ -229,59 +227,20 @@ export function ProfileSection({ initialData }: ProfileSectionProps) {
         </CardContent>
       </Card>
 
-      {/* Social Links */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Social Links</CardTitle>
-          <CardDescription>
-            Connect your social profiles (optional)
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <Label htmlFor="github">GitHub</Label>
-            <Input
-              id="github"
-              type="url"
-              placeholder="https://github.com/username"
-              {...register("socialLinks.github")}
-            />
-          </div>
-          <div>
-            <Label htmlFor="twitter">Twitter</Label>
-            <Input
-              id="twitter"
-              type="url"
-              placeholder="https://twitter.com/username"
-              {...register("socialLinks.twitter")}
-            />
-          </div>
-          <div>
-            <Label htmlFor="website">Website</Label>
-            <Input
-              id="website"
-              type="url"
-              placeholder="https://yourwebsite.com"
-              {...register("socialLinks.website")}
-            />
-          </div>
-        </CardContent>
-      </Card>
-
       <div className="flex justify-end">
         <Button
           type="submit"
-          className="w-full md:w-auto px-8"
+          className="w-48 h-14 gradient-bg text-white font-semibold text-lg rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:scale-[1.02] disabled:opacity-50 disabled:transform-none"
           disabled={isSubmitting}
         >
           {isSubmitting ? (
             <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
               Saving...
             </>
           ) : (
             <>
-              <Save className="mr-2 h-4 w-4" />
+              <Save className="mr-2 h-5 w-5" />
               Save Changes
             </>
           )}

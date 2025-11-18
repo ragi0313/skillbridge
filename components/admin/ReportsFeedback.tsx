@@ -268,7 +268,7 @@ export default function ReportsFeedback({ onReportUpdate }: ReportsFeedbackProps
                             {/* Description */}
                             <div>
                               <h4 className="font-semibold mb-2">Description</h4>
-                              <p className="bg-gray-50 p-3 rounded text-sm">{selectedReport.description}</p>
+                              <p className="bg-gray-50 p-3 rounded text-sm break-words whitespace-pre-wrap">{selectedReport.description}</p>
                             </div>
 
                             {/* Evidence */}
@@ -285,7 +285,7 @@ export default function ReportsFeedback({ onReportUpdate }: ReportsFeedbackProps
                             {selectedReport.status !== "pending" && selectedReport.adminNotes && (
                               <div>
                                 <h4 className="font-semibold mb-2">Admin Notes</h4>
-                                <p className="bg-blue-50 p-3 rounded text-sm">{selectedReport.adminNotes}</p>
+                                <p className="bg-blue-50 p-3 rounded text-sm break-words whitespace-pre-wrap">{selectedReport.adminNotes}</p>
                               </div>
                             )}
 
@@ -293,7 +293,7 @@ export default function ReportsFeedback({ onReportUpdate }: ReportsFeedbackProps
                             {selectedReport.resolution && (
                               <div>
                                 <h4 className="font-semibold mb-2">Resolution</h4>
-                                <p className="bg-green-50 p-3 rounded text-sm">{selectedReport.resolution}</p>
+                                <p className="bg-green-50 p-3 rounded text-sm break-words whitespace-pre-wrap">{selectedReport.resolution}</p>
                                 <p className="text-xs text-gray-500 mt-2">
                                   Resolved by {selectedReport.reviewedBy} on{" "}
                                   {selectedReport.reviewedAt && format(new Date(selectedReport.reviewedAt), "MMM dd, yyyy HH:mm")}

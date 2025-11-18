@@ -232,7 +232,7 @@ export default function RefundRequests() {
 
                   <div>
                     <Label className="text-xs text-gray-500">Detailed Explanation</Label>
-                    <p className="text-sm text-gray-700 bg-gray-50 p-3 rounded-md mt-1">
+                    <p className="text-sm text-gray-700 bg-gray-50 p-3 rounded-md mt-1 break-words whitespace-pre-wrap">
                       {request.detailedReason}
                     </p>
                   </div>
@@ -247,7 +247,7 @@ export default function RefundRequests() {
                         Amount: {request.approvedAmount} credits
                       </p>
                       {request.adminNotes && (
-                        <p className="text-sm text-green-700 mt-1">
+                        <p className="text-sm text-green-700 mt-1 break-words whitespace-pre-wrap">
                           <strong>Admin Notes:</strong> {request.adminNotes}
                         </p>
                       )}
@@ -261,7 +261,7 @@ export default function RefundRequests() {
                         <span className="text-sm font-semibold text-red-800">Rejected</span>
                       </div>
                       {request.rejectionReason && (
-                        <p className="text-sm text-red-700">
+                        <p className="text-sm text-red-700 break-words whitespace-pre-wrap">
                           <strong>Reason:</strong> {request.rejectionReason}
                         </p>
                       )}

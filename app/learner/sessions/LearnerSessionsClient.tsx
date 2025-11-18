@@ -593,7 +593,7 @@ export function LearnerSessionsClient({ sessions }: LearnerSessionsClientProps) 
               <MessageCircle className="w-4 h-4 text-gray-500" />
               <span className="text-sm font-medium">Your Notes:</span>
             </div>
-            <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded-md">
+            <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded-md break-words whitespace-pre-wrap">
               {session.sessionNotes}
             </p>
           </div>
@@ -658,7 +658,7 @@ export function LearnerSessionsClient({ sessions }: LearnerSessionsClientProps) 
                 {session.rejectionReason ? "Session Rejected" : "Session Cancelled"}
               </span>
             </div>
-            <p className="text-sm text-red-700">
+            <p className="text-sm text-red-700 break-words whitespace-pre-wrap">
               <strong>Reason: </strong>
               {session.rejectionReason || session.cancellationReason}
             </p>

@@ -842,11 +842,11 @@ export default function BookMentorSessionPageClient({ session }: Props) {
                 {/* Terms */}
                 <div className="mt-4 text-xs text-gray-500 text-center bg-gray-50 p-3 rounded-lg">
                   By clicking "Confirm & Book Session", you agree to our{" "}
-                  <a href="#" className="text-blue-600 hover:text-blue-800 hover:underline font-medium">
+                  <a href="/terms-of-service" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 hover:underline font-medium">
                     Terms of Service
                   </a>{" "}
                   and{" "}
-                  <a href="#" className="text-blue-600 hover:text-blue-800 hover:underline font-medium">
+                  <a href="/cancellation-policy" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 hover:underline font-medium">
                     Cancellation Policy
                   </a>
                   .

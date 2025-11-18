@@ -114,7 +114,7 @@ export default function ReportDialog({ reportedUserId, reportedUserName, session
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Please describe the issue in detail..."
               rows={6}
-              className="resize-none"
+              className="resize-none break-words"
             />
             <p className="text-xs text-gray-500 mt-1">
               Provide as much detail as possible to help us investigate.

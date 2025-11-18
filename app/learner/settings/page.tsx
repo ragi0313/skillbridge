@@ -16,7 +16,6 @@ interface LearnerData {
   experienceLevel: string
   learningGoals: string
   profilePictureUrl?: string | null
-  socialLinks?: { github?: string; twitter?: string; website?: string } | null
   timezone?: string | null
 }
 
@@ -44,18 +43,6 @@ export default function LearnerSettingsPage() {
       const data = await response.json()
       const learner = data  // API returns learner data directly, not wrapped
 
-      // Parse socialLinks if it exists
-      let socialLinks = null
-      try {
-        if (learner.socialLinks) {
-          socialLinks = typeof learner.socialLinks === 'string'
-            ? JSON.parse(learner.socialLinks)
-            : learner.socialLinks
-        }
-      } catch (error) {
-        console.error('Failed to parse socialLinks:', error)
-      }
-
       setLearnerData({
         firstName: learner.firstName || "",
         lastName: learner.lastName || "",
@@ -65,7 +52,6 @@ export default function LearnerSettingsPage() {
         learningGoals: learner.learningGoals || "",
         profilePictureUrl: learner.profilePictureUrl || null,
         timezone: learner.timezone || "",
-        socialLinks: socialLinks || undefined,
       })
     } catch (error) {
       console.error("Error fetching learner data:", error)

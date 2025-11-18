@@ -350,6 +350,7 @@ export default function TicketSystem({ user }: TicketSystemProps) {
                   onChange={(e) => setNewTicket(prev => ({ ...prev, description: e.target.value }))}
                   placeholder={newTicket.category ? "Fill in the template below..." : "Please provide detailed information about your issue, including steps to reproduce if applicable"}
                   rows={10}
+                  className="break-words overflow-wrap-anywhere"
                 />
                 {newTicket.category && (
                   <p className="text-xs text-gray-500 mt-1">
@@ -482,7 +483,7 @@ export default function TicketSystem({ user }: TicketSystemProps) {
                         {formatDate(selectedTicket.createdAt)}
                       </span>
                     </div>
-                    <p className="text-gray-700">{selectedTicket.description}</p>
+                    <p className="text-gray-700 break-words whitespace-pre-wrap">{selectedTicket.description}</p>
                   </div>
 
                   {/* Messages */}
@@ -505,7 +506,7 @@ export default function TicketSystem({ user }: TicketSystemProps) {
                           {formatDate(message.createdAt)}
                         </span>
                       </div>
-                      <p className="text-gray-700">{message.content}</p>
+                      <p className="text-gray-700 break-words whitespace-pre-wrap">{message.content}</p>
                     </div>
                   ))}
                 </div>

@@ -50,6 +50,8 @@ export default function ReportsFeedback({ onReportUpdate }: ReportsFeedbackProps
   const [adminNotes, setAdminNotes] = useState("")
   const [resolution, setResolution] = useState("")
   const [actionLoading, setActionLoading] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 10
 
   useEffect(() => {
     fetchReports()
@@ -145,6 +147,17 @@ export default function ReportsFeedback({ onReportUpdate }: ReportsFeedbackProps
     }
   }
 
+  // Pagination logic
+  const totalPages = Math.ceil(reports.length / itemsPerPage)
+  const startIndex = (currentPage - 1) * itemsPerPage
+  const endIndex = startIndex + itemsPerPage
+  const paginatedReports = reports.slice(startIndex, endIndex)
+
+  // Reset to page 1 when status filter changes
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [statusFilter])
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -193,7 +206,7 @@ export default function ReportsFeedback({ onReportUpdate }: ReportsFeedbackProps
             </div>
           ) : (
             <div className="space-y-4">
-              {reports.map((report) => (
+              {paginatedReports.map((report) => (
                 <div
                   key={report.id}
                   className={`p-4 border-l-4 border rounded-lg hover:bg-gray-50 transition-colors ${getPriorityColor(report.category)}`}
@@ -337,6 +350,64 @@ export default function ReportsFeedback({ onReportUpdate }: ReportsFeedbackProps
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* Pagination */}
+          {totalPages > 1 && !loading && reports.length > 0 && (
+            <div className="border-t pt-4 mt-4">
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-gray-600">
+                  Showing {startIndex + 1} to {Math.min(endIndex, reports.length)} of {reports.length} reports
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                    disabled={currentPage === 1}
+                  >
+                    Previous
+                  </Button>
+                  <div className="flex space-x-1">
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                      const page = i + 1
+                      return (
+                        <Button
+                          key={page}
+                          variant={currentPage === page ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setCurrentPage(page)}
+                          className="w-8 h-8 p-0"
+                        >
+                          {page}
+                        </Button>
+                      )
+                    })}
+                    {totalPages > 5 && (
+                      <>
+                        <span className="px-2">...</span>
+                        <Button
+                          variant={currentPage === totalPages ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setCurrentPage(totalPages)}
+                          className="w-8 h-8 p-0"
+                        >
+                          {totalPages}
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                    disabled={currentPage === totalPages}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
             </div>
           )}
         </CardContent>

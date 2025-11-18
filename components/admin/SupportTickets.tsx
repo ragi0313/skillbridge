@@ -84,6 +84,8 @@ export default function SupportTickets({ onTicketUpdate }: SupportTicketsProps) 
   const [replyMessage, setReplyMessage] = useState('')
   const [internalNote, setInternalNote] = useState('')
   const [sendingReply, setSendingReply] = useState(false)
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 10
 
   // Fetch tickets
   useEffect(() => {
@@ -180,6 +182,17 @@ export default function SupportTickets({ onTicketUpdate }: SupportTicketsProps) 
 
     return matchesSearch && matchesStatus && matchesCategory && matchesPriority
   })
+
+  // Pagination logic
+  const totalPages = Math.ceil(filteredTickets.length / itemsPerPage)
+  const startIndex = (currentPage - 1) * itemsPerPage
+  const endIndex = startIndex + itemsPerPage
+  const paginatedTickets = filteredTickets.slice(startIndex, endIndex)
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchTerm, filter])
 
   const openTicket = (ticket: SupportTicket) => {
     setSelectedTicket(ticket)
@@ -283,7 +296,7 @@ export default function SupportTickets({ onTicketUpdate }: SupportTicketsProps) 
             <p className="text-gray-600">No support tickets match your current filters.</p>
           </div>
         ) : (
-          filteredTickets.map((ticket) => (
+          paginatedTickets.map((ticket) => (
             <div key={ticket.id} className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-lg transition-all duration-200 hover:border-purple-200">
               <div className="">
                 <div className="flex items-start justify-between">
@@ -525,6 +538,62 @@ export default function SupportTickets({ onTicketUpdate }: SupportTicketsProps) 
               </div>
             </div>
           ))
+        )}
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between border-t bg-white rounded-xl border-gray-200 p-4 mt-4">
+            <div className="text-sm text-gray-600">
+              Showing {startIndex + 1} to {Math.min(endIndex, filteredTickets.length)} of {filteredTickets.length} tickets
+            </div>
+            <div className="flex items-center space-x-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+                disabled={currentPage === 1}
+              >
+                Previous
+              </Button>
+              <div className="flex space-x-1">
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  const page = i + 1
+                  return (
+                    <Button
+                      key={page}
+                      variant={currentPage === page ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setCurrentPage(page)}
+                      className="w-8 h-8 p-0"
+                    >
+                      {page}
+                    </Button>
+                  )
+                })}
+                {totalPages > 5 && (
+                  <>
+                    <span className="px-2">...</span>
+                    <Button
+                      variant={currentPage === totalPages ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setCurrentPage(totalPages)}
+                      className="w-8 h-8 p-0"
+                    >
+                      {totalPages}
+                    </Button>
+                  </>
+                )}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+                disabled={currentPage === totalPages}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
         )}
       </div>
     </div>

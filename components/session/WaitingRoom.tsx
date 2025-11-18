@@ -209,33 +209,53 @@ export function WaitingRoom({
         })
 
         cameraStreamRef.current = stream
-        setCameraEnabled(true)
 
         if (videoRef.current) {
           videoRef.current.srcObject = stream
           videoRef.current.muted = true // Ensure muted for autoplay
 
-          // Setup onloadedmetadata handler before attempting play
-          videoRef.current.onloadedmetadata = async () => {
-            if (videoRef.current && cameraStreamRef.current) {
-              try {
-                await videoRef.current.play()
-                console.log("Camera video playing successfully")
-              } catch (playError: any) {
-                console.error("Failed to play video:", playError)
-              }
-            }
-          }
+          // Wait for stream to be ready and play
+          try {
+            // Force load the video
+            videoRef.current.load()
 
-          // Try to play immediately if metadata already loaded
-          if (videoRef.current.readyState >= 2) {
-            try {
-              await videoRef.current.play()
-              console.log("Camera video playing immediately")
-            } catch (playError: any) {
-              console.log("Waiting for onloadedmetadata event:", playError.message)
-            }
+            // Wait for the video to be ready
+            await new Promise<void>((resolve, reject) => {
+              if (!videoRef.current) {
+                reject(new Error('Video ref lost'))
+                return
+              }
+
+              const video = videoRef.current
+
+              const onCanPlay = async () => {
+                try {
+                  await video.play()
+                  console.log("Camera video playing successfully")
+                  resolve()
+                } catch (playError) {
+                  console.error("Failed to play video:", playError)
+                  reject(playError)
+                }
+              }
+
+              if (video.readyState >= video.HAVE_FUTURE_DATA) {
+                onCanPlay()
+              } else {
+                video.addEventListener('canplay', onCanPlay, { once: true })
+                // Timeout after 5 seconds
+                setTimeout(() => reject(new Error('Video load timeout')), 5000)
+              }
+            })
+
+            setCameraEnabled(true)
+          } catch (error) {
+            console.error("Error setting up video playback:", error)
+            // Still set enabled even if play fails, as stream is active
+            setCameraEnabled(true)
           }
+        } else {
+          setCameraEnabled(true)
         }
       }
     } catch (error: any) {
@@ -684,7 +704,6 @@ export function WaitingRoom({
                       autoPlay
                       muted
                       playsInline
-                      webkit-playsinline="true"
                       className="w-full h-48 object-cover transform scale-x-[-1]"
                       style={{ filter: 'brightness(1.05) contrast(1.1)' }}
                     />

@@ -405,13 +405,10 @@ export function VideoCallRoom({
     chatInitializedRef.current = true
     console.log("[VIDEO_CALL] Chat enabled - users can now send messages")
 
-    // Fetch initial messages (non-blocking)
+    // Fetch initial messages (non-blocking, won't fail if empty)
     fetchSessionMessages()
-      .then(() => {
-        console.log("[VIDEO_CALL] Initial messages loaded")
-      })
       .catch((error) => {
-        console.warn("[VIDEO_CALL] Failed to fetch initial messages, but chat still enabled:", error)
+        console.warn("[VIDEO_CALL] Failed to fetch initial messages (this is normal for new sessions):", error)
       })
 
     // Connect to SSE for real-time messages
@@ -1319,14 +1316,12 @@ export function VideoCallRoom({
     async (message: string, file?: File) => {
       if (!message.trim() && !file) return
 
-      if (!isChatInitialized) {
-        console.warn("[VIDEO_CALL] Chat not initialized yet, attempting to initialize now")
-        // Try to initialize chat immediately if not already done
-        if (!chatInitializedRef.current) {
-          initializeSessionChat().catch(console.error)
-        }
-        setMediaError("Chat is initializing, please try again in a moment...")
-        return
+      // Auto-initialize chat if not ready
+      if (!isChatInitialized && !chatInitializedRef.current) {
+        console.log("[VIDEO_CALL] Auto-initializing chat...")
+        setIsChatInitialized(true)
+        chatInitializedRef.current = true
+        connectToSSE()
       }
 
       setIsUploading(!!file)

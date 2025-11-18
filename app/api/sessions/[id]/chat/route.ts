@@ -5,7 +5,10 @@ import { db } from "@/db"
 import { users, bookingSessions, learners, mentors } from "@/db/schema"
 import { eq } from "drizzle-orm"
 import { broadcastChatMessage } from "@/app/api/sse/session-updates/route"
-import { sessionChatService } from "@/lib/services/SessionChatService"
+
+// Simple in-memory storage for session chat (cleared when server restarts)
+// This is ephemeral - messages only exist during the session
+const sessionMessages: Map<number, any[]> = new Map()
 
 async function handleGetChatMessages(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -21,8 +24,8 @@ async function handleGetChatMessages(request: NextRequest, { params }: { params:
       return NextResponse.json({ error: "Invalid session ID" }, { status: 400 })
     }
 
-    // Use hybrid service (Redis first, DB fallback)
-    const messages = await sessionChatService.getMessages(sessionId)
+    // Get messages from in-memory storage (returns empty array if none exist)
+    const messages = sessionMessages.get(sessionId) || []
 
     return NextResponse.json({ messages })
   } catch (error) {
@@ -57,8 +60,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ error: "Message or attachment required" }, { status: 400 })
     }
 
-    if (!sessionId) {
-      return NextResponse.json({ error: "Session ID is required" }, { status: 400 })
+    const sessionIdInt = parseInt(sessionId)
+    if (isNaN(sessionIdInt)) {
+      return NextResponse.json({ error: "Invalid session ID" }, { status: 400 })
     }
 
     // Validate message content
@@ -67,68 +71,28 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     // Validate file size if attachment exists (5MB limit for session chat)
-    // Note: Files are stored in-memory for the session duration only (ephemeral)
     if (attachment && attachment.fileSize > 5 * 1024 * 1024) {
       return NextResponse.json({ error: "File too large (max 5MB for session chat)" }, { status: 400 })
     }
 
-    // Basic spam detection for session chat
-    if (message) {
-      const spamPatterns = [
-        /(.)\1{10,}/i, // Repeated characters (10+ times)
-        /(buy now|click here|limited time|act now)/gi, // Spam keywords
-      ]
-
-      if (spamPatterns.some(pattern => pattern.test(message))) {
-        return NextResponse.json({ error: "Message appears to contain spam content" }, { status: 400 })
-      }
-    }
-
-    // Get user details from database
-    const [user] = await db
-      .select({
-        id: users.id,
-        firstName: users.firstName,
-        lastName: users.lastName,
-        role: users.role
-      })
-      .from(users)
-      .where(eq(users.id, session.id))
-      .limit(1)
-
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 })
-    }
-
-    // Verify the sender matches the authenticated user
-    const expectedSenderId = `${user.role}-${user.firstName} ${user.lastName}`
-    const providedSenderId = `${senderRole}-${senderName}`
-
-    if (providedSenderId !== expectedSenderId) {
-      return NextResponse.json({ error: "Message sender does not match authenticated user" }, { status: 403 })
-    }
-
-    const sessionIdInt = parseInt(sessionId)
-    if (isNaN(sessionIdInt)) {
-      return NextResponse.json({ error: "Invalid session ID" }, { status: 400 })
-    }
-
-    // Store message using hybrid service (Redis first, DB fallback)
-    const storedMessage = await sessionChatService.storeMessage(
-      sessionIdInt,
-      session.id,
-      senderRole || user.role,
-      message || ""
-    )
-
+    // Create the message object
     const newMessage = {
-      ...storedMessage,
-      senderName: senderName || `${user.firstName} ${user.lastName}`,
-      // Note: Attachments not persisted - they're ephemeral for session only
+      id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      message: message || "",
+      messageType: messageType || "text",
+      timestamp: Date.now(),
+      senderName: senderName,
+      senderRole: senderRole,
+      senderId: `${senderRole}-${senderName}`,
       attachment: attachment || undefined
     }
 
-    console.log(`[SESSION_CHAT] Message stored for session ${sessionId}`)
+    // Store message in memory for this session
+    const messages = sessionMessages.get(sessionIdInt) || []
+    messages.push(newMessage)
+    sessionMessages.set(sessionIdInt, messages)
+
+    console.log(`[SESSION_CHAT] Message stored in memory for session ${sessionId} (${messages.length} total)`)
 
     // Broadcast message via SSE for real-time delivery
     try {
@@ -159,7 +123,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }
     } catch (error) {
       console.error(`[SESSION_CHAT] Failed to broadcast message via SSE:`, error)
-      // Continue - client can still poll as fallback
+      // Continue - message is still stored in memory
     }
 
     return NextResponse.json({

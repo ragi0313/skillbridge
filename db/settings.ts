@@ -14,13 +14,6 @@ export const learnerProfileUpdateSchema = z.object({
     .min(10, "Learning goals must be at least 10 characters")
     .max(500, "Learning goals cannot exceed 500 characters"),
   profilePictureUrl: urlSchema,
-  socialLinks: z
-    .object({
-      github: urlSchema,
-      twitter: urlSchema,
-      website: urlSchema,
-    })
-    .optional(),
   timezone: z.string().refine((val) => isValidPhilippineTimezone(val), {
     message: "Only Philippine Standard Time is supported",
   }),

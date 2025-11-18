@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useImperativeHandle, forwardRef } from "react"
-import { Clock, Users, TrendingUp, UserCheck, MessageSquare, Megaphone, LogOut, X, Video, FileText, Mail }  from "lucide-react"
+import { Clock, Users, TrendingUp, UserCheck, MessageSquare, Megaphone, LogOut, X, Video, FileText, Mail, DollarSign }  from "lucide-react"
 import { Layers } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -43,6 +43,7 @@ const getMenuItems = (counts: SidebarCounts) => [
   { id: "user-management", label: "Users Management", icon: Users },
   { id: "skill-categories", label: "Skill Categories", icon: Layers },
   { id: "session-logs", label: "Session Logs", icon: Video },
+  { id: "refund-requests", label: "Refund Requests", icon: DollarSign },
   {
     id: "support-tickets",
     label: "Support Tickets",

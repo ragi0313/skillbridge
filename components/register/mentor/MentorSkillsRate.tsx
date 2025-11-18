@@ -80,12 +80,11 @@ export default function MentorSkillsRates({ formData, setFormData, nextStep, pre
               </Label>
               <Input
                 id="skillName"
-                placeholder="e.g., JavaScript, React, UI/UX Design"
+                placeholder="e.g., JavaScript, React, C#, C++"
                 value={newSkill}
                 onChange={(e) => {
-                  // Allow letters, spaces, slashes, hyphens, plus signs, dots, parentheses
-                  // Disallow pure numbers and special characters like @#$%^&*
-                  const value = e.target.value.replace(/[^a-zA-Z0-9\s/\-+.()]/g, '')
+                  // Allow letters, spaces, slashes, hyphens, plus signs, dots, parentheses, and # for skills like C#
+                  const value = e.target.value.replace(/[^a-zA-Z0-9\s/\-+.()#]/g, '')
                   setNewSkill(value)
                 }}
                 className="h-12 text-base bg-white"

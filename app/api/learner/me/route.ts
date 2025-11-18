@@ -80,7 +80,13 @@ export async function PATCH(req: Request) {
 
     await db
       .update(learners)
-      .set({ country, experienceLevel, learningGoals, profilePictureUrl, timezone })
+      .set({
+        country,
+        experienceLevel,
+        learningGoals,
+        profilePictureUrl,
+        timezone
+      })
       .where(eq(learners.userId, session.id))
 
     return NextResponse.json({ message: "Learner profile updated successfully" })

@@ -1,9 +1,10 @@
 import { db } from "@/db"
-import { bookingSessions, learners, mentors, creditTransactions, mentorPayouts, notifications } from "@/db/schema"
+import { bookingSessions, learners, mentors, creditTransactions, mentorPayouts, notifications, users } from "@/db/schema"
 import { eq, and, or, lt, isNull } from "drizzle-orm"
 import { broadcastSessionUpdate, broadcastForceDisconnect, broadcastBookingUpdate } from "@/app/api/sse/session-updates/route"
 import { sessionCompletionService } from './SessionCompletionService'
 import { sessionLogService } from './SessionLogService'
+import { notificationService } from '../notifications/notification-service'
 
 export class SessionMonitorService {
   private static instance: SessionMonitorService
@@ -275,7 +276,53 @@ export class SessionMonitorService {
     try {
       const now = new Date()
       const thirtyMinutesFromNow = new Date(now.getTime() + 30 * 60 * 1000)
-      
+
+      // First get the sessions that will be updated
+      const sessionsToUpdate = await db
+        .select({
+          sessionId: bookingSessions.id,
+          startTime: bookingSessions.startTime,
+          skillName: bookingSessions.skillName,
+          learnerUserId: learners.userId,
+          mentorUserId: mentors.userId,
+        })
+        .from(bookingSessions)
+        .leftJoin(learners, eq(bookingSessions.learnerId, learners.id))
+        .leftJoin(mentors, eq(bookingSessions.mentorId, mentors.id))
+        .where(
+          and(
+            eq(bookingSessions.status, 'confirmed'),
+            lt(bookingSessions.startTime, thirtyMinutesFromNow)
+          )
+        )
+
+      // Get mentor and learner names for each session
+      const enrichedSessions = await Promise.all(
+        sessionsToUpdate.map(async (session) => {
+          const [mentorUser, learnerUser] = await Promise.all([
+            session.mentorUserId
+              ? db.select({ firstName: users.firstName, lastName: users.lastName })
+                  .from(users)
+                  .where(eq(users.id, session.mentorUserId))
+                  .limit(1)
+              : Promise.resolve([null]),
+            session.learnerUserId
+              ? db.select({ firstName: users.firstName, lastName: users.lastName })
+                  .from(users)
+                  .where(eq(users.id, session.learnerUserId))
+                  .limit(1)
+              : Promise.resolve([null])
+          ])
+
+          return {
+            ...session,
+            mentorName: mentorUser[0] ? `${mentorUser[0].firstName} ${mentorUser[0].lastName}` : undefined,
+            learnerName: learnerUser[0] ? `${learnerUser[0].firstName} ${learnerUser[0].lastName}` : undefined,
+          }
+        })
+      )
+
+      // Update status to upcoming
       await db
         .update(bookingSessions)
         .set({ status: 'upcoming' })
@@ -285,6 +332,31 @@ export class SessionMonitorService {
             lt(bookingSessions.startTime, thirtyMinutesFromNow)
           )
         )
+
+      // Send reminder notifications for each session
+      for (const session of enrichedSessions) {
+        if (session.learnerUserId && session.mentorUserId && session.startTime) {
+          // Send reminder to learner
+          await notificationService.createSessionReminder(
+            session.learnerUserId,
+            session.sessionId,
+            new Date(session.startTime),
+            true, // isLearner
+            session.mentorName || 'your mentor',
+            session.skillName || undefined
+          )
+
+          // Send reminder to mentor
+          await notificationService.createSessionReminder(
+            session.mentorUserId,
+            session.sessionId,
+            new Date(session.startTime),
+            false, // isLearner
+            undefined,
+            session.skillName || undefined
+          )
+        }
+      }
     } catch (error) {
       console.error('[SESSION_MONITOR] Error updating to upcoming status:', error)
     }

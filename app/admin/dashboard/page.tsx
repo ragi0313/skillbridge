@@ -11,6 +11,7 @@ import AuditLog from "@/components/admin/AuditLog"
 import SessionLogs from "@/components/admin/SessionLogs"
 import SupportTickets from "@/components/admin/SupportTickets"
 import ReportsFeedback from "@/components/admin/ReportsFeedback"
+import RefundRequests from "@/components/admin/RefundRequests"
 
 export default function AdminDashboardPage() {
   const [activeSection, setActiveSection] = useState("dashboard")
@@ -29,6 +30,8 @@ export default function AdminDashboardPage() {
         return <SkillCategoriesManagementPage />
       case "session-logs":
         return <SessionLogs />
+      case "refund-requests":
+        return <RefundRequests />
       case "support-tickets":
         return <SupportTickets onTicketUpdate={() => sidebarRef.current?.refreshCounts()} />
       case "audit-log":

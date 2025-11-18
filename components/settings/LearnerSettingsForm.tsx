@@ -29,7 +29,6 @@ interface LearnerSettingsFormProps {
     experienceLevel: string
     learningGoals: string
     profilePictureUrl?: string | null
-    socialLinks?: { github?: string; twitter?: string; website?: string } | null
     timezone?: string | null
   }
 }
@@ -74,7 +73,6 @@ export function LearnerSettingsForm({ initialData }: LearnerSettingsFormProps) {
       experienceLevel: initialData.experienceLevel || "",
       learningGoals: initialData.learningGoals || "",
       profilePictureUrl: initialData.profilePictureUrl || "",
-      socialLinks: initialData.socialLinks || { github: "", twitter: "", website: "" },
       timezone: initialData.timezone || "",
     },
   })
@@ -88,6 +86,9 @@ export function LearnerSettingsForm({ initialData }: LearnerSettingsFormProps) {
   } = form
 
   const profilePictureUrl = watch("profilePictureUrl")
+  const country = watch("country")
+  const timezone = watch("timezone")
+  const experienceLevel = watch("experienceLevel")
 
  const onSubmit = async (data: LearnerProfileUpdateFormValues) => {
   setIsSubmitting(true)
@@ -219,7 +220,7 @@ export function LearnerSettingsForm({ initialData }: LearnerSettingsFormProps) {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="space-y-2">
               <Label htmlFor="country" className="text-sm font-medium text-gray-900">Country</Label>
-              <Select onValueChange={(value) => setValue("country", value)} defaultValue={initialData.country}>
+              <Select onValueChange={(value) => setValue("country", value)} value={country}>
                 <SelectTrigger className="h-12 text-base">
                   <SelectValue placeholder="Select your country" />
                 </SelectTrigger>
@@ -236,7 +237,7 @@ export function LearnerSettingsForm({ initialData }: LearnerSettingsFormProps) {
 
             <div className="space-y-2">
               <Label htmlFor="timezone" className="text-sm font-medium text-gray-900">Timezone</Label>
-              <Select onValueChange={(value) => setValue("timezone", value)} defaultValue={initialData.timezone || ""}>
+              <Select onValueChange={(value) => setValue("timezone", value)} value={timezone}>
                 <SelectTrigger className="h-12 text-base">
                   <SelectValue placeholder="Select your timezone" />
                 </SelectTrigger>
@@ -256,7 +257,7 @@ export function LearnerSettingsForm({ initialData }: LearnerSettingsFormProps) {
             <Label htmlFor="experienceLevel" className="text-sm font-medium text-gray-900">Experience Level</Label>
             <Select
               onValueChange={(value) => setValue("experienceLevel", value)}
-              defaultValue={initialData.experienceLevel}
+              value={experienceLevel}
             >
               <SelectTrigger className="h-12 text-base lg:max-w-md">
                 <SelectValue placeholder="Select your experience level" />
@@ -295,54 +296,6 @@ export function LearnerSettingsForm({ initialData }: LearnerSettingsFormProps) {
               className="resize-none text-base"
             />
             {errors.learningGoals && <p className="text-red-500 text-sm mt-1">{errors.learningGoals.message}</p>}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Social Links Section */}
-      <Card className="shadow-lg border-0">
-        <CardHeader>
-          <CardTitle>Social Links</CardTitle>
-          <CardDescription>Connect your social profiles to showcase your work (optional).</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="space-y-2">
-              <Label htmlFor="github" className="text-sm font-medium text-gray-900">GitHub URL</Label>
-              <Input
-                id="github"
-                placeholder="https://github.com/username"
-                {...register("socialLinks.github")}
-                className="h-12 text-base"
-              />
-              {errors.socialLinks?.github && (
-                <p className="text-red-500 text-sm mt-1">{errors.socialLinks.github.message}</p>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="twitter" className="text-sm font-medium text-gray-900">Twitter URL</Label>
-              <Input
-                id="twitter"
-                placeholder="https://twitter.com/username"
-                {...register("socialLinks.twitter")}
-                className="h-12 text-base"
-              />
-              {errors.socialLinks?.twitter && (
-                <p className="text-red-500 text-sm mt-1">{errors.socialLinks.twitter.message}</p>
-              )}
-            </div>
-            <div className="lg:col-span-2 space-y-2">
-              <Label htmlFor="website" className="text-sm font-medium text-gray-900">Personal Website</Label>
-              <Input
-                id="website"
-                placeholder="https://yourportfolio.com"
-                {...register("socialLinks.website")}
-                className="h-12 text-base"
-              />
-              {errors.socialLinks?.website && (
-                <p className="text-red-500 text-sm mt-1">{errors.socialLinks.website.message}</p>
-              )}
-            </div>
           </div>
         </CardContent>
       </Card>

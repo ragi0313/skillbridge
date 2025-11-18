@@ -1,11 +1,5 @@
 {
   "env": {
     "NODE_ENV": "production"
-  },
-  "crons": [
-    {
-      "path": "/api/cron/session-cleanup",
-      "schedule": "*/2 * * * *"
-    }
-  ]
+  }
 }

@@ -63,11 +63,24 @@ export class NotificationService {
         return { success: true, isDuplicate: true }
       }
 
-      // Create the notification
-      await db.insert(notifications).values({
-        ...data,
+      // Create the notification - filter out undefined values to prevent Drizzle errors
+      const insertData: Record<string, unknown> = {
+        userId: data.userId,
+        type: data.type,
+        title: data.title,
+        message: data.message,
         createdAt: new Date(),
-      })
+      }
+
+      // Only add optional fields if they have values
+      if (data.relatedEntityType !== undefined) {
+        insertData.relatedEntityType = data.relatedEntityType
+      }
+      if (data.relatedEntityId !== undefined) {
+        insertData.relatedEntityId = data.relatedEntityId
+      }
+
+      await db.insert(notifications).values(insertData)
 
       return { success: true, isDuplicate: false }
     } catch (error) {

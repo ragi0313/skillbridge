@@ -51,8 +51,29 @@ export async function PATCH(req: Request) {
   const body = await req.json()
   const { country, experienceLevel, learningGoals, profilePictureUrl, timezone } = body
 
-  if (!country || !experienceLevel || !learningGoals || !timezone) {
-    return NextResponse.json({ error: "Missing or invalid required fields" }, { status: 400 })
+  // Validate that required fields are present and not empty strings
+  if (!country || country.trim() === '') {
+    return NextResponse.json({ error: "Country is required" }, { status: 400 })
+  }
+
+  if (!experienceLevel || experienceLevel.trim() === '') {
+    return NextResponse.json({ error: "Experience level is required" }, { status: 400 })
+  }
+
+  if (!learningGoals || learningGoals.trim() === '') {
+    return NextResponse.json({ error: "Learning goals is required" }, { status: 400 })
+  }
+
+  if (learningGoals.trim().length < 10) {
+    return NextResponse.json({ error: "Learning goals must be at least 10 characters" }, { status: 400 })
+  }
+
+  if (learningGoals.trim().length > 500) {
+    return NextResponse.json({ error: "Learning goals cannot exceed 500 characters" }, { status: 400 })
+  }
+
+  if (!timezone || timezone.trim() === '') {
+    return NextResponse.json({ error: "Timezone is required" }, { status: 400 })
   }
 
   try {

@@ -47,11 +47,11 @@ export default function LearnerSettingsPage() {
         firstName: learner.firstName || "",
         lastName: learner.lastName || "",
         email: learner.email || "",
-        country: learner.country || "",
-        experienceLevel: learner.experienceLevel || "",
-        learningGoals: learner.learningGoals || "",
+        country: learner.country || "PH",
+        experienceLevel: learner.experienceLevel || "beginner",
+        learningGoals: learner.learningGoals || "I want to learn new skills and improve my knowledge.",
         profilePictureUrl: learner.profilePictureUrl || null,
-        timezone: learner.timezone || "",
+        timezone: learner.timezone || "Asia/Manila",
       })
     } catch (error) {
       console.error("Error fetching learner data:", error)

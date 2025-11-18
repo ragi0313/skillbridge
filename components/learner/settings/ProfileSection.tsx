@@ -54,11 +54,11 @@ export function ProfileSection({ initialData }: ProfileSectionProps) {
   } = useForm<LearnerProfileUpdateFormValues>({
     resolver: zodResolver(learnerProfileUpdateSchema),
     defaultValues: {
-      country: initialData.country,
-      experienceLevel: initialData.experienceLevel,
-      learningGoals: initialData.learningGoals,
+      country: initialData.country || "PH",
+      experienceLevel: initialData.experienceLevel || "beginner",
+      learningGoals: initialData.learningGoals || "I want to learn new skills and improve my knowledge.",
       profilePictureUrl: initialData.profilePictureUrl || undefined,
-      timezone: initialData.timezone || undefined,
+      timezone: initialData.timezone || "Asia/Manila",
     },
   })
 
@@ -66,6 +66,8 @@ export function ProfileSection({ initialData }: ProfileSectionProps) {
     setIsSubmitting(true)
 
     try {
+      console.log("Submitting learner profile update:", data)
+
       const response = await fetch("/api/learner/me", {
         method: "PATCH",
         headers: {
@@ -79,13 +81,16 @@ export function ProfileSection({ initialData }: ProfileSectionProps) {
 
       if (!response.ok) {
         const errorData = await response.json()
+        console.error("Profile update failed:", errorData)
         throw new Error(errorData.error || "Failed to update profile")
       }
 
+      console.log("Profile updated successfully")
       toast.success("Profile updated", {
         description: "Your changes have been saved successfully.",
       })
     } catch (error: any) {
+      console.error("Profile update error:", error)
       toast.error("Update failed", {
         description: error.message || "Please check your information and try again.",
       })

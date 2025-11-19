@@ -110,8 +110,8 @@ async function handleApproveMentor(request: Request, { params }: { params: Promi
         }
       }
 
-      // Auto-assign skills to categories based on case-insensitive matching
-      // Only assign skills that don't already have any category assignments
+      // Auto-assign skills to categories based on matching existing assigned skills
+      // If another mentor's "Java" is assigned to "Web Development", assign this mentor's "java" to same category
       for (const skill of insertedSkills) {
         // Check if skill already has any category assignments
         const existingAssignments = await db
@@ -120,20 +120,23 @@ async function handleApproveMentor(request: Request, { params }: { params: Promi
           .where(eq(mentorSkillCategories.mentorSkillId, skill.id))
 
         if (existingAssignments.length === 0) {
-          // Find matching categories (case insensitive, partial matching)
-          const matchingCategories = await db
-            .select()
-            .from(skillCategories)
+          // Find categories where other skills with the same name (case-insensitive) are already assigned
+          const matchingCategoryAssignments = await db
+            .select({
+              categoryId: mentorSkillCategories.categoryId,
+            })
+            .from(mentorSkillCategories)
+            .innerJoin(mentorSkills, eq(mentorSkillCategories.mentorSkillId, mentorSkills.id))
             .where(
-              sql`LOWER(${skillCategories.name}) LIKE LOWER(${"%" + skill.skillName + "%"}) 
-                  OR LOWER(${skill.skillName}) LIKE LOWER('%' || ${skillCategories.name} || '%')`,
+              sql`LOWER(${mentorSkills.skillName}) = LOWER(${skill.skillName})`
             )
+            .groupBy(mentorSkillCategories.categoryId)
 
-          // Assign to all matching categories (multiple assignments allowed)
-          if (matchingCategories.length > 0) {
-            const autoAssignments = matchingCategories.map((category) => ({
+          // Assign to all categories where matching skills exist
+          if (matchingCategoryAssignments.length > 0) {
+            const autoAssignments = matchingCategoryAssignments.map((assignment) => ({
               mentorSkillId: skill.id,
-              categoryId: category.id,
+              categoryId: assignment.categoryId,
               createdBy: user.id,
             }))
 

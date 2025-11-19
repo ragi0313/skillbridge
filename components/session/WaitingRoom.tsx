@@ -211,52 +211,25 @@ export function WaitingRoom({
         cameraStreamRef.current = stream
 
         if (videoRef.current) {
-          videoRef.current.srcObject = stream
-          videoRef.current.muted = true // Ensure muted for autoplay
+          const video = videoRef.current
+          video.srcObject = stream
+          video.muted = true
 
-          // Wait for stream to be ready and play
+          // Simple play - don't call load() as it clears srcObject
           try {
-            // Force load the video
-            videoRef.current.load()
-
-            // Wait for the video to be ready
-            await new Promise<void>((resolve, reject) => {
-              if (!videoRef.current) {
-                reject(new Error('Video ref lost'))
-                return
-              }
-
-              const video = videoRef.current
-
-              const onCanPlay = async () => {
-                try {
-                  await video.play()
-                  console.log("Camera video playing successfully")
-                  resolve()
-                } catch (playError) {
-                  console.error("Failed to play video:", playError)
-                  reject(playError)
-                }
-              }
-
-              if (video.readyState >= video.HAVE_FUTURE_DATA) {
-                onCanPlay()
-              } else {
-                video.addEventListener('canplay', onCanPlay, { once: true })
-                // Timeout after 5 seconds
-                setTimeout(() => reject(new Error('Video load timeout')), 5000)
-              }
-            })
-
-            setCameraEnabled(true)
-          } catch (error) {
-            console.error("Error setting up video playback:", error)
-            // Still set enabled even if play fails, as stream is active
-            setCameraEnabled(true)
+            await video.play()
+            console.log("Camera video playing successfully")
+          } catch (playError: any) {
+            // If autoplay is blocked, try playing on user interaction
+            if (playError.name === 'NotAllowedError') {
+              console.log("Autoplay blocked, video will play on interaction")
+            } else {
+              console.error("Failed to play video:", playError)
+            }
           }
-        } else {
-          setCameraEnabled(true)
         }
+
+        setCameraEnabled(true)
       }
     } catch (error: any) {
       console.error("Camera error:", error)

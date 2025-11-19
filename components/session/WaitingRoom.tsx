@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react"
 import { Card, CardHeader, CardContent } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
-import { Clock, User, VideoIcon, AlertCircle, Users, CheckCircle, Camera, Mic, MicOff, CameraOff } from "lucide-react"
+import { Clock, User, VideoIcon, AlertCircle, Users, CheckCircle, Camera, Mic, MicOff, CameraOff } from 'lucide-react'
 import { SessionCountdown } from "@/components/session/SessionCountdown"
 import { useRealTimeTimer, formatTimeRemaining } from "@/lib/hooks/useRealTimeTimer"
 
@@ -169,7 +169,6 @@ export function WaitingRoom({
     }
   }, [onJoinSession, hasJoinedSession, joinStatus])
 
-  // Camera test functions - fixed version
   const toggleCamera = useCallback(async () => {
     setMediaError("")
 
@@ -204,25 +203,30 @@ export function WaitingRoom({
       cameraStreamRef.current = stream
 
       if (videoRef.current) {
+        // Assign stream first
         videoRef.current.srcObject = stream
-        // Set video properties before playing
+        // Set video properties
         videoRef.current.muted = true
         videoRef.current.playsInline = true
         
-        // Wait for video to be ready before playing
-        videoRef.current.onloadedmetadata = () => {
-          if (videoRef.current) {
-            videoRef.current.play().catch(err => {
-              console.error("Play error:", err)
+        // Use play() directly without waiting for loadedmetadata
+        try {
+          await videoRef.current.play()
+        } catch (playError) {
+          console.error("[v0] Play error:", playError)
+          // If autoplay fails, try again with a small delay
+          setTimeout(() => {
+            videoRef.current?.play().catch(err => {
+              console.error("[v0] Retry play error:", err)
               setMediaError("Failed to start video playback")
             })
-          }
+          }, 100)
         }
       }
 
       setCameraEnabled(true)
     } catch (error: any) {
-      console.error("Camera error:", error)
+      console.error("[v0] Camera error:", error)
       let msg = "Unable to access camera."
       if (error.name === 'NotAllowedError') msg = "Camera access denied. Please allow camera permissions."
       else if (error.name === 'NotFoundError') msg = "No camera found."
@@ -655,7 +659,6 @@ export function WaitingRoom({
                   <div className="relative bg-black rounded-xl overflow-hidden border-2 border-emerald-500/40 shadow-xl">
                     <video
                       ref={videoRef}
-                      autoPlay
                       muted
                       playsInline
                       className="w-full h-48 object-cover"

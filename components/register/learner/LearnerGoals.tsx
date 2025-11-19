@@ -84,17 +84,17 @@ export default function LearnerGoals({ formData, setFormData, prevStep }: any) {
             onCheckedChange={(checked) => setAgreedToTerms(!!checked)}
             className="mt-1"
           />
-          <Label htmlFor="terms" className="text-sm leading-relaxed text-gray-600">
+          <Label htmlFor="terms" className="text-sm leading-relaxed text-gray-600 cursor-pointer">
             I agree to the{" "}
-            <a href="/terms-of-service" className="text-blue-600 hover:text-blue-700 hover:underline font-semibold">
+            <a href="/terms-of-service" target="_blank" className="text-blue-600 hover:text-blue-700 hover:underline font-semibold inline">
               Terms of Service
             </a>
-            {", "}
-            <a href="/privacy-policy" className="text-blue-600 hover:text-blue-700 hover:underline font-semibold">
+            ,{" "}
+            <a href="/privacy-policy" target="_blank" className="text-blue-600 hover:text-blue-700 hover:underline font-semibold inline">
               Privacy Policy
             </a>
-            {", and "}
-            <a href="/code-of-conduct" className="text-blue-600 hover:text-blue-700 hover:underline font-semibold">
+            , and{" "}
+            <a href="/code-of-conduct" target="_blank" className="text-blue-600 hover:text-blue-700 hover:underline font-semibold inline">
               Code of Conduct
             </a>
           </Label>

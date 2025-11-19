@@ -116,7 +116,7 @@ export async function POST(
       }, { status: 400 })
     }
 
-    // Create feedback record
+    // Create feedback record and update session status in a single transaction for atomic operation
     const feedbackData = {
       sessionId,
       reviewerUserId: userId,
@@ -135,8 +135,6 @@ export async function POST(
       createdAt: new Date(),
     }
 
-    await db.insert(sessionFeedback).values(feedbackData)
-
     // Update session with feedback flag
     const updateData: any = {}
     if (userRole === 'learner') {
@@ -145,10 +143,11 @@ export async function POST(
       updateData.mentorFeedbackSubmitted = true
     }
 
-    await db
-      .update(bookingSessions)
-      .set(updateData)
-      .where(eq(bookingSessions.id, sessionId))
+    // Batch insert and update in a single transaction for better performance
+    await db.transaction(async (tx) => {
+      await tx.insert(sessionFeedback).values(feedbackData)
+      await tx.update(bookingSessions).set(updateData).where(eq(bookingSessions.id, sessionId))
+    })
 
     return NextResponse.json({
       success: true,

@@ -7,7 +7,6 @@ const pool = new Pool({
   // Add timeouts to prevent hanging connections
   connectionTimeoutMillis: 10000, // 10 seconds to establish connection
   idleTimeoutMillis: 30000, // 30 seconds idle timeout
-  statement_timeout: 30000, // 30 seconds statement timeout
 })
 
 export const db = drizzle(pool, { schema })

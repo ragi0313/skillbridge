@@ -100,14 +100,17 @@ export async function POST(request: NextRequest) {
     }
 
     // Create the mentor review
+    const now = new Date()
     const [review] = await db
       .insert(mentorReviews)
       .values({
         mentorId: bookingSession.mentorId,
         learnerId: bookingSession.learnerId,
         sessionId: sessionIdInt,
-        reviewText: reviewTextClean,
+        reviewText: reviewTextClean || "",
         rating: ratingInt,
+        createdAt: now,
+        updatedAt: now,
       })
       .returning({ id: mentorReviews.id })
 

@@ -1,9 +1,6 @@
 "use client"
 
 import { useState } from "react"
-import { useForm, Controller } from "react-hook-form"
-import { zodResolver } from "@hookform/resolvers/zod"
-import type { z } from "zod"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -11,13 +8,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { toast } from "sonner"
-import { learnerProfileUpdateSchema } from "@/db/settings"
 import countries from "world-countries"
 import { commonTimeZones } from "@/lib/timeZones"
 import ProfilePictureUpload from "@/components/register/ProfilePictureUpload"
 import { Loader2, Save } from "lucide-react"
-
-type LearnerProfileUpdateFormValues = z.infer<typeof learnerProfileUpdateSchema>
 
 interface ProfileSectionProps {
   initialData: {
@@ -37,6 +31,13 @@ export function ProfileSection({ initialData }: ProfileSectionProps) {
   const [profilePictureUrl, setProfilePictureUrl] = useState<string | null>(
     initialData.profilePictureUrl || null
   )
+  const [formData, setFormData] = useState({
+    country: initialData.country || "PH",
+    experienceLevel: initialData.experienceLevel || "beginner",
+    learningGoals: initialData.learningGoals || "",
+    timezone: initialData.timezone || "Asia/Manila",
+  })
+  const [errors, setErrors] = useState<Record<string, string>>({})
 
   const countryOptions = countries
     .filter((country) => country.cca2 === "PH")
@@ -45,27 +46,49 @@ export function ProfileSection({ initialData }: ProfileSectionProps) {
       label: country.name.common,
     }))
 
-  const {
-    register,
-    handleSubmit,
-    control,
-    formState: { errors },
-  } = useForm<LearnerProfileUpdateFormValues>({
-    resolver: zodResolver(learnerProfileUpdateSchema),
-    defaultValues: {
-      country: initialData.country || "PH",
-      experienceLevel: initialData.experienceLevel || "beginner",
-      learningGoals: initialData.learningGoals || "I want to learn new skills and improve my knowledge.",
-      profilePictureUrl: initialData.profilePictureUrl || undefined,
-      timezone: initialData.timezone || "Asia/Manila",
-    },
-  })
+  const handleFormChange = (field: string, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }))
+    // Clear error when user starts typing
+    if (errors[field]) {
+      setErrors(prev => ({ ...prev, [field]: "" }))
+    }
+  }
 
-  const onSubmit = async (data: LearnerProfileUpdateFormValues) => {
+  const validateForm = (): boolean => {
+    const newErrors: Record<string, string> = {}
+
+    if (!formData.experienceLevel) {
+      newErrors.experienceLevel = "Experience level is required"
+    }
+
+    if (!formData.learningGoals || formData.learningGoals.trim().length < 10) {
+      newErrors.learningGoals = "Learning goals must be at least 10 characters"
+    }
+
+    if (formData.learningGoals && formData.learningGoals.trim().length > 500) {
+      newErrors.learningGoals = "Learning goals cannot exceed 500 characters"
+    }
+
+    if (!formData.timezone) {
+      newErrors.timezone = "Timezone is required"
+    }
+
+    setErrors(newErrors)
+    return Object.keys(newErrors).length === 0
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (!validateForm()) {
+      toast.error("Please fix the errors below")
+      return
+    }
+
     setIsSubmitting(true)
 
     try {
-      console.log("Submitting learner profile update:", data)
+      console.log("Submitting learner profile update:", formData)
 
       const response = await fetch("/api/learner/me", {
         method: "PATCH",
@@ -73,7 +96,10 @@ export function ProfileSection({ initialData }: ProfileSectionProps) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          ...data,
+          country: formData.country,
+          experienceLevel: formData.experienceLevel,
+          learningGoals: formData.learningGoals,
+          timezone: formData.timezone,
           profilePictureUrl: profilePictureUrl,
         }),
       })
@@ -99,7 +125,7 @@ export function ProfileSection({ initialData }: ProfileSectionProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+    <form onSubmit={handleSubmit} className="space-y-6">
       {/* Personal Information */}
       <Card>
         <CardHeader>
@@ -139,49 +165,37 @@ export function ProfileSection({ initialData }: ProfileSectionProps) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <Label htmlFor="country">Country</Label>
-              <Controller
-                name="country"
-                control={control}
-                render={({ field }) => (
-                  <Select value={field.value} onValueChange={field.onChange} disabled>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Philippines" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {countryOptions.map((country) => (
-                        <SelectItem key={country.value} value={country.value}>
-                          {country.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              />
+              <Select value={formData.country} onValueChange={(value) => handleFormChange("country", value)} disabled>
+                <SelectTrigger>
+                  <SelectValue placeholder="Philippines" />
+                </SelectTrigger>
+                <SelectContent>
+                  {countryOptions.map((country) => (
+                    <SelectItem key={country.value} value={country.value}>
+                      {country.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <p className="text-xs text-gray-500 mt-1">Service available in Philippines only</p>
             </div>
 
             <div>
               <Label htmlFor="timezone">Timezone</Label>
-              <Controller
-                name="timezone"
-                control={control}
-                render={({ field }) => (
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select timezone" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {commonTimeZones.map((tz) => (
-                        <SelectItem key={tz.value} value={tz.value}>
-                          {tz.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              />
+              <Select value={formData.timezone} onValueChange={(value) => handleFormChange("timezone", value)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select timezone" />
+                </SelectTrigger>
+                <SelectContent>
+                  {commonTimeZones.map((tz) => (
+                    <SelectItem key={tz.value} value={tz.value}>
+                      {tz.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               {errors.timezone && (
-                <p className="text-sm text-red-600 mt-1">{errors.timezone.message}</p>
+                <p className="text-sm text-red-600 mt-1">{errors.timezone}</p>
               )}
             </div>
           </div>
@@ -199,24 +213,18 @@ export function ProfileSection({ initialData }: ProfileSectionProps) {
         <CardContent className="space-y-4">
           <div>
             <Label htmlFor="experienceLevel">Experience Level</Label>
-            <Controller
-              name="experienceLevel"
-              control={control}
-              render={({ field }) => (
-                <Select value={field.value} onValueChange={field.onChange}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select your level" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="beginner">Beginner</SelectItem>
-                    <SelectItem value="intermediate">Intermediate</SelectItem>
-                    <SelectItem value="advanced">Advanced</SelectItem>
-                  </SelectContent>
-                </Select>
-              )}
-            />
+            <Select value={formData.experienceLevel} onValueChange={(value) => handleFormChange("experienceLevel", value)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select your level" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="beginner">Beginner</SelectItem>
+                <SelectItem value="intermediate">Intermediate</SelectItem>
+                <SelectItem value="advanced">Advanced</SelectItem>
+              </SelectContent>
+            </Select>
             {errors.experienceLevel && (
-              <p className="text-sm text-red-600 mt-1">{errors.experienceLevel.message}</p>
+              <p className="text-sm text-red-600 mt-1">{errors.experienceLevel}</p>
             )}
           </div>
 
@@ -224,12 +232,13 @@ export function ProfileSection({ initialData }: ProfileSectionProps) {
             <Label htmlFor="learningGoals">Learning Goals</Label>
             <Textarea
               id="learningGoals"
-              {...register("learningGoals")}
+              value={formData.learningGoals}
+              onChange={(e) => handleFormChange("learningGoals", e.target.value)}
               placeholder="What do you want to achieve with mentorship?"
               rows={4}
             />
             {errors.learningGoals && (
-              <p className="text-sm text-red-600 mt-1">{errors.learningGoals.message}</p>
+              <p className="text-sm text-red-600 mt-1">{errors.learningGoals}</p>
             )}
           </div>
         </CardContent>

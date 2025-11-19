@@ -1796,20 +1796,31 @@ export function VideoCallRoom({
                       ) : (
                         <div className="space-y-2">
                           {message.attachment?.fileType?.startsWith("image/") ? (
-                            <div>
-                              <img
-                                src={message.attachment.fileData || "/placeholder.svg"}
-                                alt={message.attachment.fileName}
-                                className="max-w-full h-auto rounded-lg mb-2"
-                              />
-                              {message.attachment && (
+                            <div className="space-y-2">
+                              <div className="relative group cursor-pointer" onClick={() => window.open(message.attachment!.fileData, '_blank')}>
+                                <img
+                                  src={message.attachment.fileData || "/placeholder.svg"}
+                                  alt={message.attachment.fileName}
+                                  className="max-w-[180px] max-h-[180px] w-auto h-auto rounded-lg object-cover"
+                                />
+                                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center">
+                                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
+                                  </svg>
+                                </div>
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs text-white/60 truncate max-w-[120px]">{message.attachment.fileName}</span>
                                 <button
                                   onClick={() => downloadFile(message.attachment!)}
-                                  className="text-xs text-white/80 hover:text-white underline"
+                                  className="text-xs text-white/80 hover:text-white flex items-center space-x-1"
                                 >
-                                  Download {message.attachment.fileName}
+                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                  </svg>
+                                  <span>Save</span>
                                 </button>
-                              )}
+                              </div>
                             </div>
                           ) : (
                             <div className="space-y-2">
@@ -2009,8 +2020,9 @@ export function VideoCallRoom({
           >
             <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6" />
             {unreadCount > 0 && !showSidebar && (
-              <div className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold animate-pulse">
-                {unreadCount > 99 ? "99+" : unreadCount}
+              <div className="absolute -top-2 -right-2 min-w-[20px] h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold px-1 shadow-lg">
+                <div className="absolute inset-0 bg-red-500 rounded-full animate-ping opacity-75"></div>
+                <span className="relative z-10">{unreadCount > 99 ? "99+" : unreadCount}</span>
               </div>
             )}
             <div className="absolute -top-8 sm:-top-12 left-1/2 transform -translate-x-1/2 bg-black/80 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">

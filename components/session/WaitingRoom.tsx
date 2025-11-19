@@ -169,81 +169,52 @@ export function WaitingRoom({
     }
   }, [onJoinSession, hasJoinedSession, joinStatus])
 
-  // Camera test functions
+  // Camera test functions - simplified for reliability
   const toggleCamera = useCallback(async () => {
-    try {
-      setMediaError("")
-      
-      if (cameraEnabled) {
-        // Turn off camera
-        if (cameraStreamRef.current) {
-          cameraStreamRef.current.getVideoTracks().forEach(track => {
-            track.stop()
-            })
-          cameraStreamRef.current = null
-        }
-        if (videoRef.current) {
-          videoRef.current.srcObject = null
-        }
-        setCameraEnabled(false)
-      } else {
-        // Turn on camera
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-          throw new Error('Camera access is not supported in this browser')
-        }
-        
-        // Check for camera permissions first
-        try {
-          const permissions = await navigator.permissions.query({ name: 'camera' as PermissionName })
-          } catch (permError) {
-          }
-        
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            width: { ideal: 640, min: 320, max: 1280 },
-            height: { ideal: 480, min: 240, max: 720 },
-            facingMode: 'user',
-            frameRate: { ideal: 15, max: 30 }
-          },
-          audio: false
-        })
+    setMediaError("")
 
-        cameraStreamRef.current = stream
-
-        if (videoRef.current) {
-          const video = videoRef.current
-          video.srcObject = stream
-          video.muted = true
-
-          // Simple play - don't call load() as it clears srcObject
-          try {
-            await video.play()
-            console.log("Camera video playing successfully")
-          } catch (playError: any) {
-            // If autoplay is blocked, try playing on user interaction
-            if (playError.name === 'NotAllowedError') {
-              console.log("Autoplay blocked, video will play on interaction")
-            } else {
-              console.error("Failed to play video:", playError)
-            }
-          }
-        }
-
-        setCameraEnabled(true)
+    if (cameraEnabled) {
+      // Turn off camera
+      if (cameraStreamRef.current) {
+        cameraStreamRef.current.getTracks().forEach(track => track.stop())
+        cameraStreamRef.current = null
       }
+      if (videoRef.current) {
+        videoRef.current.srcObject = null
+      }
+      setCameraEnabled(false)
+      return
+    }
+
+    // Turn on camera
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error('Camera not supported')
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user' },
+        audio: false
+      })
+
+      cameraStreamRef.current = stream
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+        // Wait for video to be ready before playing
+        videoRef.current.onloadedmetadata = () => {
+          videoRef.current?.play().catch(e => console.log("Play error:", e))
+        }
+      }
+
+      setCameraEnabled(true)
     } catch (error: any) {
       console.error("Camera error:", error)
-      let errorMessage = "Unable to access camera."
-      
-      if (error.name === 'NotAllowedError') {
-        errorMessage = "Camera access denied. Please allow camera permissions and try again."
-      } else if (error.name === 'NotFoundError') {
-        errorMessage = "No camera found. Please connect a camera and try again."
-      } else if (error.name === 'NotReadableError') {
-        errorMessage = "Camera is already in use by another application."
-      }
-      
-      setMediaError(errorMessage)
+      let msg = "Unable to access camera."
+      if (error.name === 'NotAllowedError') msg = "Camera access denied. Please allow camera permissions."
+      else if (error.name === 'NotFoundError') msg = "No camera found."
+      else if (error.name === 'NotReadableError') msg = "Camera in use by another app."
+      setMediaError(msg)
       setCameraEnabled(false)
     }
   }, [cameraEnabled])

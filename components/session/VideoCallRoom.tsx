@@ -130,10 +130,9 @@ export function VideoCallRoom({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const chatEndRef = useRef<HTMLDivElement>(null)
 
-  // Chat refs for session chat (now using SSE)
+  // Chat refs for session chat (using SSE)
   const chatInitializedRef = useRef<boolean>(false)
   const sseConnectionRef = useRef<EventSource | null>(null)
-  const lastMessageTimestampRef = useRef<number>(0)
 
   const sessionStart = new Date(sessionData.startTime)
   const sessionEnd = new Date(sessionData.endTime)
@@ -301,29 +300,6 @@ export function VideoCallRoom({
     [cleanupLocalTracks],
   )
 
-  // Fetch session messages from API (for catching up when joining)
-  const fetchSessionMessages = useCallback(async () => {
-    try {
-      console.log("[VIDEO_CALL] Fetching session chat history...")
-      const response = await fetch(`/api/sessions/${sessionId}/chat`)
-      if (response.ok) {
-        const data = await response.json()
-        if (data.messages && Array.isArray(data.messages)) {
-          console.log(`[VIDEO_CALL] Loaded ${data.messages.length} historical messages`)
-          setChatMessages(data.messages)
-          // Update last message timestamp
-          if (data.messages.length > 0) {
-            const latestTimestamp = Math.max(...data.messages.map((m: ChatMessage) => m.timestamp))
-            lastMessageTimestampRef.current = latestTimestamp
-          }
-        }
-      }
-    } catch (error) {
-      console.warn("[VIDEO_CALL] Failed to fetch session messages:", error)
-      // Not critical - user can still send/receive new messages
-    }
-  }, [sessionId])
-
   // Connect to SSE for real-time chat messages
   const connectToSSE = useCallback(() => {
     if (sseConnectionRef.current) {
@@ -331,9 +307,10 @@ export function VideoCallRoom({
       return
     }
 
-    console.log("[VIDEO_CALL] Connecting to SSE for real-time chat...")
+    console.log("[VIDEO_CALL] Connecting to SSE for real-time updates...")
 
     try {
+      // Use your EXISTING SSE endpoint
       const eventSource = new EventSource('/api/sse/session-updates')
       sseConnectionRef.current = eventSource
 
@@ -341,40 +318,50 @@ export function VideoCallRoom({
         console.log("[VIDEO_CALL] SSE connection opened")
       }
 
-      eventSource.addEventListener('message', (event) => {
+      eventSource.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data)
 
-          // Handle chat messages for this session
+          // Ignore heartbeat/connected messages
+          if (data.type === 'heartbeat' || data.type === 'connected') {
+            return
+          }
+
+          // Handle chat messages for THIS session
           if (data.type === 'chat_message' && data.sessionId === parseInt(sessionId)) {
             console.log("[VIDEO_CALL] Received chat message via SSE:", data.message)
 
             const newMessage = data.message
 
             setChatMessages((prev: ChatMessage[]) => {
-              // Check if message already exists
+              // Prevent duplicates
               if (prev.find(m => m.id === newMessage.id)) {
+                console.log("[VIDEO_CALL] Duplicate message ignored:", newMessage.id)
                 return prev
               }
+              console.log("[VIDEO_CALL] Adding new message to chat")
               return [...prev, newMessage].sort((a, b) => a.timestamp - b.timestamp)
             })
-
-            // Update last message timestamp
-            lastMessageTimestampRef.current = newMessage.timestamp
 
             // Update unread count if sidebar is closed
             if (!showSidebar) {
               setUnreadCount((prev: number) => prev + 1)
             }
           }
+
+          // Handle other session updates (force disconnect, etc.)
+          if (data.type === 'session_update' && data.sessionId === parseInt(sessionId)) {
+            console.log("[VIDEO_CALL] Session update received:", data.updateType)
+            // Handle other updates as needed
+          }
         } catch (error) {
           console.error("[VIDEO_CALL] Error parsing SSE message:", error)
         }
-      })
+      }
 
       eventSource.onerror = (error) => {
         console.error("[VIDEO_CALL] SSE connection error:", error)
-        // SSE will automatically reconnect
+        // EventSource will automatically attempt to reconnect
       }
     } catch (error) {
       console.error("[VIDEO_CALL] Failed to connect to SSE:", error)
@@ -393,52 +380,65 @@ export function VideoCallRoom({
   // Initialize session chat (using SSE for real-time updates)
   const initializeSessionChat = useCallback(async () => {
     if (chatInitializedRef.current || isCleaningUpRef.current) {
-      console.log("[VIDEO_CALL] Chat already initialized or cleaning up, skipping...")
+      console.log("[VIDEO_CALL] Chat already initialized or cleaning up")
       return
     }
 
-    console.log("[VIDEO_CALL] ===== STARTING CHAT INITIALIZATION (SSE MODE) =====")
-    console.log("[VIDEO_CALL] Session ID:", sessionId)
+    console.log("[VIDEO_CALL] ===== INITIALIZING SESSION CHAT =====")
 
-    // CRITICAL: Mark as initialized IMMEDIATELY to enable chat UI
+    // Mark as initialized FIRST (enables UI immediately)
     setIsChatInitialized(true)
     chatInitializedRef.current = true
-    console.log("[VIDEO_CALL] Chat enabled - users can now send messages")
+    console.log("[VIDEO_CALL] ✓ Chat UI enabled")
 
-    // Fetch initial messages (non-blocking, won't fail if empty)
-    fetchSessionMessages()
-      .catch((error) => {
-        console.warn("[VIDEO_CALL] Failed to fetch initial messages (this is normal for new sessions):", error)
-      })
-
-    // Connect to SSE for real-time messages
-    console.log("[VIDEO_CALL] Connecting to SSE for real-time chat...")
+    // Connect to SSE
     connectToSSE()
+    console.log("[VIDEO_CALL] ✓ SSE connection established")
+
+    // Fetch existing messages (non-blocking)
+    try {
+      console.log("[VIDEO_CALL] Fetching chat history...")
+      const response = await fetch(`/api/sessions/${sessionId}/chat`)
+      if (response.ok) {
+        const data = await response.json()
+        if (data.messages && data.messages.length > 0) {
+          console.log(`[VIDEO_CALL] ✓ Loaded ${data.messages.length} historical messages`)
+          setChatMessages(data.messages)
+        } else {
+          console.log("[VIDEO_CALL] ✓ No previous messages (new session)")
+        }
+      }
+    } catch (error) {
+      console.warn("[VIDEO_CALL] Failed to fetch history (this is OK for new sessions):", error)
+    }
 
     console.log("[VIDEO_CALL] ===== CHAT READY =====")
-  }, [sessionId, fetchSessionMessages, connectToSSE])
+  }, [sessionId, connectToSSE])
 
   // Cleanup session chat
   const cleanupSessionChat = useCallback(() => {
     console.log("[VIDEO_CALL] Cleaning up session chat...")
 
     try {
-      // Disconnect from SSE
+      // Disconnect SSE
       disconnectFromSSE()
 
-      // Reset state
+      // Clear messages from server memory
+      fetch(`/api/sessions/${sessionId}/chat`, { method: 'DELETE' })
+        .then(() => console.log("[VIDEO_CALL] ✓ Server messages cleared"))
+        .catch(err => console.warn('[VIDEO_CALL] Failed to clear server messages:', err))
+
+      // Reset local state
       setIsChatInitialized(false)
       chatInitializedRef.current = false
-
-      // Clear all chat messages (ephemeral session chat)
       setChatMessages([])
       setUnreadCount(0)
 
-      console.log("[VIDEO_CALL] Session chat cleanup completed")
+      console.log("[VIDEO_CALL] ✓ Chat cleanup completed")
     } catch (error) {
-      console.error("[VIDEO_CALL] Error during session chat cleanup:", error)
+      console.error("[VIDEO_CALL] Error during chat cleanup:", error)
     }
-  }, [disconnectFromSSE])
+  }, [sessionId, disconnectFromSSE])
 
   // Comprehensive cleanup function
   const performCleanup = useCallback(
@@ -679,12 +679,6 @@ export function VideoCallRoom({
 
             currentRemoteUsersRef.current.add(user.uid.toString())
             setParticipants(currentRemoteUsersRef.current.size + 1)
-
-            // Initialize chat when first user joins
-            if (currentRemoteUsersRef.current.size === 1 && !chatInitializedRef.current) {
-              // Initialize chat immediately when other user joins
-              initializeSessionChat()
-            }
           } catch (error) {
             console.error("[VIDEO_CALL] Error handling user published:", error)
           }
@@ -849,17 +843,7 @@ export function VideoCallRoom({
         setConnectionState("connected")
         console.log("[VIDEO_CALL] Agora initialization completed successfully")
 
-        // Initialize chat immediately after successful Agora connection
-        if (!chatInitializedRef.current && !isCleaningUpRef.current && !isCallEnding) {
-          console.log("[VIDEO_CALL] Initializing chat immediately after Agora connection")
-          // Initialize chat immediately without delay
-          initializeSessionChat().catch((error) => {
-            console.error("[VIDEO_CALL] Chat initialization error:", error)
-            // Still mark as initialized to prevent users from being blocked
-            setIsChatInitialized(true)
-            chatInitializedRef.current = true
-          })
-        }
+        // Chat will be auto-initialized by the useEffect when connectionState === "connected"
 
         // Start session tracking with proper cleanup handling
         const startPing = () => {
@@ -924,7 +908,6 @@ export function VideoCallRoom({
     isCallEnding,
     pingSession,
     retryMediaCreation,
-    initializeSessionChat,
   ])
 
   // FIXED: Improved video toggle with better track management
@@ -1007,14 +990,14 @@ export function VideoCallRoom({
     if (!agoraClientRef.current) {
       console.warn("[VIDEO_CALL] No Agora client available for screen sharing")
       setMediaError("Unable to start screen sharing. Please wait for the video call to fully initialize.")
-      setTimeout(() => setMediaError(null), 3000)
+      setTimeout(() => setMediaError(""), 3000)
       return
     }
 
     if (isInitializingRef.current) {
       console.warn("[VIDEO_CALL] Agora still initializing, cannot start screen share yet")
       setMediaError("Video call is still connecting. Please wait a moment and try again.")
-      setTimeout(() => setMediaError(null), 3000)
+      setTimeout(() => setMediaError(""), 3000)
       return
     }
 
@@ -1316,24 +1299,20 @@ export function VideoCallRoom({
     async (message: string, file?: File) => {
       if (!message.trim() && !file) return
 
-      // Auto-initialize chat if not ready
-      if (!isChatInitialized && !chatInitializedRef.current) {
+      // Auto-initialize if needed
+      if (!isChatInitialized) {
         console.log("[VIDEO_CALL] Auto-initializing chat...")
-        setIsChatInitialized(true)
-        chatInitializedRef.current = true
-        connectToSSE()
+        await initializeSessionChat()
       }
 
       setIsUploading(!!file)
 
       try {
-        console.log("[VIDEO_CALL] Sending message via API...")
-
         const currentUserName = `${currentUser.firstName} ${currentUser.lastName}`
+        console.log(`[VIDEO_CALL] Sending message from ${currentUserName} (${userRole})`)
 
         let attachment = undefined
         if (file) {
-          // For file sharing (images and documents), convert to base64
           const reader = new FileReader()
           const fileData = await new Promise<string>((resolve) => {
             reader.onload = () => resolve(reader.result as string)
@@ -1348,76 +1327,42 @@ export function VideoCallRoom({
           }
         }
 
-        // Create the message object
-        const sessionMessage: ChatMessage = {
-          id: Date.now().toString(),
-          message: file ? file.name : message.trim(),
-          messageType: file ? "file" : "text",
-          timestamp: Date.now(),
-          senderName: currentUserName,
-          senderRole: userRole,
-          senderId: `${userRole}-${currentUserName}`,
-          attachment: file
-            ? {
-                fileName: file.name,
-                fileSize: file.size,
-                fileType: file.type,
-                fileData: URL.createObjectURL(file),
-              }
-            : undefined,
-        }
-
-        // Add to local messages immediately for sender
-        setChatMessages((prev: ChatMessage[]) => {
-          // Check if message already exists to avoid duplicates
-          if (prev.some((msg) => msg.id === sessionMessage.id)) {
-            return prev
-          }
-          return [...prev, sessionMessage].sort((a, b) => a.timestamp - b.timestamp)
+        // Send to API - it will broadcast to BOTH users via SSE
+        const response = await fetch(`/api/sessions/${sessionId}/chat`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            message: file ? file.name : message.trim(),
+            messageType: file ? "file" : "text",
+            senderName: currentUserName,
+            senderRole: userRole,
+            attachment,
+          }),
         })
 
-        // Send via the session chat API (stored in-memory, broadcasted via SSE)
-        try {
-          const response = await fetch(`/api/sessions/${sessionId}/chat`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              message: file ? file.name : message.trim(),
-              messageType: file ? "file" : "text",
-              senderName: currentUserName,
-              senderRole: userRole,
-              attachment,
-            }),
-          })
-
-          if (!response.ok) {
-            throw new Error(`Failed to send message: ${response.status}`)
-          }
-
-          const result = await response.json()
-          console.log("[VIDEO_CALL] Message sent successfully, stored and broadcasted via SSE:", result)
-
-          // Update last message timestamp to prevent duplicates from SSE
-          lastMessageTimestampRef.current = sessionMessage.timestamp
-        } catch (apiError) {
-          console.warn("[VIDEO_CALL] Session chat API failed, message only visible locally:", apiError)
-          // Remove the message from local state if API fails
-          setChatMessages((prev: ChatMessage[]) => prev.filter(msg => msg.id !== sessionMessage.id))
-          throw apiError
+        if (!response.ok) {
+          const errorText = await response.text()
+          throw new Error(`Failed to send message (${response.status}): ${errorText}`)
         }
+
+        const result = await response.json()
+        console.log("[VIDEO_CALL] ✓ Message sent successfully, waiting for SSE...")
+
+        // IMPORTANT: Don't add message locally!
+        // It will come back via SSE for both sender and receiver
 
         setNewMessage("")
         setMediaError("")
       } catch (error) {
-        console.error("[VIDEO_CALL] Failed to send message:", error)
-        setMediaError(`Failed to send message: ${error instanceof Error ? error.message : "Unknown error"}`)
+        console.error("[VIDEO_CALL] ✗ Failed to send message:", error)
+        setMediaError(`Failed to send: ${error instanceof Error ? error.message : "Unknown error"}`)
       } finally {
         setIsUploading(false)
       }
     },
-    [userRole, currentUser, sessionId, isChatInitialized, initializeSessionChat],
+    [sessionId, userRole, currentUser, isChatInitialized, initializeSessionChat],
   )
 
   const handleSendMessage = useCallback(() => {
@@ -1469,7 +1414,20 @@ export function VideoCallRoom({
     } else if (showSidebar) {
       setUnreadCount(0)
     }
-  }, [chatMessages, showSidebar])
+  }, [chatMessages, showSidebar, userRole, currentUser])
+
+  // Initialize chat when Agora is connected
+  useEffect(() => {
+    if (
+      connectionState === "connected" &&
+      !chatInitializedRef.current &&
+      !isCleaningUpRef.current &&
+      !isCallEnding
+    ) {
+      console.log("[VIDEO_CALL] Agora connected - auto-initializing chat")
+      initializeSessionChat()
+    }
+  }, [connectionState, initializeSessionChat, isCallEnding])
 
   // Helper functions
   const getConnectionStatusColor = (state: ConnectionState) => {
@@ -1541,7 +1499,6 @@ export function VideoCallRoom({
     }
     return "00:00"
   }
-
 
   return (
     <div className="h-screen w-full bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex flex-col overflow-hidden">
@@ -1891,7 +1848,7 @@ export function VideoCallRoom({
                   />
                 </svg>
                 <p className="text-white/80 text-sm font-medium">Drop files here or click to upload</p>
-                <p className="text-white/60 text-xs mt-1">Max 10MB • Images, documents, etc.</p>
+                <p className="text-white/60 text-xs mt-1">Max 5MB • Images, documents, etc.</p>
               </div>
 
               {/* Message Input */}

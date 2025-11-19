@@ -1,16 +1,17 @@
+// app/api/sessions/[id]/chat/route.ts
 import { NextRequest, NextResponse } from "next/server"
 import { getSession } from "@/lib/auth/getSession"
-import { withRateLimit } from "@/lib/middleware/rate-limit"
-import { db } from "@/db"
-import { users, bookingSessions, learners, mentors } from "@/db/schema"
-import { eq } from "drizzle-orm"
 import { broadcastChatMessage } from "@/app/api/sse/session-updates/route"
+import { db } from "@/db"
+import { bookingSessions, learners, mentors } from "@/db/schema"
+import { eq } from "drizzle-orm"
 
-// Simple in-memory storage for session chat (cleared when server restarts)
-// This is ephemeral - messages only exist during the session
+// In-memory storage for session chat (ephemeral)
 const sessionMessages: Map<number, any[]> = new Map()
+const MAX_MESSAGES_PER_SESSION = 100
 
-async function handleGetChatMessages(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+// GET - Fetch chat history (only what's in memory)
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getSession()
     if (!session?.id) {
@@ -24,79 +25,80 @@ async function handleGetChatMessages(request: NextRequest, { params }: { params:
       return NextResponse.json({ error: "Invalid session ID" }, { status: 400 })
     }
 
-    // Get messages from in-memory storage (returns empty array if none exist)
+    // Return messages from memory (empty array if none exist)
     const messages = sessionMessages.get(sessionId) || []
-
-    return NextResponse.json({ messages })
+    
+    console.log(`[CHAT] Fetched ${messages.length} messages for session ${sessionId}`)
+    
+    return NextResponse.json({ 
+      messages,
+      count: messages.length 
+    })
   } catch (error) {
-    console.error("[CHAT_API] Error fetching messages:", error)
+    console.error("[CHAT] Error fetching messages:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
 
-// Apply rate limiting to GET requests (20 per minute max)
-export async function GET(request: NextRequest, context: any) {
-  return withRateLimit("chat", async (req: NextRequest) => {
-    return handleGetChatMessages(req, context)
-  })(request)
-}
-
+// POST - Send a new message
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await getSession()
     if (!session?.id) {
-      console.warn("[SESSION_CHAT] Unauthorized request to post message")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { id: sessionId } = await params
+    const { id } = await params
+    const sessionId = parseInt(id)
     const body = await request.json()
     const { message, messageType, senderName, senderRole, attachment } = body
 
-    console.log(`[SESSION_CHAT] Received message for session ${sessionId} from ${senderName} (${senderRole})`)
-
-    // Validate input
+    // Validation
     if (!message && !attachment) {
       return NextResponse.json({ error: "Message or attachment required" }, { status: 400 })
     }
 
-    const sessionIdInt = parseInt(sessionId)
-    if (isNaN(sessionIdInt)) {
+    if (isNaN(sessionId)) {
       return NextResponse.json({ error: "Invalid session ID" }, { status: 400 })
     }
 
-    // Validate message content
     if (message && message.length > 1000) {
       return NextResponse.json({ error: "Message too long (max 1000 characters)" }, { status: 400 })
     }
 
-    // Validate file size if attachment exists (5MB limit for session chat)
     if (attachment && attachment.fileSize > 5 * 1024 * 1024) {
-      return NextResponse.json({ error: "File too large (max 5MB for session chat)" }, { status: 400 })
+      return NextResponse.json({ error: "File too large (max 5MB)" }, { status: 400 })
     }
 
-    // Create the message object
+    // Create message object
     const newMessage = {
       id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       message: message || "",
       messageType: messageType || "text",
       timestamp: Date.now(),
-      senderName: senderName,
-      senderRole: senderRole,
+      senderName,
+      senderRole,
       senderId: `${senderRole}-${senderName}`,
       attachment: attachment || undefined
     }
 
-    // Store message in memory for this session
-    const messages = sessionMessages.get(sessionIdInt) || []
+    // Store in memory
+    if (!sessionMessages.has(sessionId)) {
+      sessionMessages.set(sessionId, [])
+    }
+    
+    const messages = sessionMessages.get(sessionId)!
     messages.push(newMessage)
-    sessionMessages.set(sessionIdInt, messages)
+    
+    // Prevent memory bloat
+    if (messages.length > MAX_MESSAGES_PER_SESSION) {
+      messages.shift()
+    }
 
-    console.log(`[SESSION_CHAT] Message stored in memory for session ${sessionId} (${messages.length} total)`)
+    console.log(`[CHAT] Message stored for session ${sessionId} (${messages.length} total)`)
 
-    // Broadcast message via SSE for real-time delivery
+    // Get learner and mentor user IDs for broadcasting
     try {
-      // Get learner and mentor user IDs for this session
       const sessionData = await db
         .select({
           learner: {
@@ -109,7 +111,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         .from(bookingSessions)
         .leftJoin(learners, eq(bookingSessions.learnerId, learners.id))
         .leftJoin(mentors, eq(bookingSessions.mentorId, mentors.id))
-        .where(eq(bookingSessions.id, sessionIdInt))
+        .where(eq(bookingSessions.id, sessionId))
         .limit(1)
 
       if (sessionData.length > 0 && sessionData[0].learner && sessionData[0].mentor) {
@@ -118,11 +120,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
           sessionData[0].mentor.userId
         ]
 
-        await broadcastChatMessage(sessionIdInt, newMessage, targetUserIds)
-        console.log(`[SESSION_CHAT] Message broadcasted via SSE for session ${sessionId}`)
+        // Broadcast via existing SSE
+        await broadcastChatMessage(sessionId, newMessage, targetUserIds)
+        console.log(`[CHAT] Message broadcasted to users: ${targetUserIds.join(', ')}`)
+      } else {
+        console.warn(`[CHAT] Session ${sessionId} not found or missing participants`)
       }
     } catch (error) {
-      console.error(`[SESSION_CHAT] Failed to broadcast message via SSE:`, error)
+      console.error(`[CHAT] Failed to broadcast message:`, error)
       // Continue - message is still stored in memory
     }
 
@@ -131,7 +136,34 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       success: true
     })
   } catch (error) {
-    console.error("[SESSION_CHAT] Error posting message:", error)
+    console.error("[CHAT] Error posting message:", error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+  }
+}
+
+// DELETE - Clear session messages (when session ends)
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const session = await getSession()
+    if (!session?.id) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const { id } = await params
+    const sessionId = parseInt(id)
+
+    if (isNaN(sessionId)) {
+      return NextResponse.json({ error: "Invalid session ID" }, { status: 400 })
+    }
+
+    // Clear messages from memory
+    sessionMessages.delete(sessionId)
+    
+    console.log(`[CHAT] Cleared messages for session ${sessionId}`)
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error("[CHAT] Error clearing messages:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

@@ -193,7 +193,11 @@ export function WaitingRoom({
       }
 
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user' },
+        video: { 
+          facingMode: 'user',
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        },
         audio: false
       })
 
@@ -201,10 +205,11 @@ export function WaitingRoom({
 
       if (videoRef.current) {
         videoRef.current.srcObject = stream
-        // Wait for video to be ready before playing
-        videoRef.current.onloadedmetadata = () => {
-          videoRef.current?.play().catch(e => console.log("Play error:", e))
-        }
+        // Ensure video plays automatically
+        videoRef.current.play().catch(err => {
+          console.error("Play error:", err)
+          setMediaError("Failed to start video playback")
+        })
       }
 
       setCameraEnabled(true)
@@ -648,8 +653,7 @@ export function WaitingRoom({
                       autoPlay
                       muted
                       playsInline
-                      className="w-full h-48 object-cover transform scale-x-[-1]"
-                      style={{ filter: 'brightness(1.05) contrast(1.1)' }}
+                      className="w-full h-48 object-cover"
                     />
                     <div className="absolute top-2 right-2 bg-emerald-600/90 backdrop-blur-sm px-2 py-1 rounded-full">
                       <div className="flex items-center space-x-1">

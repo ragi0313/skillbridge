@@ -1,3 +1,4 @@
+//app/api/sse/session-updates
 import { NextRequest } from "next/server"
 import { getSession } from "@/lib/auth/getSession"
 

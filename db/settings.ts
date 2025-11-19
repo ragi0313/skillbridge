@@ -1,8 +1,8 @@
 import { z } from "zod"
 import { isValidPhilippineTimezone } from "@/lib/timeZones"
 
-// Helper for URL validation
-const urlSchema = z.string().url("Invalid URL format").optional().or(z.literal(""))
+// Helper for URL validation - accepts URL string, empty string, null, or undefined
+const urlSchema = z.string().url("Invalid URL format").optional().or(z.literal("")).nullable()
 
 export const learnerProfileUpdateSchema = z.object({
   country: z.string().refine((val) => val === "PH", {

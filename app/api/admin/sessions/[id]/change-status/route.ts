@@ -231,28 +231,6 @@ export async function POST(
         }
       }
 
-      // Send notifications INSIDE the transaction
-      await tx.insert(notifications).values([
-        {
-          userId: booking.learnerUserId,
-          type: "session_status_changed",
-          title: notificationTitle,
-          message: learnerMessage,
-          relatedEntityType: "session",
-          relatedEntityId: sessionId,
-          createdAt: now,
-        },
-        {
-          userId: booking.mentorUserId,
-          type: "session_status_changed",
-          title: notificationTitle,
-          message: mentorMessage,
-          relatedEntityType: "session",
-          relatedEntityId: sessionId,
-          createdAt: now,
-        }
-      ])
-
       return {
         success: true,
         message: "Session status updated successfully",
@@ -262,10 +240,48 @@ export async function POST(
         paymentToMentor,
         learnerUserId: booking.learnerUserId,
         mentorUserId: booking.mentorUserId,
+        notificationTitle,
+        learnerMessage,
+        mentorMessage,
       }
     })
 
-    return NextResponse.json(result)
+    // Send notifications OUTSIDE the transaction to reduce transaction scope
+    // This improves performance and prevents timeout issues
+    try {
+      await db.insert(notifications).values([
+        {
+          userId: result.learnerUserId,
+          type: "session_status_changed",
+          title: result.notificationTitle,
+          message: result.learnerMessage,
+          relatedEntityType: "session",
+          relatedEntityId: sessionId,
+          createdAt: new Date(),
+        },
+        {
+          userId: result.mentorUserId,
+          type: "session_status_changed",
+          title: result.notificationTitle,
+          message: result.mentorMessage,
+          relatedEntityType: "session",
+          relatedEntityId: sessionId,
+          createdAt: new Date(),
+        }
+      ])
+    } catch (notifError) {
+      // Log notification error but don't fail the request since transaction succeeded
+      console.error("Error sending notifications:", notifError)
+    }
+
+    return NextResponse.json({
+      success: result.success,
+      message: result.message,
+      oldStatus: result.oldStatus,
+      newStatus: result.newStatus,
+      refundToLearner: result.refundToLearner,
+      paymentToMentor: result.paymentToMentor,
+    })
   } catch (error: any) {
     console.error("Error changing session status:", error)
     return NextResponse.json(

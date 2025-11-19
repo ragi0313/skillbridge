@@ -99,7 +99,7 @@ export function WaitingRoom({
       if (cameraStreamRef.current) {
         cameraStreamRef.current.getTracks().forEach(track => {
           track.stop()
-          })
+        })
         cameraStreamRef.current = null
         setCameraEnabled(false)
       }
@@ -107,7 +107,7 @@ export function WaitingRoom({
       if (microphoneStreamRef.current) {
         microphoneStreamRef.current.getTracks().forEach(track => {
           track.stop()
-          })
+        })
         microphoneStreamRef.current = null
         setMicrophoneEnabled(false)
         setAudioLevel(0)
@@ -124,7 +124,7 @@ export function WaitingRoom({
         videoRef.current.srcObject = null
       }
       
-      } catch (error) {
+    } catch (error) {
       console.error("Error cleaning up media streams:", error)
     }
     
@@ -158,7 +158,7 @@ export function WaitingRoom({
       const success = await onJoinSession()
       if (success) {
         setJoinStatus("joined")
-        } else {
+      } else {
         setJoinStatus("error")
         setErrorMessage("Failed to join session. Please try again.")
       }
@@ -169,7 +169,7 @@ export function WaitingRoom({
     }
   }, [onJoinSession, hasJoinedSession, joinStatus])
 
-  // Camera test functions - simplified for reliability
+  // Camera test functions - fixed version
   const toggleCamera = useCallback(async () => {
     setMediaError("")
 
@@ -205,11 +205,19 @@ export function WaitingRoom({
 
       if (videoRef.current) {
         videoRef.current.srcObject = stream
-        // Ensure video plays automatically
-        videoRef.current.play().catch(err => {
-          console.error("Play error:", err)
-          setMediaError("Failed to start video playback")
-        })
+        // Set video properties before playing
+        videoRef.current.muted = true
+        videoRef.current.playsInline = true
+        
+        // Wait for video to be ready before playing
+        videoRef.current.onloadedmetadata = () => {
+          if (videoRef.current) {
+            videoRef.current.play().catch(err => {
+              console.error("Play error:", err)
+              setMediaError("Failed to start video playback")
+            })
+          }
+        }
       }
 
       setCameraEnabled(true)
@@ -241,7 +249,8 @@ export function WaitingRoom({
               gainNodeRef.current.disconnect(audioContextRef.current.destination)
             }
           } catch (disconnectError) {
-            }
+            // Ignore disconnect errors
+          }
           audioContextRef.current.close()
         }
         setMicrophoneEnabled(false)
@@ -255,12 +264,6 @@ export function WaitingRoom({
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
           throw new Error('Microphone access is not supported in this browser')
         }
-        
-        // Check for microphone permissions first
-        try {
-          const permissions = await navigator.permissions.query({ name: 'microphone' as PermissionName })
-          } catch (permError) {
-          }
         
         const stream = await navigator.mediaDevices.getUserMedia({ 
           audio: { 
@@ -306,10 +309,12 @@ export function WaitingRoom({
                 setMediaError("")
               }
             } catch (disconnectError) {
-              }
+              // Ignore disconnect errors
+            }
           }, 3000)
         } catch (playbackError) {
-          }
+          // Ignore playback errors
+        }
         
         const updateAudioLevel = () => {
           if (analyserRef.current && microphoneStreamRef.current) {

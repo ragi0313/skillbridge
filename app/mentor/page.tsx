@@ -428,12 +428,6 @@ export default function MentorDashboardPage() {
               <p className="text-gray-600 mb-4">
                 Complete your profile with more skills to find learners who match your expertise.
               </p>
-              <Link href="/mentor/settings">
-                <Button className="bg-purple-600 hover:bg-purple-700">
-                  <Settings className="w-4 h-4 mr-2" />
-                  Update Profile
-                </Button>
-              </Link>
             </div>
           )}
             </section>

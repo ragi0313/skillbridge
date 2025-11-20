@@ -544,16 +544,6 @@ export default function SessionLogs() {
                                   <Edit className="w-4 h-4" />
                                   <span>Change Status</span>
                                 </Button>
-                                {selectedSession.status === "ongoing" && (
-                                  <Button
-                                    onClick={() => forceEndSession(selectedSession.id)}
-                                    variant="destructive"
-                                    className="flex items-center space-x-2"
-                                  >
-                                    <StopCircle className="w-4 h-4" />
-                                    <span>Force End Session</span>
-                                  </Button>
-                                )}
                               </div>
                             </div>
                           )}
@@ -594,19 +584,7 @@ export default function SessionLogs() {
                     </div>
                   </div>
 
-                  {session.status === "ongoing" && (
-                    <div className="mt-3 pt-3 border-t">
-                      <Button
-                        onClick={() => forceEndSession(session.id)}
-                        variant="destructive"
-                        size="sm"
-                        className="flex items-center space-x-2"
-                      >
-                        <StopCircle className="w-4 h-4" />
-                        <span>Force End Session</span>
-                      </Button>
-                    </div>
-                  )}
+
                 </div>
               ))}
             </div>

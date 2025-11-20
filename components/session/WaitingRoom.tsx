@@ -185,12 +185,14 @@ export function WaitingRoom({
       return
     }
 
-    // Turn on camera
+    // Turn on camera with new robust approach
     try {
       if (!navigator.mediaDevices?.getUserMedia) {
         throw new Error('Camera not supported')
       }
 
+      console.log("[CAMERA] Requesting camera access...")
+      
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { 
           facingMode: 'user',
@@ -200,37 +202,99 @@ export function WaitingRoom({
         audio: false
       })
 
+      console.log("[CAMERA] Stream obtained, tracks:", stream.getTracks().map(t => t.kind))
+
       cameraStreamRef.current = stream
 
       if (videoRef.current) {
-        // Assign stream first
-        videoRef.current.srcObject = stream
-        // Set video properties
-        videoRef.current.muted = true
-        videoRef.current.playsInline = true
+        console.log("[CAMERA] Setting up video element...")
         
-        // Use play() directly without waiting for loadedmetadata
-        try {
-          await videoRef.current.play()
-        } catch (playError) {
-          console.error("[v0] Play error:", playError)
-          // If autoplay fails, try again with a small delay
+        // Assign stream directly
+        videoRef.current.srcObject = stream
+        
+        // Configure video element properties
+        videoRef.current.setAttribute('muted', 'true')
+        videoRef.current.setAttribute('playsinline', 'true')
+        videoRef.current.setAttribute('autoplay', 'true')
+        videoRef.current.style.transform = 'scaleX(-1)' // Mirror effect
+        
+        console.log("[CAMERA] Video element configured, attempting to play...")
+        
+        // Wait for video to be ready before playing
+        return new Promise<void>((resolve) => {
+          const onCanPlay = async () => {
+            console.log("[CAMERA] Video ready to play")
+            videoRef.current?.removeEventListener('canplay', onCanPlay)
+            
+            try {
+              await videoRef.current!.play()
+              console.log("[CAMERA] Video playing successfully")
+              setCameraEnabled(true)
+              resolve()
+            } catch (playError) {
+              console.error("[CAMERA] Play error:", playError)
+              setMediaError("Failed to start video playback. Try allowing camera permissions.")
+              setCameraEnabled(false)
+              resolve()
+            }
+          }
+          
+          videoRef.current!.addEventListener('canplay', onCanPlay)
+          
+          // Timeout fallback
           setTimeout(() => {
+            console.log("[CAMERA] Timeout waiting for canplay event, forcing play...")
+            videoRef.current?.removeEventListener('canplay', onCanPlay)
             videoRef.current?.play().catch(err => {
-              console.error("[v0] Retry play error:", err)
-              setMediaError("Failed to start video playback")
+              console.error("[CAMERA] Forced play error:", err)
+              setMediaError("Camera not responding. Please check permissions.")
+              setCameraEnabled(false)
             })
-          }, 100)
-        }
+            resolve()
+          }, 3000)
+        })
+      } else {
+        throw new Error('Video element not found')
       }
-
-      setCameraEnabled(true)
     } catch (error: any) {
-      console.error("[v0] Camera error:", error)
+      console.error("[CAMERA] Camera error:", error)
       let msg = "Unable to access camera."
-      if (error.name === 'NotAllowedError') msg = "Camera access denied. Please allow camera permissions."
-      else if (error.name === 'NotFoundError') msg = "No camera found."
-      else if (error.name === 'NotReadableError') msg = "Camera in use by another app."
+      
+      if (error.name === 'NotAllowedError' || error.message?.includes('Permission')) {
+        msg = "Camera access denied. Please check your browser camera permissions in settings."
+      } else if (error.name === 'NotFoundError') {
+        msg = "No camera found on your device."
+      } else if (error.name === 'NotReadableError' || error.message?.includes('in use')) {
+        msg = "Camera is already in use by another application. Close other apps using camera."
+      } else if (error.name === 'OverconstrainedError') {
+        msg = "Your camera doesn't support the requested resolution. Using default resolution..."
+        
+        // Retry with less strict constraints
+        try {
+          const fallbackStream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: 'user' },
+            audio: false
+          })
+          
+          cameraStreamRef.current = fallbackStream
+          if (videoRef.current) {
+            videoRef.current.srcObject = fallbackStream
+            videoRef.current.muted = true
+            videoRef.current.playsInline = true
+            
+            await videoRef.current.play()
+            setCameraEnabled(true)
+            setMediaError("Using default camera resolution.")
+            return
+          }
+        } catch (fallbackError) {
+          console.error("[CAMERA] Fallback error:", fallbackError)
+          msg = "Camera initialization failed. Please check permissions."
+        }
+      } else if (error.name === 'SecurityError') {
+        msg = "Camera access denied for security reasons. Use HTTPS connection."
+      }
+      
       setMediaError(msg)
       setCameraEnabled(false)
     }
@@ -659,15 +723,35 @@ export function WaitingRoom({
                   <div className="relative bg-black rounded-xl overflow-hidden border-2 border-emerald-500/40 shadow-xl">
                     <video
                       ref={videoRef}
+                      autoPlay
                       muted
                       playsInline
-                      className="w-full h-48 object-cover"
+                      className="w-full h-48 object-cover bg-black"
+                      style={{ 
+                        width: '100%', 
+                        height: '192px',
+                        objectFit: 'cover',
+                        display: 'block',
+                        backgroundColor: '#000'
+                      }}
                     />
                     <div className="absolute top-2 right-2 bg-emerald-600/90 backdrop-blur-sm px-2 py-1 rounded-full">
                       <div className="flex items-center space-x-1">
                         <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
                         <span className="text-white text-xs font-medium">Live</span>
                       </div>
+                    </div>
+                  </div>
+                )}
+
+                {!cameraEnabled && (
+                  <div className="w-full h-48 bg-gradient-to-br from-slate-700/50 to-slate-800/50 rounded-xl border border-slate-600/20 flex items-center justify-center">
+                    <div className="text-center space-y-2">
+                      <div className="w-14 h-14 bg-slate-700/50 rounded-full flex items-center justify-center mx-auto">
+                        <CameraOff className="h-7 w-7 text-slate-400" />
+                      </div>
+                      <p className="text-slate-400 text-sm font-medium">Camera off</p>
+                      <p className="text-slate-500 text-xs">Click "Test Camera" button above to see preview</p>
                     </div>
                   </div>
                 )}

@@ -129,7 +129,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       })
     } catch (broadcastError) {
       // Log broadcast error but don't fail the request
-      }
+      console.error('Broadcast error (non-critical):', broadcastError)
+    }
 
     return NextResponse.json(result)
   } catch (error: any) {

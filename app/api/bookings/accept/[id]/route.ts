@@ -132,11 +132,16 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     })
 
     // Broadcast real-time update to connected clients
-    await broadcastSessionUpdate(sessionId, 'status_change', {
-      previousStatus: 'pending',
-      newStatus: 'confirmed',
-      mentorResponse: true
-    })
+    try {
+      await broadcastSessionUpdate(sessionId, 'status_change', {
+        previousStatus: 'pending',
+        newStatus: 'confirmed',
+        mentorResponse: true
+      })
+    } catch (broadcastError) {
+      // Log broadcast error but don't fail the request
+      console.error('Broadcast error (non-critical):', broadcastError)
+    }
 
     return NextResponse.json(result)
   } catch (error: any) {

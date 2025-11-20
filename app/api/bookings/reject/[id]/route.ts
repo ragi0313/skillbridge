@@ -9,20 +9,26 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   try {
     const { id } = await params
     const sessionId = Number.parseInt(id)
+    console.log('[REJECT] Starting rejection process for session:', sessionId)
+    
     if (!sessionId || isNaN(sessionId)) {
       return NextResponse.json({ error: "Invalid session ID" }, { status: 400 })
     }
 
     const session = await getSession()
+    console.log('[REJECT] Auth session:', { userId: session?.id, role: session?.role })
+    
     if (!session?.id || session.role !== "mentor") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
     const body = await request.json().catch(() => ({}))
     const rejectionReason = body.reason || body.rejectionReason || "No reason provided"
+    console.log('[REJECT] Rejection reason:', rejectionReason)
 
     // Get mentor ID from user ID
     const [mentor] = await db.select({ id: mentors.id }).from(mentors).where(eq(mentors.userId, session.id))
+    console.log('[REJECT] Mentor profile:', { mentorId: mentor?.id })
 
     if (!mentor) {
       return NextResponse.json({ error: "Mentor profile not found" }, { status: 404 })
@@ -44,6 +50,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         .from(bookingSessions)
         .innerJoin(learners, eq(bookingSessions.learnerId, learners.id))
         .where(eq(bookingSessions.id, sessionId))
+
+      console.log('[REJECT] Booking found:', { bookingId: booking?.id, status: booking?.status, mentorId: booking?.mentorId })
 
       if (!booking) {
         throw new Error("Booking session not found")
@@ -117,6 +125,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         refundAmount: booking.escrowCredits,
       }
     })
+
+    console.log('[REJECT] Transaction completed successfully:', result)
 
     // Broadcast real-time update to connected clients
     try {

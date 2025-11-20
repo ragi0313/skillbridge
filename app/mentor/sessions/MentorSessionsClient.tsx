@@ -374,7 +374,7 @@ export function MentorSessionsClient({ sessions }: MentorSessionsClientProps) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          message: isAccepting ? "" : responseMessage 
+          reason: isAccepting ? "" : responseMessage 
         })
       })
 

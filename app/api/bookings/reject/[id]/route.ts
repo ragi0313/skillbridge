@@ -19,11 +19,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
 
     const body = await request.json().catch(() => ({}))
-    const rejectionReason = body.reason || body.rejectionReason
-
-    if (!rejectionReason || rejectionReason.trim().length === 0) {
-      return NextResponse.json({ error: "Rejection reason is required" }, { status: 400 })
-    }
+    const rejectionReason = body.reason || body.rejectionReason || "No reason provided"
 
     // Get mentor ID from user ID
     const [mentor] = await db.select({ id: mentors.id }).from(mentors).where(eq(mentors.userId, session.id))

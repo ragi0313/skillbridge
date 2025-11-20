@@ -169,16 +169,23 @@ export async function broadcastChatMessage(
 
   const encodedMessage = new TextEncoder().encode(data)
 
+  // Debug: log all active connections
+  console.log(`[SSE] Broadcasting chat message to users: ${targetUserIds.join(', ')}`)
+  console.log(`[SSE] Current active connections: ${Array.from(connections.keys()).join(', ')}`)
+
   // Send to specific users
   for (const userId of targetUserIds) {
     const connection = connections.get(userId.toString())
     if (connection) {
       try {
         connection.enqueue(encodedMessage)
+        console.log(`[SSE] ✓ Chat message sent to user ${userId}`)
       } catch (error) {
-        console.error(`Failed to send chat message to user ${userId}:`, error)
+        console.error(`[SSE] ✗ Failed to send chat message to user ${userId}:`, error)
         connections.delete(userId.toString())
       }
+    } else {
+      console.warn(`[SSE] ✗ User ${userId} has no active SSE connection`)
     }
   }
 }

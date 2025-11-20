@@ -99,33 +99,60 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     // Get learner and mentor user IDs for broadcasting
     try {
-      const sessionData = await db
+      // First get the session with learner and mentor IDs
+      const sessionRecord = await db
         .select({
-          learner: {
-            userId: learners.userId
-          },
-          mentor: {
-            userId: mentors.userId
-          }
+          learnerId: bookingSessions.learnerId,
+          mentorId: bookingSessions.mentorId,
         })
         .from(bookingSessions)
-        .leftJoin(learners, eq(bookingSessions.learnerId, learners.id))
-        .leftJoin(mentors, eq(bookingSessions.mentorId, mentors.id))
         .where(eq(bookingSessions.id, sessionId))
         .limit(1)
 
-      if (sessionData.length > 0 && sessionData[0].learner && sessionData[0].mentor) {
-        const targetUserIds = [
-          sessionData[0].learner.userId,
-          sessionData[0].mentor.userId
-        ]
-
-        // Broadcast via existing SSE
-        await broadcastChatMessage(sessionId, newMessage, targetUserIds)
-        console.log(`[CHAT] Message broadcasted to users: ${targetUserIds.join(', ')}`)
-      } else {
-        console.warn(`[CHAT] Session ${sessionId} not found or missing participants`)
+      if (!sessionRecord || sessionRecord.length === 0) {
+        console.warn(`[CHAT] Session ${sessionId} not found`)
+        return NextResponse.json({
+          message: newMessage,
+          success: true
+        })
       }
+
+      const { learnerId, mentorId } = sessionRecord[0]
+      console.log(`[CHAT] Session ${sessionId} - learnerId: ${learnerId}, mentorId: ${mentorId}`)
+
+      // Now get the user IDs for each
+      const learnerRecord = await db
+        .select({ userId: learners.userId })
+        .from(learners)
+        .where(eq(learners.id, learnerId))
+        .limit(1)
+
+      const mentorRecord = await db
+        .select({ userId: mentors.userId })
+        .from(mentors)
+        .where(eq(mentors.id, mentorId))
+        .limit(1)
+
+      if (!learnerRecord || learnerRecord.length === 0 || !mentorRecord || mentorRecord.length === 0) {
+        console.warn(`[CHAT] Could not find learner or mentor user IDs`)
+        console.log(`[CHAT] Learner record:`, learnerRecord)
+        console.log(`[CHAT] Mentor record:`, mentorRecord)
+        return NextResponse.json({
+          message: newMessage,
+          success: true
+        })
+      }
+
+      const targetUserIds = [
+        learnerRecord[0].userId,
+        mentorRecord[0].userId
+      ]
+
+      console.log(`[CHAT] Broadcasting to learner userId: ${learnerRecord[0].userId}, mentor userId: ${mentorRecord[0].userId}`)
+
+      // Broadcast via existing SSE
+      await broadcastChatMessage(sessionId, newMessage, targetUserIds)
+      console.log(`[CHAT] Message broadcasted to users: ${targetUserIds.join(', ')}`)
     } catch (error) {
       console.error(`[CHAT] Failed to broadcast message:`, error)
       // Continue - message is still stored in memory

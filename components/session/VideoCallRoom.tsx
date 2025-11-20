@@ -332,6 +332,8 @@ export function VideoCallRoom({
             console.log("[VIDEO_CALL] Received chat message via SSE:", data.message)
 
             const newMessage = data.message
+            const currentUserId = `${userRole}-${currentUser.firstName} ${currentUser.lastName}`
+            const isOwnMessage = newMessage.senderId === currentUserId
 
             setChatMessages((prev: ChatMessage[]) => {
               // Prevent duplicates
@@ -343,8 +345,14 @@ export function VideoCallRoom({
               return [...prev, newMessage].sort((a, b) => a.timestamp - b.timestamp)
             })
 
+            // Auto-open sidebar when receiving message from OTHER user
+            if (!isOwnMessage && !showSidebar) {
+              console.log("[VIDEO_CALL] Auto-opening chat sidebar for incoming message from", newMessage.senderName)
+              setShowSidebar(true)
+            }
+
             // Update unread count if sidebar is closed
-            if (!showSidebar) {
+            if (!showSidebar && !isOwnMessage) {
               setUnreadCount((prev: number) => prev + 1)
             }
           }
@@ -366,7 +374,7 @@ export function VideoCallRoom({
     } catch (error) {
       console.error("[VIDEO_CALL] Failed to connect to SSE:", error)
     }
-  }, [sessionId, showSidebar])
+  }, [sessionId, showSidebar, userRole, currentUser])
 
   // Disconnect from SSE
   const disconnectFromSSE = useCallback(() => {

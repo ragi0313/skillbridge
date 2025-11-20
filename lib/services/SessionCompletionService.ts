@@ -30,7 +30,6 @@ export interface SessionCompletionResult {
   mentorEarnings: number
   platformFeePhp: number
   alreadyCompleted: boolean
-  agoraChannelName?: string | null
 }
 
 class SessionCompletionService {
@@ -163,6 +162,7 @@ class SessionCompletionService {
 
       let mentorEarnings = 0
       let platformFeePhp = 0
+      let platformFeeChargeId: string | null = null
       const notificationData = []
 
       // Process mentor payment AND platform fee capture
@@ -171,9 +171,52 @@ class SessionCompletionService {
         const platformFeeCredits = sessionRecord.totalCostCredits - mentorEarnings
         platformFeePhp = platformFeeCredits * this.CREDITS_TO_PHP_RATE
 
-        // Note: Xendit payout will be processed asynchronously after transaction completes
-        // This avoids blocking the response while waiting for external API
+        // PLATFORM FEE COLLECTION: Transfer platform fee to Xendit account
+        // Note: This requires verified Xendit business account with payout permissions
+        try {
+          // Check if Xendit account details are configured
+          if (!process.env.XENDIT_PLATFORM_ACCOUNT_NUMBER) {
+            console.warn(`[PLATFORM_FEE] Xendit platform account not configured. Platform fee of ₱${platformFeePhp} will be tracked but not transferred.`)
+          } else {
+            // Create a payout to transfer platform fee to your business account
+            const platformFeePayout = await Payout.createPayout({
+              idempotencyKey: `platform_fee_${sessionId}_${Date.now()}`,
+              data: {
+                referenceId: `platform_fee_${sessionId}_${Date.now()}`,
+                channelCode: `PH_${process.env.XENDIT_PLATFORM_BANK_CODE || 'BPI'}`,
+                channelProperties: {
+                  accountHolderName: process.env.XENDIT_PLATFORM_ACCOUNT_NAME || 'SkillBridge',
+                  accountNumber: process.env.XENDIT_PLATFORM_ACCOUNT_NUMBER!,
+                },
+                description: `Platform fee - Session ${sessionId} (${platformFeeCredits} credits)`,
+                amount: Math.round(platformFeePhp * 100) / 100,
+                currency: 'PHP',
+                metadata: {
+                  sessionId: sessionId.toString(),
+                  platformFeeCredits: platformFeeCredits.toString(),
+                  platformFeePhp: platformFeePhp.toString(),
+                  type: 'platform_fee',
+                  learnerUserId: sessionRecord.learner_user_id.toString(),
+                  mentorUserId: sessionRecord.mentor_user_id.toString(),
+                }
+              }
+            })
 
+            // Record the Xendit payout ID for reference
+            platformFeeChargeId = platformFeePayout.id
+            console.log(`[PLATFORM_FEE] Successfully created Xendit payout: ${platformFeeChargeId} for ₱${platformFeePhp}`)
+          }
+        } catch (xenditError: any) {
+          // Handle specific Xendit errors
+          if (xenditError?.status === 403 || xenditError?.errorCode === 'REQUEST_FORBIDDEN_ERROR') {
+            console.warn(`[PLATFORM_FEE] Xendit account not verified for payouts yet. Platform fee of ₱${platformFeePhp} will be tracked in database. Error: ${xenditError?.errorMessage || 'Permission denied'}`)
+          } else {
+            console.error(`[PLATFORM_FEE] Failed to create Xendit payout for platform fee:`, xenditError)
+          }
+          // Continue processing - don't fail the session completion
+          // Platform fees are still tracked in the database for manual processing
+        }
+        
         // Record platform fee capture for accounting purposes
         await tx.insert(creditTransactions).values({
           userId: 1, // Platform/admin user ID  
@@ -183,14 +226,15 @@ class SessionCompletionService {
           balanceBefore: 0,
           balanceAfter: 0, 
           relatedSessionId: sessionId,
-          description: `Platform fee collected: ₱${platformFeePhp} from session ${sessionId}`,
+          description: `Platform fee collected: ₱${platformFeePhp} from session ${sessionId}${platformFeeChargeId ? ` (Xendit: ${platformFeeChargeId})` : ''}`,
           metadata: {
             platformFeePhp,
             mentorEarnings,
             originalAmount: sessionRecord.totalCostCredits,
             feePercentage: 20,
+            xenditPayoutId: platformFeeChargeId,
             xenditAmountPhp: Math.round(platformFeePhp), // PHP amount
-            note: 'Platform fee recorded (Xendit payout queued for async processing)'
+            note: platformFeeChargeId ? 'Platform fee transferred via Xendit' : 'Platform fee recorded (Xendit payout failed)'
           },
         })
 
@@ -253,6 +297,7 @@ class SessionCompletionService {
             mentorEarnings,
             platformFeeCredits,
             platformFeePhp,
+            xenditPayoutId: platformFeeChargeId,
             totalAmount: sessionRecord.totalCostCredits
           }
         })
@@ -340,8 +385,7 @@ class SessionCompletionService {
         refundProcessed: shouldRefundLearner,
         mentorEarnings,
         platformFeePhp,
-        alreadyCompleted: false,
-        agoraChannelName: session.agoraChannelName
+        alreadyCompleted: false
       }
     })
 
@@ -354,54 +398,7 @@ class SessionCompletionService {
       })
     }
 
-    // Process Xendit platform fee payout asynchronously AFTER transaction completes
-    // This avoids blocking the session completion response while waiting for external API
-    if (result.status === 'completed' && result.paymentProcessed && result.platformFeePhp > 0) {
-      this.processPlatformFeePayout(sessionId, result.platformFeePhp).catch(payoutError => {
-        console.error(`[PLATFORM_FEE] Failed to process Xendit payout for session ${sessionId}:`, payoutError)
-        // Non-blocking error - fees are already recorded in database
-      })
-    }
-
     return result
-  }
-
-  private async processPlatformFeePayout(sessionId: number, platformFeePhp: number): Promise<void> {
-    try {
-      if (!process.env.XENDIT_PLATFORM_ACCOUNT_NUMBER) {
-        console.warn(`[PLATFORM_FEE] Xendit account not configured. Platform fee of ₱${platformFeePhp} will remain in database.`)
-        return
-      }
-
-      const platformFeePayout = await Payout.createPayout({
-        idempotencyKey: `platform_fee_${sessionId}_${Date.now()}`,
-        data: {
-          referenceId: `platform_fee_${sessionId}_${Date.now()}`,
-          channelCode: `PH_${process.env.XENDIT_PLATFORM_BANK_CODE || 'BPI'}`,
-          channelProperties: {
-            accountHolderName: process.env.XENDIT_PLATFORM_ACCOUNT_NAME || 'SkillBridge',
-            accountNumber: process.env.XENDIT_PLATFORM_ACCOUNT_NUMBER!,
-          },
-          description: `Platform fee - Session ${sessionId}`,
-          amount: Math.round(platformFeePhp * 100) / 100,
-          currency: 'PHP',
-          metadata: {
-            sessionId: sessionId.toString(),
-            platformFeePhp: platformFeePhp.toString(),
-            type: 'platform_fee',
-            processedAt: new Date().toISOString(),
-          }
-        }
-      })
-
-      console.log(`[PLATFORM_FEE] Successfully created Xendit payout: ${platformFeePayout.id} for ₱${platformFeePhp}`)
-    } catch (xenditError: any) {
-      if (xenditError?.status === 403 || xenditError?.errorCode === 'REQUEST_FORBIDDEN_ERROR') {
-        console.warn(`[PLATFORM_FEE] Xendit account not verified for payouts. Error: ${xenditError?.errorMessage || 'Permission denied'}`)
-      } else {
-        throw xenditError
-      }
-    }
   }
 
   private calculateConnectionDuration(joinedAt: Date | null, leftAt: Date | null, completionTime: Date): number {

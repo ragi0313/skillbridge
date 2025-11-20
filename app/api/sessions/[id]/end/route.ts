@@ -62,41 +62,47 @@ export async function POST(
       cancellationReason: cancellationReason
     })
 
-    // Parallelize Agora room closure and feedback status check
-    // These are independent operations that don't need to block each other
-    const [agoraResult, feedbackInfo] = await Promise.all([
-      // End Agora call if exists and session was actually completed
-      !result.alreadyCompleted && result.agoraChannelName
-        ? agoraService.endRoom(result.agoraChannelName, reason).catch(error => {
-            console.error('Error ending Agora room:', error)
-            return null // Non-blocking error
-          })
-        : Promise.resolve(null),
-      
-      // Check feedback status in parallel
-      result.success && result.status === 'completed' && !result.alreadyCompleted
-        ? db
-            .select({
-              learnerFeedbackSubmitted: bookingSessions.learnerFeedbackSubmitted,
-              mentorFeedbackSubmitted: bookingSessions.mentorFeedbackSubmitted
-            })
-            .from(bookingSessions)
-            .where(eq(bookingSessions.id, sessionId))
-            .limit(1)
-            .catch(error => {
-              console.error('Error checking feedback status:', error)
-              return [] // Non-blocking error
-            })
-        : Promise.resolve([])
-    ])
+    // End Agora call if exists and session was actually completed (not already completed)
+    if (!result.alreadyCompleted) {
+      try {
+        // Get channel name from session data
+        const [sessionData] = await db
+          .select({ agoraChannelName: bookingSessions.agoraChannelName })
+          .from(bookingSessions)
+          .where(eq(bookingSessions.id, sessionId))
+          .limit(1)
+        
+        if (sessionData?.agoraChannelName) {
+          await agoraService.endRoom(sessionData.agoraChannelName, reason)
+        }
+      } catch (error) {
+        console.error('Error ending Agora room:', error)
+      }
+    }
 
-    // Format feedback info from parallel result
-    let feedbackInfo_data = {}
-    if (agoraResult !== undefined && feedbackInfo && feedbackInfo.length > 0) {
-      feedbackInfo_data = {
-        learnerFeedbackSubmitted: feedbackInfo[0].learnerFeedbackSubmitted || false,
-        mentorFeedbackSubmitted: feedbackInfo[0].mentorFeedbackSubmitted || false,
-        shouldShowFeedback: result.status === 'completed' && result.paymentProcessed
+    // Check feedback status if session was successfully completed
+    let feedbackInfo = {}
+    if (result.success && result.status === 'completed' && !result.alreadyCompleted) {
+      try {
+        const feedbackQuery = await db
+          .select({
+            learnerFeedbackSubmitted: bookingSessions.learnerFeedbackSubmitted,
+            mentorFeedbackSubmitted: bookingSessions.mentorFeedbackSubmitted
+          })
+          .from(bookingSessions)
+          .where(eq(bookingSessions.id, sessionId))
+          .limit(1)
+
+        if (feedbackQuery.length > 0) {
+          feedbackInfo = {
+            learnerFeedbackSubmitted: feedbackQuery[0].learnerFeedbackSubmitted || false,
+            mentorFeedbackSubmitted: feedbackQuery[0].mentorFeedbackSubmitted || false,
+            shouldShowFeedback: result.status === 'completed' && result.paymentProcessed
+          }
+        }
+      } catch (error) {
+        console.error('Error checking feedback status:', error)
+        // Continue without feedback info
       }
     }
 
@@ -109,7 +115,7 @@ export async function POST(
         refundProcessed: result.refundProcessed,
         mentorEarnings: result.mentorEarnings
       },
-      feedbackInfo: feedbackInfo_data,
+      feedbackInfo,
       alreadyEnded: result.alreadyCompleted
     })
 

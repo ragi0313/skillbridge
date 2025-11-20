@@ -376,33 +376,17 @@ export function WaitingRoom({
         analyser.fftSize = 256
         microphone.connect(gainNode)
         gainNode.connect(analyser)
-        gainNode.gain.value = 0.1
+        
+        // Connect to speakers so user can hear themselves
+        gainNode.connect(audioContext.destination)
+        gainNode.gain.value = 0.3  // Set volume to 30% to avoid feedback
         
         audioContextRef.current = audioContext
         analyserRef.current = analyser
         gainNodeRef.current = gainNode
         
         setMicrophoneEnabled(true)
-        
-        // Automatically enable audio playback for testing (brief duration)
-        try {
-          gainNode.connect(audioContext.destination)
-          setMediaError("Audio playback enabled briefly for testing. Use headphones to avoid feedback.")
-          
-          // Automatically disconnect after 3 seconds to prevent feedback
-          setTimeout(() => {
-            try {
-              if (gainNodeRef.current && audioContextRef.current) {
-                gainNodeRef.current.disconnect(audioContextRef.current.destination)
-                setMediaError("")
-              }
-            } catch (disconnectError) {
-              // Ignore disconnect errors
-            }
-          }, 3000)
-        } catch (playbackError) {
-          // Ignore playback errors
-        }
+        setMediaError("Speak to test your microphone. You will hear yourself through the speakers.")
         
         const updateAudioLevel = () => {
           if (analyserRef.current && microphoneStreamRef.current) {

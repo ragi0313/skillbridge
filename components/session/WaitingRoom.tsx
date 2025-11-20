@@ -254,7 +254,27 @@ export function WaitingRoom({
           }, 3000)
         })
       } else {
-        throw new Error('Video element not found')
+        console.error("[CAMERA] Video element not mounted yet - retrying...")
+        // If ref isn't available yet, wait a moment and retry
+        return new Promise<void>((resolve) => {
+          setTimeout(() => {
+            if (videoRef.current) {
+              videoRef.current.srcObject = stream
+              videoRef.current.muted = true
+              videoRef.current.play().then(() => {
+                console.log("[CAMERA] Video playing after retry")
+                setCameraEnabled(true)
+              }).catch(err => {
+                console.error("[CAMERA] Retry play error:", err)
+                setMediaError("Failed to start video playback.")
+              })
+            } else {
+              console.error("[CAMERA] Video ref still not available")
+              setMediaError("Video element could not be accessed.")
+            }
+            resolve()
+          }, 100)
+        })
       }
     } catch (error: any) {
       console.error("[CAMERA] Camera error:", error)
@@ -673,7 +693,7 @@ export function WaitingRoom({
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-full">
             
             {/* Left Column - Device Testing */}
-            <div className="space-y-4 overflow-y-auto">
+            <div className="space-y-4">
               <div className="text-center mb-4">
                 <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 via-teal-600 to-blue-600 rounded-xl flex items-center justify-center mx-auto mb-2 shadow-lg">
                   <Camera className="h-5 w-5 text-white" />
@@ -719,42 +739,41 @@ export function WaitingRoom({
                   </Button>
                 </div>
                 
-                {cameraEnabled && (
-                  <div className="relative bg-black rounded-xl overflow-hidden border-2 border-emerald-500/40 shadow-xl">
-                    <video
-                      ref={videoRef}
-                      autoPlay
-                      muted
-                      playsInline
-                      className="w-full h-48 object-cover bg-black"
-                      style={{ 
-                        width: '100%', 
-                        height: '192px',
-                        objectFit: 'cover',
-                        display: 'block',
-                        backgroundColor: '#000'
-                      }}
-                    />
+                <div className="relative bg-black rounded-xl overflow-hidden border-2 border-emerald-500/40 shadow-xl h-64">
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    muted
+                    playsInline
+                    className={`w-full h-full object-cover bg-black ${!cameraEnabled ? 'hidden' : ''}`}
+                    style={{ 
+                      width: '100%', 
+                      height: '100%',
+                      objectFit: 'cover',
+                      display: cameraEnabled ? 'block' : 'none',
+                      backgroundColor: '#000'
+                    }}
+                  />
+                  {cameraEnabled && (
                     <div className="absolute top-2 right-2 bg-emerald-600/90 backdrop-blur-sm px-2 py-1 rounded-full">
                       <div className="flex items-center space-x-1">
                         <div className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
                         <span className="text-white text-xs font-medium">Live</span>
                       </div>
                     </div>
-                  </div>
-                )}
-
-                {!cameraEnabled && (
-                  <div className="w-full h-48 bg-gradient-to-br from-slate-700/50 to-slate-800/50 rounded-xl border border-slate-600/20 flex items-center justify-center">
-                    <div className="text-center space-y-2">
-                      <div className="w-14 h-14 bg-slate-700/50 rounded-full flex items-center justify-center mx-auto">
-                        <CameraOff className="h-7 w-7 text-slate-400" />
+                  )}
+                  {!cameraEnabled && (
+                    <div className="w-full h-full bg-slate-600 rounded-xl border border-slate-600/20 flex items-center justify-center absolute inset-0">
+                      <div className="text-center space-y-2">
+                        <div className="w-14 h-14 bg-slate-700/50 rounded-full flex items-center justify-center mx-auto">
+                          <CameraOff className="h-7 w-7 text-slate-400" />
+                        </div>
+                        <p className="text-slate-400 text-sm font-medium">Camera off</p>
+                        <p className="text-slate-500 text-xs">Click "Test Camera" button above to see preview</p>
                       </div>
-                      <p className="text-slate-400 text-sm font-medium">Camera off</p>
-                      <p className="text-slate-500 text-xs">Click "Test Camera" button above to see preview</p>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             </div>
 

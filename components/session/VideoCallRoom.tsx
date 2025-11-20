@@ -1409,18 +1409,20 @@ export function VideoCallRoom({
     }
   }, [])
 
-  // Auto-scroll chat to bottom when new messages arrive
+  // Auto-scroll chat to bottom and manage unread count
   useEffect(() => {
     if (chatEndRef.current && showSidebar) {
       chatEndRef.current.scrollIntoView({ behavior: "smooth" })
+    }
+    // Reset unread count whenever sidebar is open (messages are being read)
+    if (showSidebar) {
+      setUnreadCount(0)
     }
     // Update unread count if sidebar is closed and message is from other user
     const lastMessage = chatMessages[chatMessages.length - 1]
     const currentUserId = `${userRole}-${currentUser.firstName} ${currentUser.lastName}`
     if (!showSidebar && lastMessage && lastMessage.senderId !== currentUserId) {
       setUnreadCount((prev: number) => prev + 1)
-    } else if (showSidebar) {
-      setUnreadCount(0)
     }
   }, [chatMessages, showSidebar, userRole, currentUser])
 
@@ -1717,11 +1719,12 @@ export function VideoCallRoom({
             <div className="p-3 sm:p-6 border-b border-white/10">
               <div className="flex items-center justify-between mb-2 sm:mb-4">
                 <h2 className="text-lg sm:text-xl font-semibold text-white">Chat & Files</h2>
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-3">
                   {/* Close button for mobile */}
                   <button
                     onClick={() => setShowSidebar(false)}
-                    className="md:hidden p-1 rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
+                    className="p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors hover:scale-110"
+                    title="Close chat"
                   >
                     <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -1736,7 +1739,7 @@ export function VideoCallRoom({
             </div>
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-white/5 [&::-webkit-scrollbar-thumb]:bg-white/30 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:hover:bg-white/50">
               {chatMessages.map((message) => {
                 const currentUserId = `${userRole}-${currentUser.firstName} ${currentUser.lastName}`
                 const isOwnMessage = message.senderId === currentUserId

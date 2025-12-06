@@ -100,6 +100,41 @@ export default function MentorSignupPage() {
         <div className="max-w-4xl mx-auto">
           <StepIndicator currentStep={currentStep} totalSteps={totalSteps} isMentor={true} />
 
+          {/* Mentor Requirements Card */}
+          {currentStep === 1 && (
+            <div className="mb-8 p-6 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg">
+              <h3 className="text-lg font-semibold text-blue-900 mb-3">🎓 How to Become a Mentor</h3>
+              <p className="text-sm text-blue-800 mb-4">
+                To join our mentor community, you'll need to complete 5 steps and provide the following information:
+              </p>
+              <ul className="space-y-2 text-sm text-blue-800">
+                <li className="flex items-start gap-2">
+                  <span className="text-blue-600 font-bold">1.</span>
+                  <span><strong>Basic Profile:</strong> Your name, email, country, timezone, and password</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-blue-600 font-bold">2.</span>
+                  <span><strong>Professional Background:</strong> Your title, years of experience, bio, and LinkedIn profile (optional)</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-blue-600 font-bold">3.</span>
+                  <span><strong>Skills & Rates:</strong> List your expertise areas and set hourly rates for each skill</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-blue-600 font-bold">4.</span>
+                  <span><strong>Availability:</strong> Define your weekly availability schedule and explain your mentoring motivation</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-blue-600 font-bold">5.</span>
+                  <span><strong>Review & Submit:</strong> Review your information and agree to our terms and code of conduct</span>
+                </li>
+              </ul>
+              <p className="text-xs text-blue-700 mt-4 italic">
+                ✓ Your application will be reviewed by our team and you'll be notified within 2-3 business days
+              </p>
+            </div>
+          )}
+
           <div className="backdrop-blur-sm p-8 pl-0 lg:pl-1">
             <form onSubmit={handleSubmit} className="space-y-8">
               {currentStep === 1 && (

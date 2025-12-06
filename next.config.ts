@@ -75,6 +75,13 @@ const nextConfig: NextConfig = {
   },
   serverExternalPackages: ['jsonwebtoken', 'ioredis', 'bullmq'],
 
+  // Turbopack configuration for development
+  turbopack: {
+    resolveAlias: {
+      '@': './src',
+    },
+  },
+
   // Security: Configure request body size limits
   async headers() {
     return [

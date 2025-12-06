@@ -106,10 +106,11 @@ export async function sendMentorApprovedEmail(email: string, name: string) {
               <div class="steps-box">
                 <h3 style="color: #374151; margin-top: 0;">🚀 Next Steps:</h3>
                 <ol style="padding-left: 20px; margin: 10px 0;">
-                  <li><strong>Complete your profile</strong> - Add your bio, skills, and expertise</li>
-                  <li><strong>Set your availability</strong> - Let learners know when you're free</li>
-                  <li><strong>Define your rates</strong> - Set your hourly mentoring rate</li>
-                  <li><strong>Start connecting</strong> - Begin accepting mentorship sessions</li>
+                  <li><strong>Log in to your dashboard</strong> - Access your new mentor control panel</li>
+                  <li><strong>Complete your profile details</strong> - Add more about your expertise and achievements</li>
+                  <li><strong>Confirm your availability</strong> - Make sure your schedule is up to date</li>
+                  <li><strong>Review and optimize your rates</strong> - Ensure your pricing is competitive</li>
+                  <li><strong>Start accepting mentorship sessions</strong> - Learners can now book sessions with you</li>
                 </ol>
               </div>
 
@@ -120,7 +121,7 @@ export async function sendMentorApprovedEmail(email: string, name: string) {
               </div>
 
               <p style="background: #fef3c7; border: 1px solid #f59e0b; border-radius: 6px; padding: 15px; margin: 20px 0;">
-                <strong>💡 Pro Tip:</strong> Complete profiles with detailed expertise and clear availability get 3x more bookings!
+                <strong>💡 Pro Tip:</strong> Complete profiles with detailed expertise, verified credentials, and consistent availability receive 3x more booking requests. Update your profile today!
               </p>
 
               <p>We're excited to see the impact you'll make. If you have any questions, feel free to reach out to our support team.</p>

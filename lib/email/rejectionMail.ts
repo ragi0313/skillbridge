@@ -95,7 +95,7 @@ export async function sendMentorRejectionEmail(email: string, name: string, note
 
               <p>Thank you for taking the time to apply to become a mentor on BridgeMentor. We appreciate your interest in sharing your knowledge and expertise with our learning community.</p>
 
-              <p>After careful review, we have decided not to move forward with your application at this time. We understand this may be disappointing, and we want to provide you with feedback from our review team:</p>
+              <p>After careful review, our team has decided not to move forward with your application at this time. This decision is based on our current quality standards and mentor requirements.</p>
 
               <div class="feedback-box">
                 <h4 style="margin-top: 0; color: #92400e;">📝 Feedback from Review Team:</h4>
@@ -105,14 +105,15 @@ export async function sendMentorRejectionEmail(email: string, name: string, note
               <div class="next-steps-box">
                 <h4 style="margin-top: 0; color: #0369a1;">💪 What You Can Do Next:</h4>
                 <ul style="padding-left: 20px; margin: 10px 0;">
-                  <li>Consider the feedback provided and work on those areas</li>
-                  <li>You're welcome to reapply in the future (we recommend waiting at least 30 days)</li>
-                  <li>Reach out to our support team if you have questions about the decision</li>
-                  <li>Continue as a learner and build your profile within our community</li>
+                  <li><strong>Address the feedback</strong> - Work on the specific areas mentioned above</li>
+                  <li><strong>Build your profile</strong> - Gain more experience and certifications in your field</li>
+                  <li><strong>Reapply soon</strong> - We recommend reapplying in 30-60 days after addressing the feedback</li>
+                  <li><strong>Continue learning</strong> - Join as a learner and experience the BridgeMentor platform</li>
+                  <li><strong>Contact support</strong> - Reach out if you need clarification on the decision</li>
                 </ul>
               </div>
 
-              <p>We encourage you to stay engaged with the BridgeMentor community. Many of our successful mentors started as learners and reapplied after gaining more experience.</p>
+              <p>We encourage you not to be discouraged. Many of our most successful mentors faced initial rejections and came back stronger. Use this feedback as a stepping stone to professional growth.</p>
 
               <div class="button-container">
                 <a href="mailto:contact@bridge-mentor.com" class="button" style="color: white; text-decoration: none;">

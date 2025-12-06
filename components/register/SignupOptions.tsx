@@ -8,10 +8,10 @@ export default function SignupOptions() {
         title="I'm a Learner"
         description="Accelerate your growth with expert mentorship"
         features={[
-          "Book verified freelancing experts",
-          "Learn through personalized 1-on-1 sessions",
-          "Explore diverse skill categories",
-          "Build confidence to land your first client"
+          "Basic Information (name, email, location)",
+          "Set your timezone for convenient scheduling",
+          "Define your learning goals and experience level",
+          "2-step verification process"
         ]}
         icon={GraduationCap}
         gradient="bg-gradient-to-r from-blue-500 to-cyan-500"
@@ -20,10 +20,10 @@ export default function SignupOptions() {
         title="I'm a Freelancer"
         description="Share your expertise and build your network"
         features={[
-          "Monetize your expertise",
-          "Set your own rates",
-          "Mentor at your own pace and time",
-          "Expand your professional network"
+          "Basic Profile (name, email, location, languages)",
+          "Professional Background (title, experience, bio, LinkedIn)",
+          "Skills & Hourly Rates for each skill",
+          "Weekly Availability Schedule & Career Motivation"
         ]}
         icon={Users}
         gradient="bg-gradient-to-r from-purple-500 to-pink-500"

@@ -282,16 +282,29 @@ export function MentorReviewDialog({ mentor, onApprove, onReject }: MentorReview
 
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Admin Review Notes (Optional)</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Admin Review Notes 
+              <span className="text-red-500 ml-1">*</span>
+              <span className="text-xs text-gray-500 ml-2">(Will be sent to applicant)</span>
+            </label>
             <Textarea
-              placeholder="Add any notes about this application review..."
+              placeholder="Provide constructive feedback about this application. This will be sent to the applicant to help them improve."
               value={reviewNotes}
               onChange={(e) => setReviewNotes(e.target.value)}
               className="min-h-[100px]"
             />
+            <p className="text-xs text-gray-500 mt-1">Character count: {reviewNotes.length}/500</p>
           </div>
           <div className="flex justify-end space-x-3 pt-4">
-            <Button variant="destructive" onClick={handleReject} className="px-6">
+            <Button variant="outline" onClick={() => setIsOpen(false)} className="px-6">
+              Cancel
+            </Button>
+            <Button 
+              variant="destructive" 
+              onClick={handleReject} 
+              disabled={!reviewNotes.trim()}
+              className="px-6"
+            >
               <XCircle className="w-4 h-4 mr-2" />
               Reject Application
             </Button>

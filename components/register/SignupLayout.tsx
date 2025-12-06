@@ -6,9 +6,7 @@ export default function SignupLayout({ currentStep, children }: { currentStep: n
   return (
     <div className="min-h-screen-stable bg-gray-50 flex flex-col lg:flex-row lg:overflow-hidden">
       <div className="hidden lg:block lg:w-1/2 lg:fixed lg:left-0 lg:top-0 lg:bottom-0 lg:h-screen relative">
-          <div className="absolute top-6 left-8 z-10">
-           <Logo imageWidth={40} imageHeight={40} fontSize="text-2xl" />
-          </div>
+
         <Image
           src="/learner-bg.jpg"
           alt="Mentorship and growth concept"

@@ -77,20 +77,31 @@ export default function LearnerGoals({ formData, setFormData, prevStep }: any) {
 
       {/* Agreements */}
       <div className="space-y-4 pt-6 border-t border-gray-200">
-        <div className="flex items-start space-x-3 gap-3">
+        <div className="flex items-center gap-3">
           <Checkbox
             id="terms"
             checked={agreedToTerms}
             onCheckedChange={(checked) => setAgreedToTerms(!!checked)}
-            className="mt-1 flex-shrink-0"
+            className="flex-shrink-0"
           />
-          <Label htmlFor="terms" className="text-sm leading-relaxed text-gray-600 cursor-pointer flex-1 pt-0.5">
-            I agree to the <a href="/terms-of-service" target="_blank" className="text-blue-600 hover:text-blue-700 hover:underline font-semibold">Terms of Service</a>, <a href="/privacy-policy" target="_blank" className="text-blue-600 hover:text-blue-700 hover:underline font-semibold">Privacy Policy</a>, and <a href="/code-of-conduct" target="_blank" className="text-blue-600 hover:text-blue-700 hover:underline font-semibold">Code of Conduct</a>
+          <Label htmlFor="terms" className="text-sm text-gray-600 cursor-pointer">
+            I agree to the{" "}
+            <a href="/terms-of-service" target="_blank" className="text-blue-600 hover:underline">
+              Terms of Service
+            </a>
+            {", "}
+            <a href="/privacy-policy" target="_blank" className="text-blue-600 hover:underline">
+              Privacy Policy
+            </a>
+            {" and "}
+            <a href="/code-of-conduct" target="_blank" className="text-blue-600 hover:underline">
+              Code of Conduct
+            </a>
           </Label>
         </div>
-        <div className="flex items-start space-x-3 gap-3">
-          <Checkbox id="marketing" className="mt-1 flex-shrink-0" />
-          <Label htmlFor="marketing" className="text-sm leading-relaxed text-gray-600 flex-1 pt-0.5">
+        <div className="flex items-center gap-3">
+          <Checkbox id="marketing" className="flex-shrink-0" />
+          <Label htmlFor="marketing" className="text-sm text-gray-600">
             I'd like to receive updates about new mentors, platform features, and learning opportunities
           </Label>
         </div>

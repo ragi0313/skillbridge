@@ -187,7 +187,7 @@ export default function MentorReviewSubmit({ formData, prevStep, isSubmitting }:
             <div className="text-amber-900">
               <h3 className="font-semibold mb-2">Application Review Process</h3>
               <p className="text-sm leading-relaxed">
-                Your mentor application will be carefully reviewed by our team within 2-3 business days. We'll verify
+                Your mentor application will be carefully reviewed by our team within 1-2 business days. We'll verify
                 your credentials and ensure you meet our quality standards. You'll receive an email notification once
                 your account is approved and activated.
               </p>

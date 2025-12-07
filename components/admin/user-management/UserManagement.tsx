@@ -40,6 +40,7 @@ export default function UserManagement() {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [roleFilter, setRoleFilter] = useState("all")
+  const [statusFilter, setStatusFilter] = useState("all") // New: status filter
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null)
   const [actionDialog, setActionDialog] = useState<{
     open: boolean
@@ -104,20 +105,34 @@ export default function UserManagement() {
     // Check blacklisted first
     if (user.blacklistedAt) {
       return (
-        <Badge variant="destructive" className="flex items-center gap-1">
-          <Ban className="w-3 h-3" />
-          Blacklisted
-        </Badge>
+        <div className="flex flex-col gap-1">
+          <Badge variant="destructive" className="flex items-center gap-1 w-fit cursor-help" title={user.blacklistReason || "No reason provided"}>
+            <Ban className="w-3 h-3" />
+            Blacklisted
+          </Badge>
+          {user.blacklistReason && (
+            <span className="text-xs text-gray-600 bg-red-50 p-2 rounded border border-red-100">
+              {user.blacklistReason}
+            </span>
+          )}
+        </div>
       )
     }
 
     // Check suspended second
     if (user.suspendedAt && (!user.suspensionEndsAt || new Date(user.suspensionEndsAt) > new Date())) {
       return (
-        <Badge variant="secondary" className="flex items-center gap-1 bg-orange-100 text-orange-800">
-          <Clock className="w-3 h-3" />
-          Suspended
-        </Badge>
+        <div className="flex flex-col gap-1">
+          <Badge variant="secondary" className="flex items-center gap-1 w-fit bg-orange-100 text-orange-800 cursor-help" title={user.suspensionReason || "No reason provided"}>
+            <Clock className="w-3 h-3" />
+            Suspended
+          </Badge>
+          {user.suspensionReason && (
+            <span className="text-xs text-gray-600 bg-orange-50 p-2 rounded border border-orange-100">
+              {user.suspensionReason}
+            </span>
+          )}
+        </div>
       )
     }
 
@@ -167,7 +182,19 @@ export default function UserManagement() {
 
     const matchesRole = roleFilter === "all" || user.role === roleFilter
 
-    return matchesSearch && matchesRole
+    // Status filter logic
+    let matchesStatus = true
+    if (statusFilter === "all") {
+      matchesStatus = true
+    } else if (statusFilter === "active") {
+      matchesStatus = !user.blacklistedAt && !user.suspendedAt
+    } else if (statusFilter === "suspended") {
+      matchesStatus = user.suspendedAt && !user.blacklistedAt
+    } else if (statusFilter === "blacklisted") {
+      matchesStatus = user.blacklistedAt
+    }
+
+    return matchesSearch && matchesRole && matchesStatus
   })
 
   // Pagination logic
@@ -179,7 +206,7 @@ export default function UserManagement() {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1)
-  }, [searchTerm, roleFilter])
+  }, [searchTerm, roleFilter, statusFilter])
 
   const openActionDialog = (user: AdminUser, type: "suspend" | "blacklist" | "unsuspend" | "unblacklist") => {
     setSelectedUser(user)
@@ -245,6 +272,17 @@ export default function UserManagement() {
                 <SelectItem value="learner">Learners</SelectItem>
                 <SelectItem value="mentor">Mentors</SelectItem>
                 <SelectItem value="admin">Admins</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-full sm:w-48">
+                <SelectValue placeholder="Filter by status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="suspended">Suspended</SelectItem>
+                <SelectItem value="blacklisted">Blacklisted</SelectItem>
               </SelectContent>
             </Select>
           </div>

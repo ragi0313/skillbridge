@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState, useMemo } from "react"
+import { toast } from "sonner"
 import type { PendingMentor } from "./pending-mentors/types"
 import { MentorApplicationHeader } from "./pending-mentors/MentorApplicationHeader"
 import { MentorApplicationCard } from "./pending-mentors/MentorApplicationCard"
@@ -36,30 +37,48 @@ export default function PendingMentorApprovals({ onMentorUpdate }: PendingMentor
 
   const handleApprove = async (id: number, notes: string) => {
     try {
-      await fetch(`/api/admin/pending-mentors/approve/${id}`, {
+      const response = await fetch(`/api/admin/pending-mentors/approve/${id}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ notes }),
       })
+      
+      if (!response.ok) {
+        const error = await response.json()
+        toast.error(error.message || "Failed to approve mentor")
+        return
+      }
+      
       setMentors((prev) => prev.filter((m) => m.id !== id))
+      toast.success("Mentor approved successfully!")
       onMentorUpdate?.() // Refresh sidebar counts
     } catch (error) {
       console.error("Failed to approve mentor:", error)
+      toast.error("Error approving mentor")
     }
   }
 
 
   const handleReject = async (id: number, notes: string) => {
     try {
-      await fetch(`/api/admin/pending-mentors/reject`, {
+      const response = await fetch(`/api/admin/pending-mentors/reject`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id, notes }),
       })
+      
+      if (!response.ok) {
+        const error = await response.json()
+        toast.error(error.message || "Failed to reject mentor")
+        return
+      }
+      
       setMentors((prev) => prev.filter((m) => m.id !== id))
+      toast.success("Mentor application rejected. Email sent to applicant.")
       onMentorUpdate?.() // Refresh sidebar counts
     } catch (error) {
       console.error("Failed to reject mentor:", error)
+      toast.error("Error rejecting mentor")
     }
   }
 

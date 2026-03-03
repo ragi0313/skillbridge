@@ -4,7 +4,7 @@ import { and, eq, or } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { toZonedTime } from "date-fns-tz";
 import { withRateLimit } from "@/lib/middleware/rate-limit";
-import { logUserAction, AUDIT_ACTIONS, ENTITY_TYPES } from "@/lib/admin/audit-log";
+import { logUserAction, getClientIpAddress, AUDIT_ACTIONS, ENTITY_TYPES } from "@/lib/admin/audit-log";
 
 const timeToMinutes = (timeStr: string): number => {
   if (!timeStr || typeof timeStr !== "string") return 0;
@@ -248,6 +248,7 @@ async function handleBooking(req: NextRequest) {
     });
 
     // Log booking creation
+    const ipAddress = getClientIpAddress(req)
     await logUserAction({
       userId: learnerUserId,
       action: AUDIT_ACTIONS.BOOKING_CREATE,
@@ -264,6 +265,7 @@ async function handleBooking(req: NextRequest) {
         totalCostCredits: result.totalCostCredits,
       },
       severity: "info",
+      ipAddress,
     })
 
     return NextResponse.json({

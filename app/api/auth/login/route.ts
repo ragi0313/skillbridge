@@ -9,7 +9,7 @@ import { users, learners, mentors, admins } from "@/db/schema"
 import { compare } from "bcryptjs"
 import { sign } from "jsonwebtoken"
 import { sendBlacklistNotificationEmail, sendSuspensionNotificationEmail } from "@/lib/email/userRestrictionMail"
-import { logUserAction, AUDIT_ACTIONS, ENTITY_TYPES } from "@/lib/admin/audit-log"
+import { logUserAction, getClientIpAddress, AUDIT_ACTIONS, ENTITY_TYPES } from "@/lib/admin/audit-log"
 import { is2FAEnabled, create2FACode } from "@/lib/auth/two-factor-service"
 
 const withTimeout = <T>(promise: Promise<T>, ms: number): Promise<T> => {
@@ -45,12 +45,14 @@ async function handleLogin(req: NextRequest) {
 
     if (!user) {
       // Log failed login attempt
+      const ipAddress = getClientIpAddress(req)
       await logUserAction({
         action: AUDIT_ACTIONS.USER_LOGIN_FAILED,
         entityType: ENTITY_TYPES.USER,
         description: `Failed login attempt for email: ${email}`,
         metadata: { email, reason: "email_not_found" },
         severity: "warning",
+        ipAddress,
       })
 
       return NextResponse.json(
@@ -67,6 +69,7 @@ async function handleLogin(req: NextRequest) {
 
     if (!isPasswordValid) {
       // Log failed login attempt
+      const ipAddress = getClientIpAddress(req)
       await logUserAction({
         userId: user.id,
         action: AUDIT_ACTIONS.USER_LOGIN_FAILED,
@@ -75,6 +78,7 @@ async function handleLogin(req: NextRequest) {
         description: `Failed login attempt: Incorrect password for ${user.email}`,
         metadata: { email: user.email, reason: "incorrect_password" },
         severity: "warning",
+        ipAddress,
       })
 
       return NextResponse.json(
@@ -258,6 +262,7 @@ async function handleLogin(req: NextRequest) {
     })
 
     // Log successful login
+    const ipAddress = getClientIpAddress(req)
     await logUserAction({
       userId: user.id,
       action: user.role === "admin" ? AUDIT_ACTIONS.ADMIN_LOGIN : AUDIT_ACTIONS.USER_LOGIN,
@@ -266,6 +271,7 @@ async function handleLogin(req: NextRequest) {
       description: `${user.role} logged in: ${user.firstName} ${user.lastName} (${user.email})`,
       metadata: { role: user.role, email: user.email },
       severity: "info",
+      ipAddress,
     })
 
     // Return success with role (matching frontend expectation)

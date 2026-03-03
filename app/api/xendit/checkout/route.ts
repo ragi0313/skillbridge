@@ -7,7 +7,7 @@ import { verify } from "jsonwebtoken"
 import { db } from "@/db"
 import { learners, creditPurchases, creditTransactions } from "@/db/schema"
 import { eq, sql } from "drizzle-orm"
-import { logUserAction, AUDIT_ACTIONS, ENTITY_TYPES } from "@/lib/admin/audit-log"
+import { logUserAction, getClientIpAddress, AUDIT_ACTIONS, ENTITY_TYPES } from "@/lib/admin/audit-log"
 
 const xendit = new Xendit({ 
   secretKey: process.env.XENDIT_SECRET_KEY! 
@@ -99,6 +99,7 @@ async function handleCheckout(req: NextRequest): Promise<NextResponse> {
       })
 
       // Log the credit purchase
+      const ipAddress = getClientIpAddress(req)
       await logUserAction({
         userId: user.id,
         action: AUDIT_ACTIONS.CREDITS_PURCHASE,
@@ -111,6 +112,7 @@ async function handleCheckout(req: NextRequest): Promise<NextResponse> {
           demoMode: true,
         },
         severity: "info",
+        ipAddress,
       })
 
       console.log(`[DEMO MODE] ✅ Added ${credits} credits to user ${user.id} immediately`)

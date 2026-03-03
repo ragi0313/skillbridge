@@ -4,10 +4,10 @@ import { users, mentors, mentorSkills, mentorSkillCategories, pendingMentors, pe
   skillCategories,
 } from "@/db/schema"
 import { eq, sql } from "drizzle-orm"
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { sendMentorApprovedEmail } from "@/lib/email/approvedMail"
 import { getSession } from "@/lib/auth/getSession"
-import { logAdminAction, AUDIT_ACTIONS, ENTITY_TYPES } from "@/lib/admin/audit-log"
+import { logAdminAction, getClientIpAddress, AUDIT_ACTIONS, ENTITY_TYPES } from "@/lib/admin/audit-log"
 import { withRateLimit } from "@/lib/middleware/rate-limit"
 
 // Helper to convert "09:00 AM" to "09:00" (24-hour format)
@@ -20,7 +20,7 @@ function to24Hour(time: string): string {
   return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}`
 }
 
-async function handleApproveMentor(request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handleApproveMentor(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   // SECURITY: Check admin authentication
   const session = await getSession()
   if (!session || session.role !== 'admin') {
@@ -167,6 +167,7 @@ async function handleApproveMentor(request: Request, { params }: { params: Promi
     await sendMentorApprovedEmail(pending.email, `${pending.firstName} ${pending.lastName}`)
 
     // Log admin action
+    const ipAddress = getClientIpAddress(request)
     await logAdminAction({
       adminId: session.id,
       action: AUDIT_ACTIONS.APPROVE_MENTOR,
@@ -181,7 +182,8 @@ async function handleApproveMentor(request: Request, { params }: { params: Promi
         skillCount: pendingSkills.length,
         categoryAssignments: skillCategoryAssignments.length
       },
-      severity: 'info'
+      severity: 'info',
+      ipAddress,
     })
 
     // Cleanup

@@ -4,7 +4,7 @@ import { db } from '@/db'
 import { bookingSessions, learners, mentors } from '@/db/schema'
 import { eq } from 'drizzle-orm'
 import { agoraService } from '@/lib/agora/AgoraService'
-import { logUserAction, AUDIT_ACTIONS, ENTITY_TYPES } from '@/lib/admin/audit-log'
+import { logUserAction, getClientIpAddress, AUDIT_ACTIONS, ENTITY_TYPES } from '@/lib/admin/audit-log'
 
 export async function POST(
   request: NextRequest,
@@ -160,6 +160,7 @@ export async function POST(
     })
 
     // Log session start
+    const ipAddress = getClientIpAddress(request)
     await logUserAction({
       userId: session.id,
       action: AUDIT_ACTIONS.SESSION_START,
@@ -172,6 +173,7 @@ export async function POST(
         agoraChannelName: result.agoraChannelName,
       },
       severity: "info",
+      ipAddress,
     })
 
     return NextResponse.json(result)

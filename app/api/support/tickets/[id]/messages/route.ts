@@ -3,7 +3,7 @@ import { db } from '@/db'
 import { supportTickets, supportTicketResponses, auditLogs, users } from '@/db/schema'
 import { getSession } from '@/lib/auth/getSession'
 import { eq, and, sql } from 'drizzle-orm'
-import { logSimpleAction } from '@/lib/admin/audit-log'
+import { logSimpleAction, getClientIpAddress } from '@/lib/admin/audit-log'
 
 export async function GET(
   request: NextRequest,
@@ -128,12 +128,12 @@ export async function POST(
       .where(eq(supportTickets.id, ticketId))
 
     // Log the action
+    const ipAddress = getClientIpAddress(request)
     await logSimpleAction({
       userId: session.id,
       action: 'support_ticket_user_reply',
       details: `User replied to support ticket #${ticketId}`,
-      ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown',
-      userAgent: request.headers.get('user-agent') || 'unknown',
+      ipAddress,
     })
 
     return NextResponse.json(

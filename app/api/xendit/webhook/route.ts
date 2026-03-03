@@ -1,10 +1,10 @@
 import { headers } from "next/headers";
-import { NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 import { Xendit } from "xendit-node";
 import { db } from "@/db";
 import { learners, creditPurchases, creditTransactions } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
-import { logUserAction, AUDIT_ACTIONS, ENTITY_TYPES } from "@/lib/admin/audit-log";
+import { logUserAction, getClientIpAddress, AUDIT_ACTIONS, ENTITY_TYPES } from "@/lib/admin/audit-log";
 
 const xendit = new Xendit({ 
   secretKey: process.env.XENDIT_SECRET_KEY! 
@@ -16,7 +16,7 @@ function verifyXenditWebhook(callbackToken: string, webhookToken: string): boole
   return callbackToken === webhookToken;
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   const body = await req.text();
   const headerStore = await headers();
   const signature = headerStore.get("x-callback-token");
@@ -41,6 +41,7 @@ export async function POST(req: Request) {
     });
 
     // Log security event
+    const ipAddress = getClientIpAddress(req)
     await logUserAction({
       action: 'WEBHOOK_VERIFICATION_FAILED',
       entityType: ENTITY_TYPES.SYSTEM as any,
@@ -51,6 +52,7 @@ export async function POST(req: Request) {
         timestamp: new Date().toISOString()
       },
       severity: "critical",
+      ipAddress,
     }).catch(err => console.error('Failed to log webhook verification failure:', err));
 
     return new NextResponse("Unauthorized", { status: 401 });
@@ -145,6 +147,9 @@ export async function POST(req: Request) {
       console.error("[SECURITY] Missing invoice ID:", { invoice });
       return NextResponse.json({ error: "Missing invoice ID" }, { status: 400 });
     }
+
+    // Extract IP address once (available throughout the function)
+    const ipAddress = getClientIpAddress(req)
 
     try {
       await db.transaction(async (tx) => {
@@ -245,6 +250,7 @@ export async function POST(req: Request) {
             externalId: invoice.externalId || invoice.external_id,
           },
           severity: "info",
+          ipAddress,
         })
       });
 

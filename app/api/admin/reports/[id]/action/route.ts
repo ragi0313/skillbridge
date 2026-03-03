@@ -3,7 +3,7 @@ import { getSession } from "@/lib/auth/getSession"
 import { db } from "@/db"
 import { userReports } from "@/db/schema"
 import { eq } from "drizzle-orm"
-import { logAdminAction, AUDIT_ACTIONS, ENTITY_TYPES } from "@/lib/admin/audit-log"
+import { logAdminAction, getClientIpAddress, AUDIT_ACTIONS, ENTITY_TYPES } from "@/lib/admin/audit-log"
 
 export async function POST(
   req: NextRequest,
@@ -54,6 +54,7 @@ export async function POST(
       .returning()
 
     // Log the admin action
+    const ipAddress = getClientIpAddress(req)
     await logAdminAction({
       adminId: session.id,
       action: action === "resolve" ? AUDIT_ACTIONS.RESOLVE_REPORT : AUDIT_ACTIONS.DISMISS_REPORT,
@@ -68,6 +69,7 @@ export async function POST(
         resolution,
       },
       severity: "info",
+      ipAddress,
     })
 
     return NextResponse.json({

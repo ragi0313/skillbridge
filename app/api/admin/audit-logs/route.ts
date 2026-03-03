@@ -3,7 +3,7 @@ import { getSession } from "@/lib/auth/getSession"
 import { db } from "@/db"
 import { auditLogs, users } from "@/db/schema"
 import { desc, like, and, gte, sql, eq } from "drizzle-orm"
-import { logAdminAction, AUDIT_ACTIONS, ENTITY_TYPES } from "@/lib/admin/audit-log"
+import { logAdminAction, getClientIpAddress, AUDIT_ACTIONS, ENTITY_TYPES } from "@/lib/admin/audit-log"
 
 export async function GET(req: NextRequest) {
   try {
@@ -84,6 +84,7 @@ export async function GET(req: NextRequest) {
       const csvContent = [csvHeaders, ...csvRows].map(row => row.join(",")).join("\n")
 
       // Log the export action
+      const ipAddress = getClientIpAddress(req)
       await logAdminAction({
         adminId: session.id,
         action: AUDIT_ACTIONS.EXPORT_DATA,
@@ -91,6 +92,7 @@ export async function GET(req: NextRequest) {
         description: `Exported ${allLogs.length} audit log entries to CSV`,
         metadata: { count: allLogs.length, filters: { action, severity, days, search } },
         severity: "info",
+        ipAddress,
       })
 
       return new NextResponse(csvContent, {

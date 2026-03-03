@@ -2,6 +2,37 @@ import { db } from "@/db"
 import { auditLogs } from "@/db/schema"
 import { NextRequest } from "next/server"
 
+/**
+ * Extract client IP address from a NextRequest
+ * Handles various proxy headers and direct connections
+ */
+export function getClientIpAddress(request: NextRequest): string | undefined {
+  // Check headers in order of precedence
+  const forwarded = request.headers.get("x-forwarded-for")
+  if (forwarded) {
+    // x-forwarded-for can contain multiple IPs, take the first one
+    return forwarded.split(",")[0].trim()
+  }
+
+  const realIp = request.headers.get("x-real-ip")
+  if (realIp) {
+    return realIp
+  }
+
+  const clientIp = request.headers.get("x-client-ip")
+  if (clientIp) {
+    return clientIp
+  }
+
+  // Fallback to IP from the request itself
+  try {
+    const ip = request.ip || request.headers.get("cf-connecting-ip")
+    return ip || undefined
+  } catch {
+    return undefined
+  }
+}
+
 export interface AuditLogEntry {
   userId?: number // For non-admin users
   adminId?: number // For admin users
@@ -11,6 +42,7 @@ export interface AuditLogEntry {
   description: string
   metadata?: Record<string, any>
   severity?: "info" | "warning" | "critical"
+  ipAddress?: string
 }
 
 export async function logAdminAction({
@@ -22,6 +54,7 @@ export async function logAdminAction({
   description,
   metadata,
   severity = "info",
+  ipAddress,
 }: AuditLogEntry) {
   try {
     await db.insert(auditLogs).values({
@@ -34,6 +67,7 @@ export async function logAdminAction({
       description,
       metadata,
       severity,
+      ipAddress,
       createdAt: new Date(),
     })
   } catch (error) {
@@ -52,6 +86,7 @@ export async function logUserAction({
   description,
   metadata,
   severity = "info",
+  ipAddress,
 }: AuditLogEntry) {
   try {
     await db.insert(auditLogs).values({
@@ -64,6 +99,7 @@ export async function logUserAction({
       description,
       metadata,
       severity,
+      ipAddress,
       createdAt: new Date(),
     })
   } catch (error) {
@@ -77,10 +113,12 @@ export async function logSimpleAction({
   userId,
   action,
   details,
+  ipAddress,
 }: {
   userId?: number | null
   action: string
   details: string
+  ipAddress?: string
 }) {
   try {
     await db.insert(auditLogs).values({
@@ -90,6 +128,7 @@ export async function logSimpleAction({
       details,
       description: details,
       severity: "info",
+      ipAddress,
       createdAt: new Date(),
     })
   } catch (error) {

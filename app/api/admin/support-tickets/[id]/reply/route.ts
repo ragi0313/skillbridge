@@ -3,7 +3,7 @@ import { db } from '@/db'
 import { supportTicketResponses, supportTickets, auditLogs, users } from '@/db/schema'
 import { getSession } from '@/lib/auth/getSession'
 import { eq, sql } from 'drizzle-orm'
-import { logSimpleAction } from '@/lib/admin/audit-log'
+import { logSimpleAction, getClientIpAddress } from '@/lib/admin/audit-log'
 import { sendSupportTicketReply } from '@/lib/email/supportTicketMail'
 
 export async function POST(
@@ -82,12 +82,12 @@ export async function POST(
       .where(eq(supportTickets.id, ticketId))
 
     // Log the action
+    const ipAddress = getClientIpAddress(request)
     await logSimpleAction({
       userId: session.id,
       action: isInternal ? 'support_ticket_internal_note_added' : 'support_ticket_reply_sent',
       details: `${isInternal ? 'Internal note added to' : 'Reply sent to'} support ticket #${ticketId}`,
-      ipAddress: request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown',
-      userAgent: request.headers.get('user-agent') || 'unknown',
+      ipAddress,
     })
 
     // Send email notification to customer if not internal

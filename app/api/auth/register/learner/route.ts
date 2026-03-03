@@ -8,7 +8,7 @@ import { nanoid } from "nanoid"
 import { sendVerificationEmail } from "@/lib/email/activationMail"
 import { eq, or } from "drizzle-orm"
 import { isValidPhilippineTimezone } from "@/lib/timeZones"
-import { logUserAction, AUDIT_ACTIONS, ENTITY_TYPES } from "@/lib/admin/audit-log"
+import { logUserAction, getClientIpAddress, AUDIT_ACTIONS, ENTITY_TYPES } from "@/lib/admin/audit-log"
 
 
 async function handleRegisterLearner(req: NextRequest) {
@@ -141,6 +141,7 @@ async function handleRegisterLearner(req: NextRequest) {
     })
 
     // Log registration
+    const ipAddress = getClientIpAddress(req)
     await logUserAction({
       action: AUDIT_ACTIONS.USER_REGISTER,
       entityType: ENTITY_TYPES.LEARNER,
@@ -154,6 +155,7 @@ async function handleRegisterLearner(req: NextRequest) {
         role: "learner"
       },
       severity: "info",
+      ipAddress,
     })
 
     return NextResponse.json({ success: true })

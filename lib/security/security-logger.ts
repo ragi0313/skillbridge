@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { logUserAction, AUDIT_ACTIONS, ENTITY_TYPES } from '@/lib/admin/audit-log'
+import { logUserAction, getClientIpAddress, AUDIT_ACTIONS, ENTITY_TYPES } from '@/lib/admin/audit-log'
 
 export type SecurityEventType =
   | 'authentication_failure'
@@ -39,11 +39,7 @@ export function extractRequestInfo(req: NextRequest): {
   userAgent: string
   requestPath: string
 } {
-  const forwarded = req.headers.get('x-forwarded-for')
-  const realIp = req.headers.get('x-real-ip')
-  const cfConnectingIp = req.headers.get('cf-connecting-ip')
-
-  const ipAddress = forwarded?.split(',')[0] || realIp || cfConnectingIp || 'unknown'
+  const ipAddress = getClientIpAddress(req) || 'unknown'
   const userAgent = req.headers.get('user-agent') || 'unknown'
   const requestPath = new URL(req.url).pathname
 
@@ -87,7 +83,6 @@ export async function logSecurityEvent(event: SecurityEvent): Promise<void> {
         ...event.metadata
       },
       ipAddress: event.ipAddress,
-      userAgent: event.userAgent,
       severity: event.severity === 'critical' ? 'critical' : event.severity === 'high' ? 'warning' : 'info'
     })
 

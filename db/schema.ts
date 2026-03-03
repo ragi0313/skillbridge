@@ -136,6 +136,8 @@ export const auditLogs = pgTable("audit_logs", {
   description: text("description"), // More detailed description
   metadata: json("metadata"), // Additional structured data
   severity: varchar("severity", { length: 20 }).default("info"), // 'info', 'warning', 'critical'
+  ipAddress: varchar("ip_address", { length: 45 }), // IPv4 (up to 15 chars) or IPv6 (up to 45 chars)
+  userAgent: varchar("user_agent", { length: 512 }), // User agent string for request context
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 }, (table) => ({
   userIdIdx: index("audit_logs_user_id_idx").on(table.userId),
@@ -143,6 +145,7 @@ export const auditLogs = pgTable("audit_logs", {
   actionIdx: index("audit_logs_action_idx").on(table.action),
   entityTypeIdx: index("audit_logs_entity_type_idx").on(table.entityType),
   severityIdx: index("audit_logs_severity_idx").on(table.severity),
+  ipAddressIdx: index("audit_logs_ip_address_idx").on(table.ipAddress),
   createdAtIdx: index("audit_logs_created_at_idx").on(table.createdAt),
 }))
 

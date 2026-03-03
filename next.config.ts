@@ -1,10 +1,6 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Disable ESLint during build for faster deployment
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
   // Disable TypeScript type checking during build for faster deployment
   typescript: {
     ignoreBuildErrors: true,
@@ -105,10 +101,6 @@ const nextConfig: NextConfig = {
     ]
   },
 
-  // Set body size limits for API routes (handled by middleware)
-  serverRuntimeConfig: {
-    maxRequestBodySize: '50mb' // Maximum for file uploads
-  }
 };
 
 export default nextConfig;

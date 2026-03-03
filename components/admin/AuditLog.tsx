@@ -19,6 +19,7 @@ interface AuditLogEntry {
   description: string | null
   metadata?: Record<string, any>
   severity: "info" | "warning" | "critical"
+  ipAddress?: string | null
   createdAt: string | null
 }
 
@@ -240,10 +241,11 @@ export default function AuditLog() {
                     </div>
                     <p className="text-gray-700 mb-2">{log.description || "No description available"}</p>
                     <div className="flex items-center justify-between text-sm text-gray-500">
-                      <div className="flex items-center space-x-4">
+                      <div className="flex items-center space-x-4 flex-wrap">
                         <span>Admin: {log.adminName}</span>
                         <span>Entity: {log.entityType}</span>
                         {log.entityId && <span>ID: {log.entityId}</span>}
+                        {log.ipAddress && <span className="font-mono text-xs bg-gray-100 px-2 py-1 rounded">IP: {log.ipAddress}</span>}
                       </div>
                       {log.metadata && (
                         <Button

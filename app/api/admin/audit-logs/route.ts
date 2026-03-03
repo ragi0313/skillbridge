@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
     if (search) {
       const searchPattern = `%${search}%`
       filters.push(
-        sql`(${auditLogs.description} ILIKE ${searchPattern} OR ${auditLogs.details} ILIKE ${searchPattern})`
+        sql`(${auditLogs.description} ILIKE ${searchPattern} OR ${auditLogs.details} ILIKE ${searchPattern} OR ${auditLogs.ipAddress} ILIKE ${searchPattern})`
       )
     }
 
@@ -61,6 +61,7 @@ export async function GET(req: NextRequest) {
           entityId: auditLogs.entityId,
           description: auditLogs.description,
           severity: auditLogs.severity,
+          ipAddress: auditLogs.ipAddress,
           createdAt: auditLogs.createdAt,
         })
         .from(auditLogs)
@@ -69,7 +70,7 @@ export async function GET(req: NextRequest) {
         .orderBy(desc(auditLogs.createdAt))
 
       // Convert to CSV
-      const csvHeaders = ["ID", "Admin", "Action", "Entity Type", "Entity ID", "Description", "Severity", "Date"]
+      const csvHeaders = ["ID", "Admin", "Action", "Entity Type", "Entity ID", "Description", "Severity", "IP Address", "Date"]
       const csvRows = allLogs.map(log => [
         log.id,
         log.adminName || "Unknown",
@@ -78,6 +79,7 @@ export async function GET(req: NextRequest) {
         log.entityId || "",
         `"${(log.description || '').replace(/"/g, '""')}"`, // Escape quotes
         log.severity,
+        log.ipAddress || "",
         log.createdAt ? new Date(log.createdAt).toISOString() : "",
       ])
 
@@ -117,6 +119,7 @@ export async function GET(req: NextRequest) {
           details: auditLogs.details,
           metadata: auditLogs.metadata,
           severity: auditLogs.severity,
+          ipAddress: auditLogs.ipAddress,
           createdAt: auditLogs.createdAt,
         })
         .from(auditLogs)
